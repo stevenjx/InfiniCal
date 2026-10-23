@@ -1,0 +1,21 @@
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Xcode build output
+AIBattery/build/
+build/
+DerivedData/
+*.xcactivitylog
+*.xcuserstate
+xcuserdata/
+
+# Scratch probes used while reverse-engineering the SMC keys
+# (throwaway binaries + C files, not part of the app)
+tools/
+
+# Reference dumps (ioreg output, AlDente localisation strings)
+ref/
+
+# WorkBuddy project metadata
+.workbuddy-ai/
