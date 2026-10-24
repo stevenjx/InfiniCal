@@ -219,6 +219,7 @@
 			children = (
 				DF1D1216455F649ABC5FC56B /* Info.plist */,
 				9FF2190CE265D16110159B6D /* AppIcon.icns */,
+				3025FE56B87CDBD5AB645640 /* en.json */,
 			);
 			path = Resources;
 			sourceTree = "<group>";

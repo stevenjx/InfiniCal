@@ -181,10 +181,10 @@ sources_children = "\n".join([
     f"\t\t\t\t{FILE_REF['Sources/main.swift']} /* main.swift */,",
 ])
 helper_children = f'\t\t\t\t{FILE_REF["Helper/main.swift"]} /* main.swift */,'
-resources_children = "\n".join([
-    f"\t\t\t\t{FILE_REF[PLIST]} /* Info.plist */,",
-    f"\t\t\t\t{FILE_REF[RESOURCES[0]]} /* {os.path.basename(RESOURCES[0])} */,",
-])
+resources_children = "\n".join(
+    [f"\t\t\t\t{FILE_REF[PLIST]} /* Info.plist */,"] +
+    [f"\t\t\t\t{FILE_REF[p]} /* {os.path.basename(p)} */," for p in RESOURCES]
+)
 
 group_lines = [
     f'''\t\t{MAIN_GROUP} = {{
