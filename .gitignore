@@ -3,7 +3,6 @@
 **/.DS_Store
 
 # Xcode build output
-AIBattery/build/
 build/
 DerivedData/
 *.xcactivitylog
@@ -12,7 +11,7 @@ xcuserdata/
 
 # Scratch probes used while reverse-engineering the SMC keys
 # (throwaway binaries + C files, not part of the app)
-tools/
+probes/
 
 # Reference dumps (ioreg output, AlDente localisation strings)
 ref/

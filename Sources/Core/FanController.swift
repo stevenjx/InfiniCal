@@ -1,0 +1,638 @@
+//
+//  FanController.swift
+//  Real fan control and thermal telemetry.
+//
+//  Everything here is read from, or written to, keys this Mac actually exposes.
+//  Nothing is inferred:
+//
+//    FNum      ui8   number of fans (0 on fanless models)
+//    F{n}Ac    flt   current RPM
+//    F{n}Mn    flt   minimum RPM
+//    F{n}Mx    flt   maximum RPM
+//    F{n}Tg    flt   target RPM            (writable)
+//    F{n}Md    ui8   0 = system automatic, 1 = forced  (writable)
+//    F{n}ID    ch8*  fan label, Intel models only
+//
+//  Apple Silicon has no `FS!` bitmask key — the per-fan mode key `F{n}Md` is the
+//  switch. Intel models keep `FS!`, which is handled as a fallback so the same
+//  code works on both.
+//
+
+import Foundation
+import IOKit
+
+// MARK: - Models
+
+struct FanInfo: Identifiable, Equatable {
+    var id: Int { index }
+    let index: Int
+    var name: String
+    var currentRPM: Int
+    var minRPM: Int
+    var maxRPM: Int
+    var targetRPM: Int
+    /// true when the SMC says the fan is being driven by us rather than the system.
+    var isManual: Bool
+    var canControl: Bool
+    /// Reported only when the SMC exposes F{n}ID (Intel). Apple Silicon does not.
+    var hasOwnLabel: Bool
+}
+
+enum FanMode: String, Codable {
+    case auto
+    case fixed
+    case full
+
+    var title: String {
+        switch self {
+        case .auto: return "自动"
+        case .fixed: return "自定义"
+        case .full: return "全速"
+        }
+    }
+}
+
+struct FanPreset: Codable, Identifiable, Equatable {
+    var id = UUID()
+    var name: String
+    /// Fan index → mode.
+    var modes: [Int: FanMode]
+    /// Fan index → fixed RPM.
+    var rpms: [Int: Int]
+    var curveEnabled: Bool = false
+}
+
+struct ThermalReading: Identifiable, Equatable {
+    var id: String { key }
+    let key: String
+    let name: String
+    /// Where the number came from, shown in the UI so nothing looks invented.
+    let source: String
+    let celsius: Double
+}
+
+// MARK: - Controller
+
+final class FanController: ObservableObject {
+
+    static let shared = FanController()
+
+    @Published private(set) var fans: [FanInfo] = []
+    @Published private(set) var sensors: [ThermalReading] = []
+    @Published private(set) var lastError: String?
+
+    /// Per-fan mode chosen in the UI.
+    @Published var modes: [Int: FanMode] = [:] {
+        didSet { persistModes() }
+    }
+    /// Per-fan fixed RPM chosen in the UI.
+    @Published var fixedRPM: [Int: Int] = [:] {
+        didSet { persistModes() }
+    }
+
+    /// Temperature-driven mode.
+    @Published var curveEnabled: Bool = false {
+        didSet {
+            UserDefaults.standard.set(curveEnabled, forKey: Keys.curveEnabled)
+            DispatchQueue.main.async { [weak self] in self?.applyCurveIfNeeded(force: true) }
+        }
+    }
+    @Published var curveSensorKey: String = "cpu-die" {
+        didSet { UserDefaults.standard.set(curveSensorKey, forKey: Keys.curveSensor) }
+    }
+    @Published var curveStartTemperature: Double = 50 {
+        didSet { UserDefaults.standard.set(curveStartTemperature, forKey: Keys.curveStart) }
+    }
+    @Published var curvePeakTemperature: Double = 85 {
+        didSet { UserDefaults.standard.set(curvePeakTemperature, forKey: Keys.curvePeak) }
+    }
+
+    @Published private(set) var presets: [FanPreset] = []
+    @Published private(set) var activePresetName: String?
+
+    var hasFans: Bool { !fans.isEmpty }
+    var isAnyManual: Bool { fans.contains { $0.isManual } }
+
+    private enum Keys {
+        static let modes = "fanModes"
+        static let rpms = "fanFixedRPM"
+        static let presets = "fanPresets"
+        static let curveEnabled = "fanCurveEnabled"
+        static let curveSensor = "fanCurveSensor"
+        static let curveStart = "fanCurveStart"
+        static let curvePeak = "fanCurvePeak"
+    }
+
+    private let defaults = UserDefaults.standard
+    private var timer: Timer?
+    private var pageUsers = 0
+    private var lastCurveWrite: [Int: Int] = [:]
+    private var lastAppliedFixed: [Int: Int] = [:]
+
+    private init() {
+        loadPersistedSettings()
+        refresh()
+    }
+
+    deinit {
+        timer?.invalidate()
+    }
+
+    // MARK: - Lifecycle
+
+    func beginMonitoring() {
+        pageUsers += 1
+        // Called from onAppear, which runs inside a view update — read the SMC on
+        // the next tick instead of publishing from there.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.refresh()
+            self.syncModesFromHardware()
+        }
+        guard timer == nil else { return }
+        let t = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in self?.tick() }
+        RunLoop.main.add(t, forMode: .common)
+        timer = t
+    }
+
+    func endMonitoring() {
+        pageUsers = max(0, pageUsers - 1)
+        guard pageUsers == 0 else { return }
+        timer?.invalidate()
+        timer = nil
+    }
+
+    private func tick() {
+        refresh()
+        applyCurveIfNeeded()
+    }
+
+    // MARK: - Reading
+
+    func refresh() {
+        let updated = readFansNow()
+        if updated != fans { fans = updated }
+
+        let thermal = readSensors()
+        if thermal != sensors { sensors = thermal }
+
+        // Seed UI state from the hardware on first sight so the panel never shows
+        // a made-up default.
+        for fan in updated where modes[fan.index] == nil {
+            modes[fan.index] = fan.isManual ? .fixed : .auto
+            fixedRPM[fan.index] = fan.isManual ? fan.targetRPM : fan.currentRPM
+        }
+    }
+
+    /// Single source of truth for fan readings: one fan-count rule, one rounding
+    /// rule, one place that touches the SMC. Everything else reads `fans`.
+    private func readFansNow() -> [FanInfo] {
+        let count = fanCount()
+        var result: [FanInfo] = []
+        for index in 0..<count {
+            guard let current = readFloat("F\(index)Ac") else { continue }
+            let minRPM = Int((readFloat("F\(index)Mn") ?? 0).rounded())
+            let maxRPM = Int((readFloat("F\(index)Mx") ?? 0).rounded())
+            let target = Int((readFloat("F\(index)Tg") ?? current).rounded())
+            result.append(FanInfo(index: index,
+                                  name: fanLabel(index: index, total: count),
+                                  currentRPM: Int(current.rounded()),
+                                  minRPM: minRPM,
+                                  maxRPM: maxRPM,
+                                  targetRPM: target,
+                                  isManual: readMode(index: index),
+                                  canControl: maxRPM > minRPM && writeKeyExists("F\(index)Md"),
+                                  hasOwnLabel: readString("F\(index)ID") != nil))
+        }
+        return result
+    }
+
+    /// The SMC forgets forced mode across reboots, so trust the hardware when the
+    /// page opens instead of showing a stale "自定义" that is not in effect.
+    private func syncModesFromHardware() {
+        guard !curveEnabled else { return }
+        var updatedModes = modes
+        for fan in fans {
+            let ui = updatedModes[fan.index] ?? .auto
+            if !fan.isManual, ui != .auto { updatedModes[fan.index] = .auto }
+        }
+        if updatedModes != modes { modes = updatedModes }
+    }
+
+    /// FNum is authoritative; counting F{n}Ac is the fallback for models that do
+    /// not expose it.
+    private func fanCount() -> Int {
+        if let info = SMC.shared.keyInfo("FNum"), info.size == 1,
+           let value = try? SMC.shared.readDouble("FNum"), value >= 0, value <= 8 {
+            return Int(value)
+        }
+        var count = 0
+        for index in 0..<8 where SMC.shared.keyInfo("F\(index)Ac") != nil { count = index + 1 }
+        return count
+    }
+
+    private func fanLabel(index: Int, total: Int) -> String {
+        if let label = readString("F\(index)ID"), !label.isEmpty { return label }
+        if total == 1 { return "风扇" }
+        if total == 2 { return index == 0 ? "风扇 1（左）" : "风扇 2（右）" }
+        return "风扇 \(index + 1)"
+    }
+
+    private func readMode(index: Int) -> Bool {
+        if let value = try? SMC.shared.readDouble("F\(index)Md") { return value >= 1 }
+        if let flags = try? SMC.shared.readDouble("FS! ") {
+            return Int(flags) & (1 << (index * 2)) != 0
+        }
+        return false
+    }
+
+    private func writeKeyExists(_ key: String) -> Bool {
+        SMC.shared.keyInfo(key)?.isWritable ?? false
+    }
+
+    private func readFloat(_ key: String) -> Double? {
+        guard let value = try? SMC.shared.readDouble(key), value.isFinite else { return nil }
+        return value
+    }
+
+    private func readString(_ key: String) -> String? {
+        guard let (_, bytes) = try? SMC.shared.readBytes(key) else { return nil }
+        let trimmed = bytes.prefix { $0 != 0 }
+        guard !trimmed.isEmpty else { return nil }
+        return String(bytes: trimmed, encoding: .ascii)
+    }
+
+    // MARK: - Thermal sensors
+
+    private func readSensors() -> [ThermalReading] {
+        var result: [ThermalReading] = []
+
+        let hidCPU = hidAverage { $0.lowercased().contains("tdie") }
+        let cpu = hidCPU ?? smcCPUFallback()
+        if cpu > 0 {
+            result.append(ThermalReading(key: "cpu-die", name: "CPU",
+                                         source: hidCPU != nil ? "HID · PMU tdie 平均" : "SMC Tp01/Tp05/Tp09/Tp0D 平均",
+                                         celsius: cpu))
+        }
+
+        if let battery = readFloat("TB0T"), battery > 5, battery < 110 {
+            result.append(ThermalReading(key: "battery", name: "电池", source: "SMC TB0T", celsius: battery))
+        }
+
+        if let nand = hidAverage({ $0.lowercased().contains("nand") }) {
+            result.append(ThermalReading(key: "ssd", name: "固态硬盘", source: "HID · NAND", celsius: nand))
+        }
+
+        if let gpu = smcGPUReading() {
+            result.append(gpu)
+        }
+        return result
+    }
+
+    private func smcCPUFallback() -> Double {
+        let keys = ["Tp01", "Tp05", "Tp09", "Tp0D"]
+        let values = keys.compactMap { readFloat($0) }.filter { $0 > 5 && $0 < 110 }
+        return values.isEmpty ? 0 : values.reduce(0, +) / Double(values.count)
+    }
+
+    /// GPU cluster temperature, only when the SMC actually reports one.
+    private func smcGPUReading() -> ThermalReading? {
+        let keys = ["Tg0B", "Tg0C", "Tg0H", "TG0V"]
+        let values = keys.compactMap { readFloat($0) }.filter { $0 > 5 && $0 < 110 }
+        guard !values.isEmpty else { return nil }
+        return ThermalReading(key: "gpu", name: "GPU",
+                              source: "SMC " + keys.filter { readFloat($0) != nil }.joined(separator: "/"),
+                              celsius: values.reduce(0, +) / Double(values.count))
+    }
+
+    /// All HID temperature services, averaged per product name. Used for the
+    /// expandable "all sensors" list so nothing is hidden or invented.
+    func allHIDSensors() -> [ThermalReading] {
+        var buckets: [String: [Double]] = [:]
+        for reading in hidReadings() {
+            buckets[reading.name, default: []].append(reading.celsius)
+        }
+        return buckets.keys.sorted().compactMap { name in
+            guard let values = buckets[name], !values.isEmpty else { return nil }
+            return ThermalReading(key: name, name: name,
+                                  source: values.count > 1 ? "HID · \(values.count) 个服务平均" : "HID",
+                                  celsius: values.reduce(0, +) / Double(values.count))
+        }
+    }
+
+    // MARK: - Control
+
+    func setMode(_ mode: FanMode, for index: Int) {
+        // UI actions arrive while SwiftUI is still inside a view update; mutating
+        // @Published there triggers "Publishing changes from within view updates".
+        // Hop to the next runloop tick so every state change is published outside
+        // the update transaction.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.modes[index] = mode
+            switch mode {
+            case .auto:
+                self.applyAuto(index: index)
+            case .full:
+                self.applyFixed(index: index, rpm: self.fan(index)?.maxRPM ?? 0)
+            case .fixed:
+                self.lastAppliedFixed[index] = self.fixedRPM[index] ?? self.fan(index)?.currentRPM ?? 0
+                self.applyFixed(index: index, rpm: self.fixedRPM[index] ?? self.fan(index)?.currentRPM ?? 0)
+            }
+        }
+    }
+
+    /// UI entry points for the curve settings: same reason as `setMode`, the
+    /// write is deferred out of the view update transaction.
+    func setCurveEnabled(_ enabled: Bool) {
+        DispatchQueue.main.async { [weak self] in self?.curveEnabled = enabled }
+    }
+
+    func setCurveSensor(_ key: String) {
+        DispatchQueue.main.async { [weak self] in self?.curveSensorKey = key }
+    }
+
+    func setFixedRPM(_ rpm: Int, for index: Int) {
+        guard let fan = fan(index) else { return }
+        let clamped = min(max(rpm, fan.minRPM), fan.maxRPM)
+        fixedRPM[index] = clamped
+        guard modes[index] == .fixed else { return }
+        // Dragging the slider fires dozens of values per second; only push to the
+        // SMC when the target actually moved enough to matter.
+        if let last = lastAppliedFixed[index], abs(last - clamped) < 15 { return }
+        lastAppliedFixed[index] = clamped
+        DispatchQueue.main.async { [weak self] in
+            self?.applyFixed(index: index, rpm: clamped)
+        }
+    }
+
+    func setAllAuto() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.curveEnabled = false
+            for fan in self.fans {
+                self.modes[fan.index] = .auto
+                self.applyAuto(index: fan.index)
+            }
+            self.activePresetName = "自动"
+        }
+    }
+
+    func setAllFull() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.curveEnabled = false
+            for fan in self.fans {
+                self.modes[fan.index] = .full
+                self.applyFixed(index: fan.index, rpm: fan.maxRPM)
+            }
+            self.activePresetName = "全速"
+        }
+    }
+
+    private func applyAuto(index: Int) {
+        do {
+            try writeMode(index: index, manual: false)
+            lastError = nil
+        } catch {
+            lastError = error.localizedDescription
+        }
+        refresh()
+    }
+
+    private func applyFixed(index: Int, rpm: Int) {
+        guard let fan = fan(index), fan.canControl else {
+            lastError = "此机型未暴露可写的风扇控制键"
+            return
+        }
+        let clamped = min(max(rpm, fan.minRPM), fan.maxRPM)
+        do {
+            // Mode first, then target: the SMC only honours F{n}Tg once the fan is
+            // out of automatic mode.
+            try writeMode(index: index, manual: true)
+            try writeFloat("F\(index)Tg", Double(clamped))
+            lastError = nil
+        } catch {
+            lastError = error.localizedDescription
+        }
+        refresh()
+    }
+
+    private func writeMode(index: Int, manual: Bool) throws {
+        if SMC.shared.keyInfo("F\(index)Md")?.isWritable == true {
+            try HelperClient.shared.smcWriteBytes("F\(index)Md", [manual ? 1 : 0])
+            return
+        }
+        // Intel fallback: two bits per fan inside FS!.
+        if let info = SMC.shared.keyInfo("FS! "), info.size == 2 {
+            let current = (try? SMC.shared.readDouble("FS! ")) ?? 0
+            var flags = Int(current)
+            let shift = index * 2
+            flags &= ~(0x3 << shift)
+            if manual { flags |= (0x1 << shift) }
+            let bytes = [UInt8((flags >> 8) & 0xff), UInt8(flags & 0xff)]
+            try HelperClient.shared.smcWriteBytes("FS! ", bytes)
+            return
+        }
+        throw HelperError.smc("此机型未暴露风扇模式键")
+    }
+
+    private func writeFloat(_ key: String, _ value: Double) throws {
+        guard let info = SMC.shared.keyInfo(key) else { throw HelperError.smc("SMC 键 \(key) 不存在") }
+        guard info.isWritable else { throw HelperError.smc("SMC 键 \(key) 为只读") }
+        let bytes = try encode(value, for: info)
+        try HelperClient.shared.smcWriteBytes(key, bytes)
+    }
+
+    /// Encodes a value using the key's declared type, verifying the byte order by
+    /// decoding the result back through the same decoder the reader uses.
+    private func encode(_ value: Double, for info: SMCKeyInfo) throws -> [UInt8] {
+        switch info.type {
+        case "flt ":
+            let pattern = Float(value).bitPattern
+            let little = withUnsafeBytes(of: pattern.littleEndian) { Array($0) }
+            let big = withUnsafeBytes(of: pattern.bigEndian) { Array($0) }
+            if let decoded = try? SMC.decode(info: info, bytes: little), abs(decoded - value) < 1 {
+                return little
+            }
+            if let decoded = try? SMC.decode(info: info, bytes: big), abs(decoded - value) < 1 {
+                return big
+            }
+            return little
+        case "ui8 ":
+            return [UInt8(clamping: Int(value))]
+        case "ui16":
+            let raw = UInt16(clamping: Int(value))
+            return [UInt8(raw >> 8), UInt8(raw & 0xff)]
+        case "fpe2":
+            let raw = UInt16(clamping: Int((value * 4).rounded()))
+            return [UInt8(raw >> 8), UInt8(raw & 0xff)]
+        default:
+            throw HelperError.smc("不支持写入类型 \(info.type)")
+        }
+    }
+
+    // MARK: - Curve
+
+    private func applyCurveIfNeeded(force: Bool = false) {
+        guard curveEnabled else { return }
+        guard let temperature = curveTemperature() else { return }
+        for fan in fans where fan.canControl {
+            let target = curveRPM(temperature: temperature, fan: fan)
+            if !force, let last = lastCurveWrite[fan.index], abs(last - target) < 40 { continue }
+            lastCurveWrite[fan.index] = target
+            do {
+                try writeFloat("F\(fan.index)Tg", Double(target))
+                try writeMode(index: fan.index, manual: true)
+            } catch {
+                lastError = error.localizedDescription
+            }
+        }
+        if force { refresh() }
+    }
+
+    private func curveTemperature() -> Double? {
+        switch curveSensorKey {
+        case "battery":
+            return sensors.first { $0.key == "battery" }?.celsius
+        case "ssd":
+            return sensors.first { $0.key == "ssd" }?.celsius
+        case "gpu":
+            return sensors.first { $0.key == "gpu" }?.celsius
+        default:
+            return sensors.first { $0.key == "cpu-die" }?.celsius
+        }
+    }
+
+    private func curveRPM(temperature: Double, fan: FanInfo) -> Int {
+        let start = min(curveStartTemperature, curvePeakTemperature - 1)
+        let peak = max(curvePeakTemperature, start + 1)
+        let ratio = min(max((temperature - start) / (peak - start), 0), 1)
+        return fan.minRPM + Int((Double(fan.maxRPM - fan.minRPM) * ratio).rounded())
+    }
+
+    // MARK: - Presets
+
+    func savePreset(named name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let preset = FanPreset(name: trimmed, modes: modes, rpms: fixedRPM, curveEnabled: curveEnabled)
+        presets.removeAll { $0.name == trimmed }
+        presets.append(preset)
+        persistPresets()
+        activePresetName = trimmed
+    }
+
+    func apply(_ preset: FanPreset) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.curveEnabled = preset.curveEnabled
+            self.modes = preset.modes
+            self.fixedRPM = preset.rpms
+            if preset.curveEnabled {
+                self.applyCurveIfNeeded(force: true)
+            } else {
+                for fan in self.fans {
+                    switch preset.modes[fan.index] ?? .auto {
+                    case .auto: self.applyAuto(index: fan.index)
+                    case .full: self.applyFixed(index: fan.index, rpm: fan.maxRPM)
+                    case .fixed: self.applyFixed(index: fan.index, rpm: preset.rpms[fan.index] ?? fan.currentRPM)
+                    }
+                }
+            }
+            self.activePresetName = preset.name
+        }
+    }
+
+    /// Called on quit: a forced fan must never outlive the app.
+    func restoreSystemControl() {
+        for fan in fans {
+            try? writeMode(index: fan.index, manual: false)
+        }
+    }
+
+    // MARK: - Persistence
+
+    private func loadPersistedSettings() {
+        if let data = defaults.data(forKey: Keys.modes),
+           let decoded = try? JSONDecoder().decode([Int: FanMode].self, from: data) {
+            modes = decoded
+        }
+        if let data = defaults.data(forKey: Keys.rpms),
+           let decoded = try? JSONDecoder().decode([Int: Int].self, from: data) {
+            fixedRPM = decoded
+        }
+        if let data = defaults.data(forKey: Keys.presets),
+           let decoded = try? JSONDecoder().decode([FanPreset].self, from: data) {
+            presets = decoded
+        }
+        curveEnabled = defaults.bool(forKey: Keys.curveEnabled)
+        if let sensor = defaults.string(forKey: Keys.curveSensor) { curveSensorKey = sensor }
+        let start = defaults.double(forKey: Keys.curveStart)
+        if start > 0 { curveStartTemperature = start }
+        let peak = defaults.double(forKey: Keys.curvePeak)
+        if peak > 0 { curvePeakTemperature = peak }
+    }
+
+    private func persistModes() {
+        if let data = try? JSONEncoder().encode(modes) { defaults.set(data, forKey: Keys.modes) }
+        if let data = try? JSONEncoder().encode(fixedRPM) { defaults.set(data, forKey: Keys.rpms) }
+    }
+
+    private func persistPresets() {
+        if let data = try? JSONEncoder().encode(presets) { defaults.set(data, forKey: Keys.presets) }
+    }
+
+    private func fan(_ index: Int) -> FanInfo? {
+        fans.first { $0.index == index }
+    }
+
+    // MARK: - HID sensors
+
+    private func hidAverage(_ matching: (String) -> Bool) -> Double? {
+        let values = hidReadings().filter { matching($0.name) }.map { $0.celsius }
+        guard !values.isEmpty else { return nil }
+        return values.reduce(0, +) / Double(values.count)
+    }
+
+    /// Raw IOHID temperature services. Names come straight from IOKit, so the UI
+    /// can show them verbatim instead of inventing labels.
+    private func hidReadings() -> [(name: String, celsius: Double)] {
+        typealias CreateFunc = @convention(c) (CFAllocator?) -> Unmanaged<AnyObject>?
+        typealias MatchFunc = @convention(c) (AnyObject, CFDictionary) -> Void
+        typealias ServicesFunc = @convention(c) (AnyObject) -> Unmanaged<CFArray>?
+        typealias PropertyFunc = @convention(c) (AnyObject, CFString) -> Unmanaged<CFTypeRef>?
+        typealias EventFunc = @convention(c) (AnyObject, Int64, Int32, Int64) -> Unmanaged<AnyObject>?
+        typealias FloatFunc = @convention(c) (AnyObject, UInt32) -> Double
+
+        guard let handle = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_NOW) else { return [] }
+        defer { dlclose(handle) }
+        guard let createSym = dlsym(handle, "IOHIDEventSystemClientCreate"),
+              let matchSym = dlsym(handle, "IOHIDEventSystemClientSetMatching"),
+              let servicesSym = dlsym(handle, "IOHIDEventSystemClientCopyServices"),
+              let propertySym = dlsym(handle, "IOHIDServiceClientCopyProperty"),
+              let eventSym = dlsym(handle, "IOHIDServiceClientCopyEvent"),
+              let floatSym = dlsym(handle, "IOHIDEventGetFloatValue") else { return [] }
+
+        let create = unsafeBitCast(createSym, to: CreateFunc.self)
+        let match = unsafeBitCast(matchSym, to: MatchFunc.self)
+        let copyServices = unsafeBitCast(servicesSym, to: ServicesFunc.self)
+        let copyProperty = unsafeBitCast(propertySym, to: PropertyFunc.self)
+        let copyEvent = unsafeBitCast(eventSym, to: EventFunc.self)
+        let floatValue = unsafeBitCast(floatSym, to: FloatFunc.self)
+
+        guard let client = create(kCFAllocatorDefault)?.takeRetainedValue() else { return [] }
+        match(client, ["PrimaryUsagePage": 0xff00, "PrimaryUsage": 5] as CFDictionary)
+        guard let services = copyServices(client)?.takeRetainedValue() as? [AnyObject] else { return [] }
+
+        var rows: [(String, Double)] = []
+        for service in services {
+            guard let name = copyProperty(service, "Product" as CFString)?.takeRetainedValue() as? String else { continue }
+            guard let event = copyEvent(service, 15, 0, 0)?.takeRetainedValue() else { continue }
+            let celsius = floatValue(event, 0x000F0000)
+            guard celsius > 0, celsius < 130 else { continue }
+            rows.append((name, celsius))
+        }
+        return rows
+    }
+}
