@@ -17,13 +17,12 @@ struct OtherView: View {
                         .font(.system(size: 13))
                         .foregroundColor(theme.textPrimary)
                     Spacer()
-                    HStack(spacing: 18) {
-                        appearanceDot(mode: 0, label: t("系统"), symbol: "circle.lefthalf.filled")
-                        appearanceDot(mode: 1, label: t("浅色"), symbol: "sun.max.fill")
-                        appearanceDot(mode: 2, label: t("深色"), symbol: "moon.fill")
-                    }
+                    segmentControl(selection: $state.colorMode,
+                                   options: [SegmentOption(id: 0, symbol: "circle.lefthalf.filled", title: t("系统")),
+                                             SegmentOption(id: 1, symbol: "sun.max.fill", title: t("浅色")),
+                                             SegmentOption(id: 2, symbol: "moon.fill", title: t("深色"))])
                 }
-                .frame(height: 44)
+                .frame(height: 46)
 
                 HStack(spacing: 10) {
                     IconBadge(symbol: "globe")
@@ -31,13 +30,12 @@ struct OtherView: View {
                         .font(.system(size: 13))
                         .foregroundColor(theme.textPrimary)
                     Spacer()
-                    HStack(spacing: 18) {
-                        languageDot(mode: 0, label: t("系统"), symbol: "circle.lefthalf.filled")
-                        languageDot(mode: 1, label: "中文", symbol: "character")
-                        languageDot(mode: 2, label: "English", symbol: "textformat")
-                    }
+                    segmentControl(selection: $state.languageMode,
+                                   options: [SegmentOption(id: 0, symbol: "circle.lefthalf.filled", title: t("系统")),
+                                             SegmentOption(id: 1, symbol: "character", title: "中文"),
+                                             SegmentOption(id: 2, symbol: "textformat", title: "English")])
                 }
-                .frame(height: 44)
+                .frame(height: 46)
 
                 Text(t("合盖模式"))
                     .font(.system(size: 11, weight: .semibold))
@@ -168,34 +166,39 @@ struct OtherView: View {
         }
     }
 
-    private func appearanceDot(mode: Int, label: String, symbol: String) -> some View {
-        VStack(spacing: 4) {
-            Button { state.colorMode = mode } label: {
-                Circle()
-                    .fill(mode == 0 ? theme.innerControl : (mode == 1 ? Color.white : Color.black))
-                    .frame(width: 20, height: 20)
-                    .overlay(Circle().strokeBorder(state.colorMode == mode ? theme.accent : theme.cardStroke, lineWidth: state.colorMode == mode ? 2 : 1))
-                    .overlay(Image(systemName: symbol).font(.system(size: 8)).foregroundColor(mode == 1 ? .black : .white))
-            }
-            .buttonStyle(.plain)
-            Text(label).font(.system(size: 9)).foregroundColor(theme.textSecondary)
-        }
+    private struct SegmentOption: Identifiable {
+        let id: Int
+        let symbol: String
+        let title: String
     }
 
-    private func languageDot(mode: Int, label: String, symbol: String) -> some View {
-        VStack(spacing: 4) {
-            Button { state.languageMode = mode } label: {
-                Circle()
-                    .fill(theme.innerControl)
-                    .frame(width: 20, height: 20)
-                    .overlay(Circle().strokeBorder(state.languageMode == mode ? theme.accent : theme.cardStroke,
-                                                   lineWidth: state.languageMode == mode ? 2 : 1))
-                    .overlay(Image(systemName: symbol)
-                        .font(.system(size: 8))
-                        .foregroundColor(state.languageMode == mode ? theme.accent : theme.textSecondary))
+    /// One pill per row, both 216 pt wide so the two right edges line up. Icons
+    /// stay legible here — inside the old 20 pt circles they read as smudges.
+    private func segmentControl(selection: Binding<Int>, options: [SegmentOption]) -> some View {
+        HStack(spacing: 2) {
+            ForEach(options) { option in
+                Button { selection.wrappedValue = option.id } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: option.symbol)
+                            .font(.system(size: 9, weight: .semibold))
+                        Text(option.title)
+                            .font(.system(size: 11))
+                            .lineLimit(1)
+                    }
+                    .foregroundColor(selection.wrappedValue == option.id ? .white : theme.textSecondary)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 24)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(selection.wrappedValue == option.id ? theme.accent : Color.clear)
+                    )
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
-            Text(label).font(.system(size: 9)).foregroundColor(theme.textSecondary)
         }
+        .padding(3)
+        .frame(width: 216)
+        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(theme.innerControl))
+        .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(theme.cardStroke, lineWidth: 1))
     }
 }
