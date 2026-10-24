@@ -63,12 +63,21 @@ struct RootView: View {
 
             Spacer(minLength: 0)
 
-            HStack(spacing: 14) {
+            HStack(spacing: 12) {
                 circleButton("power") { NSApp.terminate(nil) }
-                Spacer()
-                circleButton("questionmark") {
-                    NSWorkspace.shared.open(URL(string: "https://apphousekitchen.com")!)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Infinity Computer")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(theme.textSecondary)
+                    Text(t("开发者 Steven Yang"))
+                        .font(.system(size: 9))
+                        .foregroundColor(theme.textTertiary)
                 }
+                .fixedSize()
+
+                Spacer(minLength: 0)
+
                 circleButton("gearshape", highlighted: state.selectedPanel == .other) {
                     state.selectedPanel = .other
                 }

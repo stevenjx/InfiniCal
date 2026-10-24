@@ -42,6 +42,19 @@ struct OtherView: View {
                     }
                 }
 
+                Text(t("通用"))
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(theme.textTertiary)
+                    .padding(.leading, 4)
+                    .padding(.top, 6)
+
+                Card {
+                    ToggleRow(symbol: "dock.rectangle",
+                              title: t("在 Dock 中显示图标"),
+                              help: t("关闭后应用只在菜单栏显示，不占用 Dock 与 Cmd-Tab。"),
+                              isOn: $state.showInDock)
+                }
+
                 Text(t("管理许可证"))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(theme.textTertiary)

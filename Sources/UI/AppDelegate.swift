@@ -26,8 +26,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
            let panel = Panel(rawValue: CommandLine.arguments[index + 1]) {
             state.selectedPanel = panel
         }
-        // The app is an accessory (no Dock icon), so the status item is the only
-        // way back once the window is closed.
+        // The app may run as an accessory (no Dock icon) or a regular app; the
+        // status item is always present, so closing the window is never a dead end.
+        state.applyDockPreference()
         menuBar = MenuBarController { [weak self] in self?.openMainWindow() }
         showWindow()
         if CommandLine.arguments.contains("--menubar") {

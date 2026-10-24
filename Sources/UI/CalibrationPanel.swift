@@ -106,7 +106,7 @@ struct CalibrationPanel: View {
                     .foregroundColor(theme.textTertiary)
             }
             Spacer()
-            statusPill
+            if engine.phase != .idle { statusPill }
             Button {
                 if engine.isRunning { AppState.shared.stopCalibration() } else { AppState.shared.startCalibration() }
             } label: {

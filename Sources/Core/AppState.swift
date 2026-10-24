@@ -131,6 +131,15 @@ final class AppState: ObservableObject {
     @Published var showProcessesInHighUsage: Bool = false { didSet { store(showProcessesInHighUsage, "showProcessesInHighUsage") } }
     @Published var energyThreshold: Int = 1 { didSet { store(energyThreshold, "appsSignificantEnergyThreshold") } }
     @Published var colorMode: Int = 2 { didSet { store(colorMode, "colorMode"); syncTheme() } }
+    /// `.accessory` keeps the app out of the Dock and Cmd-Tab; the status item is
+    /// then the only way back. Some users prefer a normal Dock icon, so this is a
+    /// setting rather than a hard-coded policy.
+    @Published var showInDock: Bool = true {
+        didSet {
+            store(showInDock, "showInDock")
+            if NSApp.isRunning { applyDockPreference() }
+        }
+    }
     @Published var launchAtLogin: Bool = false { didSet { store(launchAtLogin, "launchAtLogin"); applyLaunchAtLogin() } }
     @Published var startTasksAfterDue: Bool = false { didSet { store(startTasksAfterDue, "startTasksAfterDue") } }
     @Published var systemIsDark: Bool = true { didSet { syncTheme() } }
@@ -173,6 +182,11 @@ final class AppState: ObservableObject {
 
     func syncTheme() {
         Theme.current = theme
+    }
+
+    /// Applied once at launch and again whenever the setting changes.
+    func applyDockPreference() {
+        NSApp.setActivationPolicy(showInDock ? .regular : .accessory)
     }
 
     private init() {
@@ -1111,6 +1125,7 @@ final class AppState: ObservableObject {
         showProcessesInHighUsage = bool("showProcessesInHighUsage", false)
         energyThreshold = int("appsSignificantEnergyThreshold", 1)
         colorMode = int("colorMode", 2)
+        showInDock = bool("showInDock", true)
         launchAtLogin = bool("launchAtLogin", false)
         startTasksAfterDue = bool("startTasksAfterDue", false)
         if let data = defaults.data(forKey: "scheduledTasks"),
