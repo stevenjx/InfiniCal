@@ -435,6 +435,7 @@
 		FE4401F1864E6D214ECAB450 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				ARCHS = (
 					arm64,
 					x86_64,
@@ -459,6 +460,7 @@
 		AF37EF8BEBDCB8D4C98E7CA2 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				ARCHS = (
 					arm64,
 					x86_64,
@@ -483,6 +485,7 @@
 		1CF6D3A87219FAE4E73CC12C /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				ARCHS = (
 					arm64,
 					x86_64,
@@ -499,6 +502,7 @@
 		89B674E14FEADAD5001BA774 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				MACOSX_DEPLOYMENT_TARGET = 12.0;
 				ARCHS = (
 					arm64,
 					x86_64,

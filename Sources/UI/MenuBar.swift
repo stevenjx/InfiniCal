@@ -126,7 +126,7 @@ final class MenuBarController: NSObject {
     private func togglePopover() {
         if popover.isShown { closePopover(); return }
         guard let button = statusItem.button else { return }
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activateInFront()
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         popover.contentViewController?.view.window?.makeKey()
     }

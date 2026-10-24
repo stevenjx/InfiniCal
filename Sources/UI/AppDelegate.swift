@@ -80,7 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.window = window
         }
         window?.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activateInFront()
     }
 
     private func observeThemeChanges() {
@@ -94,3 +94,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+// MARK: - Activation
+
+extension NSApplication {
+    /// macOS 14 deprecates `activate(ignoringOtherApps:)` and only there adds the
+    /// replacement, so the 12/13 range keeps the old call.
+    func activateInFront() {
+        if #available(macOS 14.0, *) { activate() } else { activate(ignoringOtherApps: true) }
+    }
+}
+
+extension NSRunningApplication {
+    func activateInFront() {
+        if #available(macOS 14.0, *) { activate() } else { activate(options: [.activateIgnoringOtherApps]) }
+    }
+}

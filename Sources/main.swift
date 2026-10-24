@@ -12,7 +12,7 @@ let application = NSApplication.shared
 let identifier = Bundle.main.bundleIdentifier ?? "com.infinitycomputer.infinical"
 if let other = NSRunningApplication.runningApplications(withBundleIdentifier: identifier)
     .first(where: { $0.processIdentifier != getpid() }) {
-    other.activate(options: [.activateIgnoringOtherApps])
+    other.activateInFront()
     exit(0)
 }
 

@@ -31,9 +31,9 @@ struct OtherView: View {
                         .foregroundColor(theme.textPrimary)
                     Spacer()
                     segmentControl(selection: $state.languageMode,
-                                   options: [SegmentOption(id: 0, symbol: "circle.lefthalf.filled", title: t("系统")),
-                                             SegmentOption(id: 1, symbol: "character", title: "中文"),
-                                             SegmentOption(id: 2, symbol: "textformat", title: "English")])
+                                   options: [SegmentOption(id: 0, symbol: nil, title: t("系统")),
+                                             SegmentOption(id: 1, symbol: nil, title: "中文"),
+                                             SegmentOption(id: 2, symbol: nil, title: "English")])
                 }
                 .frame(height: 46)
 
@@ -168,7 +168,10 @@ struct OtherView: View {
 
     private struct SegmentOption: Identifiable {
         let id: Int
-        let symbol: String
+        /// `character` / `textformat` render as the glyphs “字” and “格式” in a
+        /// Chinese system, which read as stray text inside the pill — so the
+        /// language segments carry no icon at all.
+        let symbol: String?
         let title: String
     }
 
@@ -179,8 +182,10 @@ struct OtherView: View {
             ForEach(options) { option in
                 Button { selection.wrappedValue = option.id } label: {
                     HStack(spacing: 4) {
-                        Image(systemName: option.symbol)
-                            .font(.system(size: 9, weight: .semibold))
+                        if let symbol = option.symbol {
+                            Image(systemName: symbol)
+                                .font(.system(size: 9, weight: .semibold))
+                        }
                         Text(option.title)
                             .font(.system(size: 11))
                             .lineLimit(1)

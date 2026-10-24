@@ -438,7 +438,8 @@ project_release = common + '''\t\t\t\tDEBUG_INFORMATION_FORMAT = "dwarf-with-dsy
 \t\t\t\tSWIFT_OPTIMIZATION_LEVEL = "-O";
 '''
 
-app_common = '''\t\t\t\tARCHS = (
+app_common = '''\t\t\t\tMACOSX_DEPLOYMENT_TARGET = 12.0;
+\t\t\t\tARCHS = (
 \t\t\t\t\tarm64,
 \t\t\t\t\tx86_64,
 \t\t\t\t);
@@ -458,7 +459,8 @@ app_common = '''\t\t\t\tARCHS = (
 \t\t\t\tSWIFT_EMIT_LOC_STRINGS = NO;
 '''
 
-helper_common = '''\t\t\t\tARCHS = (
+helper_common = '''\t\t\t\tMACOSX_DEPLOYMENT_TARGET = 12.0;
+\t\t\t\tARCHS = (
 \t\t\t\t\tarm64,
 \t\t\t\t\tx86_64,
 \t\t\t\t);

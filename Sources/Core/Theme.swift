@@ -16,12 +16,12 @@ struct Theme {
     var sidebarBackground: Color { isDark ? Color(red: 0.115, green: 0.115, blue: 0.12) : Color(red: 0.945, green: 0.945, blue: 0.952) }
     var card: Color { isDark ? Color(red: 0.165, green: 0.165, blue: 0.172) : Color.white }
     var cardElevated: Color { isDark ? Color(red: 0.20, green: 0.20, blue: 0.208) : Color.white }
-    var innerControl: Color { isDark ? Color(red: 0.235, green: 0.235, blue: 0.245) : Color(red: 0.925, green: 0.925, blue: 0.935) }
-    var cardStroke: Color { isDark ? Color.white.opacity(0.075) : Color.black.opacity(0.06) }
-    var divider: Color { isDark ? Color.white.opacity(0.07) : Color.black.opacity(0.07) }
+    var innerControl: Color { isDark ? Color(red: 0.235, green: 0.235, blue: 0.245) : Color(red: 0.906, green: 0.906, blue: 0.918) }
+    var cardStroke: Color { isDark ? Color.white.opacity(0.075) : Color.black.opacity(0.095) }
+    var divider: Color { isDark ? Color.white.opacity(0.07) : Color.black.opacity(0.105) }
     var textPrimary: Color { isDark ? Color.white.opacity(0.92) : Color.black.opacity(0.86) }
-    var textSecondary: Color { isDark ? Color.white.opacity(0.52) : Color.black.opacity(0.5) }
-    var textTertiary: Color { isDark ? Color.white.opacity(0.34) : Color.black.opacity(0.32) }
+    var textSecondary: Color { isDark ? Color.white.opacity(0.52) : Color.black.opacity(0.56) }
+    var textTertiary: Color { isDark ? Color.white.opacity(0.34) : Color.black.opacity(0.42) }
     var accent: Color { Color(red: 0.04, green: 0.52, blue: 1.0) }
     var selectedSidebar: Color { isDark ? Color.white.opacity(0.09) : Color.black.opacity(0.06) }
     var chartGreen: Color { Color(red: 0.29, green: 0.62, blue: 0.36) }

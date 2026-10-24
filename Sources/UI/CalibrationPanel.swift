@@ -310,10 +310,13 @@ struct CalibrationPanel: View {
         return VStack(spacing: 6) {
             ZStack {
                 Circle()
-                    .fill(tint.opacity(isActive ? 0.18 : (isDone ? 0.1 : 0.06)))
+                    .fill(tint.opacity(theme.isDark
+                                        ? (isActive ? 0.18 : (isDone ? 0.10 : 0.06))
+                                        : (isActive ? 0.26 : (isDone ? 0.16 : 0.11))))
                     .frame(width: 32, height: 32)
                 Circle()
-                    .strokeBorder(tint.opacity(isActive ? 0.85 : 0.25), lineWidth: isActive ? 1.4 : 1)
+                    .strokeBorder(tint.opacity(isActive ? 0.85 : (theme.isDark ? 0.25 : 0.45)),
+                                  lineWidth: isActive ? 1.4 : 1)
                     .frame(width: 32, height: 32)
                 Image(systemName: phase.symbol)
                     .font(.system(size: 13, weight: .semibold))

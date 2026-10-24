@@ -501,11 +501,14 @@ struct PowerFlowView: View {
                                   startTop: item.startTop, startBottom: item.startBottom,
                                   endTop: item.endTop, endBottom: item.endBottom)
 
+            // The same 11–38 % alpha that reads as a soft glow on black is a
+            // barely visible smudge on white, so light mode gets more pigment.
+            let lift: Double = theme.isDark ? 1.0 : 1.7
             context.fill(path, with: .linearGradient(
                 Gradient(stops: [
-                    .init(color: color.opacity(0.38), location: 0),
-                    .init(color: color.opacity(0.20), location: 0.55),
-                    .init(color: color.opacity(0.11), location: 1)
+                    .init(color: color.opacity(min(0.58, 0.38 * lift)), location: 0),
+                    .init(color: color.opacity(min(0.38, 0.20 * lift)), location: 0.55),
+                    .init(color: color.opacity(min(0.22, 0.11 * lift)), location: 1)
                 ]),
                 startPoint: CGPoint(x: layout.ribbonStart, y: 0),
                 endPoint: CGPoint(x: layout.ribbonEnd, y: 0)))
@@ -523,8 +526,8 @@ struct PowerFlowView: View {
             bottomEdge.addCurve(to: CGPoint(x: layout.ribbonEnd, y: item.endBottom),
                                 control1: CGPoint(x: layout.ribbonStart + control, y: item.startBottom),
                                 control2: CGPoint(x: layout.ribbonEnd - control, y: item.endBottom))
-            context.stroke(topEdge, with: .color(color.opacity(0.45)), lineWidth: 1)
-            context.stroke(bottomEdge, with: .color(color.opacity(0.14)), lineWidth: 0.8)
+            context.stroke(topEdge, with: .color(color.opacity(theme.isDark ? 0.45 : 0.62)), lineWidth: 1)
+            context.stroke(bottomEdge, with: .color(color.opacity(theme.isDark ? 0.14 : 0.24)), lineWidth: 0.8)
 
             let watts = ticker.smoothedSinks[item.sink.id] ?? item.sink.watts ?? 0
             let intensity = min(1.0, watts / 14.0)
@@ -544,7 +547,7 @@ struct PowerFlowView: View {
                     let q = curvePoint(t: tt, x0: layout.ribbonStart, x1: layout.ribbonEnd,
                                        y0: centerStart, y1: centerEnd)
                     let fade = sin(tt * Double.pi)
-                    let alpha = (tail == 0 ? 0.85 : 0.24 / Double(tail)) * fade
+                    let alpha = min(1, (tail == 0 ? 0.85 : 0.24 / Double(tail)) * fade * (theme.isDark ? 1 : 1.12))
                     let r = radius * (tail == 0 ? 1 : 1.2)
                     let halo = CGRect(x: q.x - r * 2.4, y: q.y - r * 2.4,
                                       width: r * 4.8, height: r * 4.8)
