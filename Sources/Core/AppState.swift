@@ -6,6 +6,7 @@
 import Foundation
 import SwiftUI
 import AppKit
+import ServiceManagement
 
 enum Panel: String, CaseIterable, Identifiable {
     case dashboard
@@ -140,7 +141,14 @@ final class AppState: ObservableObject {
             if NSApp.isRunning { applyDockPreference() }
         }
     }
-    @Published var launchAtLogin: Bool = false { didSet { store(launchAtLogin, "launchAtLogin"); applyLaunchAtLogin() } }
+    @Published var launchAtLogin: Bool = false {
+        didSet {
+            store(launchAtLogin, "launchAtLogin")
+            // Loading defaults must not spawn `launchctl` on every launch; the
+            // agent is reconciled explicitly once the app is up.
+            if !isLoadingSettings { applyLaunchAtLogin() }
+        }
+    }
     @Published var startTasksAfterDue: Bool = false { didSet { store(startTasksAfterDue, "startTasksAfterDue") } }
     @Published var systemIsDark: Bool = true { didSet { syncTheme() } }
 
@@ -172,6 +180,7 @@ final class AppState: ObservableObject {
     private var sleepObserver: NSObjectProtocol?
     private var sleepInhibited = false
     private var lastLidClosed = false
+    private var isLoadingSettings = false
 
 
     // MARK: - Lifecycle
@@ -1026,7 +1035,55 @@ final class AppState: ObservableObject {
 
     // MARK: - Appearance / login item
 
-    private func applyLaunchAtLogin() {
+    /// macOS 13+ registers the app through `SMAppService`, which is the only
+    /// route that survives being launched from a TCC-protected folder: a hand
+    /// written LaunchAgent pointing at `~/Documents/...` is rejected by launchd
+    /// with a bare "Input/output error". macOS 12 falls back to the agent.
+    func applyLaunchAtLogin() {
+        guard #available(macOS 13.0, *) else {
+            applyLegacyLaunchAgent()
+            return
+        }
+        do {
+            if launchAtLogin {
+                if SMAppService.mainApp.status != .enabled { try SMAppService.mainApp.register() }
+            } else {
+                if SMAppService.mainApp.status == .enabled { try SMAppService.mainApp.unregister() }
+            }
+        } catch {
+            // A failed registration must not leave the switch claiming success.
+            statusNote = tf("开机自启设置失败：{p}", error.localizedDescription)
+            isLoadingSettings = true
+            launchAtLogin = !launchAtLogin
+            store(launchAtLogin, "launchAtLogin")
+            isLoadingSettings = false
+        }
+    }
+
+    /// Keeps the switch honest: the user can also remove the login item in
+    /// System Settings, and the legacy agent can go stale after the app moves.
+    func reconcileLaunchAtLogin() {
+        if #available(macOS 13.0, *) {
+            let registered = SMAppService.mainApp.status == .enabled
+            if registered != launchAtLogin, !isLoadingSettings {
+                isLoadingSettings = true
+                launchAtLogin = registered
+                store(launchAtLogin, "launchAtLogin")
+                isLoadingSettings = false
+            }
+            return
+        }
+        let path = NSHomeDirectory() + "/Library/LaunchAgents/com.infinitycomputer.infinical.plist"
+        guard launchAtLogin else {
+            if FileManager.default.fileExists(atPath: path) { applyLegacyLaunchAgent() }
+            return
+        }
+        let expected = Bundle.main.bundlePath + "/Contents/MacOS/InfiniCal"
+        let current = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+        if !current.contains(expected) { applyLegacyLaunchAgent() }
+    }
+
+    private func applyLegacyLaunchAgent() {
         let label = "com.infinitycomputer.infinical"
         let path = NSHomeDirectory() + "/Library/LaunchAgents/\(label).plist"
         if launchAtLogin {
@@ -1087,6 +1144,8 @@ final class AppState: ObservableObject {
     }
 
     private func loadSettings() {
+        isLoadingSettings = true
+        defer { isLoadingSettings = false }
         func int(_ key: String, _ fallback: Int) -> Int {
             defaults.object(forKey: key) == nil ? fallback : defaults.integer(forKey: key)
         }

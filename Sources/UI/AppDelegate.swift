@@ -29,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The app may run as an accessory (no Dock icon) or a regular app; the
         // status item is always present, so closing the window is never a dead end.
         state.applyDockPreference()
+        state.reconcileLaunchAtLogin()
         menuBar = MenuBarController { [weak self] in self?.openMainWindow() }
         showWindow()
         if CommandLine.arguments.contains("--menubar") {

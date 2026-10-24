@@ -49,10 +49,17 @@ struct OtherView: View {
                     .padding(.top, 6)
 
                 Card {
-                    ToggleRow(symbol: "dock.rectangle",
-                              title: t("在 Dock 中显示图标"),
-                              help: t("关闭后应用只在菜单栏显示，不占用 Dock 与 Cmd-Tab。"),
-                              isOn: $state.showInDock)
+                    VStack(spacing: 4) {
+                        ToggleRow(symbol: "dock.rectangle",
+                                  title: t("在 Dock 中显示图标"),
+                                  help: t("关闭后应用只在菜单栏显示，不占用 Dock 与 Cmd-Tab。"),
+                                  isOn: $state.showInDock)
+                        Divider().background(theme.divider)
+                        ToggleRow(symbol: "power.circle",
+                                  title: t("开机时自动启动"),
+                                  help: t("登录 macOS 后自动运行，让充电限制与风扇策略持续生效。"),
+                                  isOn: $state.launchAtLogin)
+                    }
                 }
 
                 Text(t("管理许可证"))
