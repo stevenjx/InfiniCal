@@ -62,11 +62,18 @@ is probed at runtime: `BCLM` (ceiling) or `CHIE` (inhibit) on Apple Silicon, `CH
 
 ### Menu bar and notifications
 
-The app runs as an accessory, so the menu bar is the way back in after closing the window: charge level, state,
-temperature, fans, adapter, plus top up / pause / set 80% / fans automatic.
+The menu bar is the way back in after closing the window: charge level, state, temperature, fans, adapter, plus
+top up / pause / set 80% / fans automatic.
 
 Notifications cover: charge limit reached, full, overheat protection on and off, top-up complete. Each event has a
 cooldown, so nothing fires every two seconds.
+
+### Interface and appearance
+
+- **Language**: follow the system, or force Chinese / English. Applied immediately, no relaunch.
+- **Appearance**: follow the system, light or dark.
+- **Show icon in Dock**: when off the app lives only in the menu bar and stays out of the Dock and Cmd-Tab.
+- **Launch at login**: registered through `SMAppService`; verify it under System Settings → General → Login Items.
 
 ### History
 
@@ -126,8 +133,9 @@ Panels: `dashboard`, `chargeControl`, `calibration`, `fanControl`, `sleep`, `his
 
 ## Localisation
 
-The interface follows the system language, switching between Simplified Chinese and English. Chinese is the source
-language; English lives in `Resources/en.json` and missing keys fall back to Chinese. Interpolated strings use
+The interface follows the system language, and Other → Language can force Chinese or English; the switch applies
+immediately. Chinese is the source language; English lives in `Resources/en.json` and missing keys fall back to
+Chinese. Interpolated strings use
 `{p}` placeholders so a translation can reorder them.
 
 ---

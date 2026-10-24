@@ -126,7 +126,7 @@ struct OtherView: View {
                 }
 
                 HStack(spacing: 6) {
-                    Text("InfiniCal 1.0.0")
+                    Text("InfiniCal \(Self.appVersion)")
                         .font(.system(size: 10))
                         .foregroundColor(theme.textTertiary)
                     Spacer()
@@ -164,6 +164,11 @@ struct OtherView: View {
         case .estimated: return Color(red: 0.95, green: 0.72, blue: 0.30)
         case .unavailable: return theme.textTertiary
         }
+    }
+
+    /// Read from the bundle so a version bump can never leave stale text here.
+    private static var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
     }
 
     private struct SegmentOption: Identifiable {
