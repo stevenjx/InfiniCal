@@ -132,6 +132,15 @@ final class AppState: ObservableObject {
     @Published var showProcessesInHighUsage: Bool = false { didSet { store(showProcessesInHighUsage, "showProcessesInHighUsage") } }
     @Published var energyThreshold: Int = 1 { didSet { store(energyThreshold, "appsSignificantEnergyThreshold") } }
     @Published var colorMode: Int = 2 { didSet { store(colorMode, "colorMode"); syncTheme() } }
+    /// 0 = follow the system, 1 = Chinese, 2 = English. Every string is resolved
+    /// through `t()` while a body is built, so publishing this is enough to
+    /// re-render the whole interface in the new language.
+    @Published var languageMode: Int = 0 {
+        didSet {
+            store(languageMode, "languageMode")
+            L10n.applyPreference(languageMode)
+        }
+    }
     /// `.accessory` keeps the app out of the Dock and Cmd-Tab; the status item is
     /// then the only way back. Some users prefer a normal Dock icon, so this is a
     /// setting rather than a hard-coded policy.
@@ -1184,6 +1193,7 @@ final class AppState: ObservableObject {
         showProcessesInHighUsage = bool("showProcessesInHighUsage", false)
         energyThreshold = int("appsSignificantEnergyThreshold", 1)
         colorMode = int("colorMode", 2)
+        languageMode = int("languageMode", 0)
         showInDock = bool("showInDock", true)
         launchAtLogin = bool("launchAtLogin", false)
         startTasksAfterDue = bool("startTasksAfterDue", false)

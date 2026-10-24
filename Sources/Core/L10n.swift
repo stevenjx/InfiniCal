@@ -12,15 +12,24 @@ import Foundation
 
 enum L10n {
 
-    /// Resolved once: the interface language does not change while running.
-    static let isChinese: Bool = {
+    /// `nil` follows the system language; set by 设置 → 其他 → 语言.
+    private static var override: Bool?
+
+    static var isChinese: Bool {
+        if let override { return override }
         let language = Locale.preferredLanguages.first ?? "en"
         return language.hasPrefix("zh")
-    }()
+    }
 
+    /// 0 = follow the system, 1 = Chinese, 2 = English.
+    static func applyPreference(_ mode: Int) {
+        override = mode == 1 ? true : (mode == 2 ? false : nil)
+    }
+
+    /// Loaded once and kept even in Chinese so the language can be switched at
+    /// runtime without relaunching.
     private static let table: [String: String] = {
-        guard !isChinese,
-              let url = Bundle.main.url(forResource: "en", withExtension: "json"),
+        guard let url = Bundle.main.url(forResource: "en", withExtension: "json"),
               let data = try? Data(contentsOf: url),
               let map = try? JSONDecoder().decode([String: String].self, from: data) else {
             return [:]

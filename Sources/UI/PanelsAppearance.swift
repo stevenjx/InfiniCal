@@ -7,7 +7,6 @@ import SwiftUI
 struct OtherView: View {
     @EnvironmentObject private var state: AppState
     private var theme: Theme { Theme.current }
-    @StateObject private var about = UIFlag()
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
@@ -22,6 +21,20 @@ struct OtherView: View {
                         appearanceDot(mode: 0, label: t("系统"), symbol: "circle.lefthalf.filled")
                         appearanceDot(mode: 1, label: t("浅色"), symbol: "sun.max.fill")
                         appearanceDot(mode: 2, label: t("深色"), symbol: "moon.fill")
+                    }
+                }
+                .frame(height: 44)
+
+                HStack(spacing: 10) {
+                    IconBadge(symbol: "globe")
+                    Text(t("语言"))
+                        .font(.system(size: 13))
+                        .foregroundColor(theme.textPrimary)
+                    Spacer()
+                    HStack(spacing: 18) {
+                        languageDot(mode: 0, label: t("系统"), symbol: "circle.lefthalf.filled")
+                        languageDot(mode: 1, label: "中文", symbol: "character")
+                        languageDot(mode: 2, label: "English", symbol: "textformat")
                     }
                 }
                 .frame(height: 44)
@@ -59,31 +72,6 @@ struct OtherView: View {
                                   title: t("开机时自动启动"),
                                   help: t("登录 macOS 后自动运行，让充电限制与风扇策略持续生效。"),
                                   isOn: $state.launchAtLogin)
-                    }
-                }
-
-                Text(t("管理许可证"))
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(theme.textTertiary)
-                    .padding(.leading, 4)
-                    .padding(.top, 6)
-
-                Card {
-                    HStack {
-                        Text(t("InfiniCal 专业版功能已全部解锁"))
-                            .font(.system(size: 12))
-                            .foregroundColor(theme.textPrimary)
-                        Spacer()
-                        Text(t("本地授权"))
-                            .font(.system(size: 11))
-                            .foregroundColor(theme.textSecondary)
-                    }
-                }
-
-                Card {
-                    HStack(spacing: 8) {
-                        SmallActionButton(title: t("简介"), symbol: "info.circle") { about.value = true }
-                        Spacer()
                     }
                 }
 
@@ -152,24 +140,6 @@ struct OtherView: View {
             }
             .padding(22)
         }
-        .sheet(isPresented: $about.value) {
-            VStack(spacing: 10) {
-                Image(systemName: "battery.100.bolt")
-                    .font(.system(size: 34))
-                    .foregroundColor(theme.accent)
-                Text("InfiniCal 1.0.0").font(.system(size: 14, weight: .semibold))
-                Text(t("电池充电管理工具\n适配 Intel 与 Apple Silicon，支持 macOS 12 及以上。"))
-                    .font(.system(size: 11))
-                    .multilineTextAlignment(.center)
-                    .foregroundColor(theme.textSecondary)
-                Button(t("好")) { about.value = false }
-                    .buttonStyle(.plain)
-                    .foregroundColor(theme.accent)
-                    .padding(.top, 6)
-            }
-            .padding(24)
-            .frame(width: 300)
-        }
     }
 
     private func sourceName(for reading: PowerReading) -> String {
@@ -206,6 +176,23 @@ struct OtherView: View {
                     .frame(width: 20, height: 20)
                     .overlay(Circle().strokeBorder(state.colorMode == mode ? theme.accent : theme.cardStroke, lineWidth: state.colorMode == mode ? 2 : 1))
                     .overlay(Image(systemName: symbol).font(.system(size: 8)).foregroundColor(mode == 1 ? .black : .white))
+            }
+            .buttonStyle(.plain)
+            Text(label).font(.system(size: 9)).foregroundColor(theme.textSecondary)
+        }
+    }
+
+    private func languageDot(mode: Int, label: String, symbol: String) -> some View {
+        VStack(spacing: 4) {
+            Button { state.languageMode = mode } label: {
+                Circle()
+                    .fill(theme.innerControl)
+                    .frame(width: 20, height: 20)
+                    .overlay(Circle().strokeBorder(state.languageMode == mode ? theme.accent : theme.cardStroke,
+                                                   lineWidth: state.languageMode == mode ? 2 : 1))
+                    .overlay(Image(systemName: symbol)
+                        .font(.system(size: 8))
+                        .foregroundColor(state.languageMode == mode ? theme.accent : theme.textSecondary))
             }
             .buttonStyle(.plain)
             Text(label).font(.system(size: 9)).foregroundColor(theme.textSecondary)
