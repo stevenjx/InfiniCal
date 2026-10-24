@@ -142,6 +142,15 @@ Writing the SMC requires **root**. The app itself is read-only; every write goes
 
 On quit, fan modes are written back to `F{n}Md = 0` and an unfinished calibration releases its charge inhibit.
 
+To remove the helper completely (the app has no uninstall button):
+
+```bash
+sudo launchctl bootout system/com.infinitycomputer.infinical.helper
+sudo rm -f /Library/PrivilegedHelperTools/com.infinitycomputer.infinical.helper \
+           /Library/LaunchDaemons/com.infinitycomputer.infinical.helper.plist \
+           /var/run/com.infinitycomputer.infinical.helper.sock
+```
+
 ---
 
 ## Layout

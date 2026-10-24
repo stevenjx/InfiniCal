@@ -199,21 +199,6 @@ final class HelperClient {
         throw HelperError.noResponse(t("助手已安装但未能启动"))
     }
 
-    func uninstall() {
-        let script = """
-        #!/bin/sh
-        /bin/launchctl bootout system/\(HelperClient.label) 2>/dev/null || true
-        /bin/rm -f "\(HelperClient.plistPath)" "\(HelperClient.helperPath)" "\(HelperClient.socketPath)"
-        /bin/launchctl bootout system/\(HelperClient.legacyLabel) 2>/dev/null || true
-        /bin/rm -f "\(HelperClient.legacyPlistPath)" "\(HelperClient.legacyHelperPath)" "\(HelperClient.legacySocketPath)"
-        """
-        let scriptPath = NSTemporaryDirectory() + "remove-infinical-helper.sh"
-        try? script.write(toFile: scriptPath, atomically: true, encoding: .utf8)
-        let appleScript = "do shell script \"/bin/sh \(scriptPath)\" with administrator privileges"
-        var errorInfo: NSDictionary?
-        NSAppleScript(source: appleScript)?.executeAndReturnError(&errorInfo)
-        lastKnownInstalled = false
-    }
 
     // MARK: - Operations
 

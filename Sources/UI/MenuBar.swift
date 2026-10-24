@@ -19,6 +19,10 @@ final class MenuBarController: NSObject {
     private let state = AppState.shared
     private let openWindow: () -> Void
     private var cancellables: Set<AnyCancellable> = []
+    /// Snapshot last drawn into the status item. The battery level only moves
+    /// every few minutes, but the state object publishes every 2 s; without this
+    /// the button allocates a fresh NSImage on every tick.
+    private var lastButtonKey: (Bool, Int, Bool, ChargeState, Int)?
 
     init(openWindow: @escaping () -> Void) {
         self.openWindow = openWindow
@@ -79,6 +83,9 @@ final class MenuBarController: NSObject {
     private func updateButton() {
         guard let button = statusItem.button else { return }
         let snapshot = state.snapshot
+        let key = (snapshot.isPresent, snapshot.percentage, snapshot.isCharging, state.chargeState, state.chargeVal)
+        if let last = lastButtonKey, last == key { return }
+        lastButtonKey = key
         guard snapshot.isPresent else {
             button.image = NSImage(systemSymbolName: "battery.0", accessibilityDescription: t("无电池"))
             button.image?.isTemplate = true

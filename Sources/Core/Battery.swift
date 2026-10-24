@@ -16,15 +16,12 @@ struct AdapterInfo: Equatable {
     var manufacturer: String = ""
     var serial: String = ""
     var model: String = ""
-    var familyCode: Int = 0
-    var adapterID: Int = 0
     var watts: Int = 0            // negotiated maximum, W
     var maxVoltage: Double = 0    // V
     var maxCurrent: Double = 0    // A
     var voltage: Double = 0       // measured input voltage, V
     var current: Double = 0       // measured input current, A
     var power: Double = 0         // measured input power, W
-    var isWireless: Bool = false
 
     var isEmpty: Bool { name.isEmpty && watts == 0 }
 }
@@ -39,9 +36,7 @@ struct BatterySnapshot: Equatable {
     var currentCapacity: Int = 0        // mAh
     var maxCapacity: Int = 0            // mAh (raw FCC)
     var designCapacity: Int = 0         // mAh
-    var nominalCapacity: Int = 0        // mAh
     var cycleCount: Int = 0
-    var designCycleCount: Int = 0
     var voltage: Double = 0             // V
     var amperage: Double = 0            // A, negative while discharging
     /// Instantaneous pack current. `amperage` is the filtered gauge value and
@@ -106,7 +101,6 @@ enum BatteryReader {
         snap.isCharging = (props["IsCharging"] as? Bool) ?? false
         snap.fullyCharged = (props["FullyCharged"] as? Bool) ?? false
         snap.cycleCount = intValue(props["CycleCount"]) ?? 0
-        snap.designCycleCount = intValue(props["DesignCycleCount9C"]) ?? 1000
         snap.voltage = Double(intValue(props["Voltage"]) ?? 0) / 1000.0
         snap.amperage = Double(intValue(props["Amperage"]) ?? 0) / 1000.0
         if snap.amperage == 0, let instant = intValue(props["InstantAmperage"]), instant != 0 {
@@ -121,7 +115,6 @@ enum BatteryReader {
             snap.designCapacity = intValue(data["DesignCapacity"]) ?? 0
             snap.maxCapacity = intValue(data["FullChargeCapacity"]) ?? 0
             snap.currentCapacity = intValue(data["RemainingCapacity"]) ?? 0
-            snap.nominalCapacity = intValue(data["NominalChargeCapacity"]) ?? 0
             if snap.percentage == 0 { snap.percentage = intValue(data["CurrentCapacity"]) ?? 0 }
             if let cells = data["CellVoltage"] as? [NSNumber], !cells.isEmpty {
                 snap.cellVoltages = cells.map { $0.doubleValue / 1000.0 }
@@ -156,12 +149,9 @@ enum BatteryReader {
             info.manufacturer = (adapter["Manufacturer"] as? String) ?? ""
             info.serial = (adapter["SerialString"] as? String) ?? ""
             info.model = (adapter["Model"] as? String) ?? ""
-            info.familyCode = intValue(adapter["FamilyCode"]) ?? 0
-            info.adapterID = intValue(adapter["AdapterID"]) ?? 0
             info.watts = intValue(adapter["Watts"]) ?? 0
             info.maxVoltage = Double(intValue(adapter["AdapterVoltage"]) ?? 0) / 1000.0
             info.maxCurrent = Double(intValue(adapter["Current"]) ?? 0) / 1000.0
-            info.isWireless = (adapter["IsWireless"] as? Bool) ?? false
             info.voltage = snap.systemVoltageIn
             info.current = snap.systemCurrentIn
             info.power = snap.systemPowerIn

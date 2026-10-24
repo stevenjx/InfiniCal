@@ -132,6 +132,15 @@ build/InfiniCal.app/Contents/MacOS/InfiniCal --menubar            # 直接展开
 
 退出 App 时自动恢复：风扇模式写回 `F{n}Md = 0`，校准未完成则释放充电阻断。
 
+彻底移除助手（App 内不提供卸载入口）：
+
+```bash
+sudo launchctl bootout system/com.infinitycomputer.infinical.helper
+sudo rm -f /Library/PrivilegedHelperTools/com.infinitycomputer.infinical.helper \
+           /Library/LaunchDaemons/com.infinitycomputer.infinical.helper.plist \
+           /var/run/com.infinitycomputer.infinical.helper.sock
+```
+
 ---
 
 ## 目录结构

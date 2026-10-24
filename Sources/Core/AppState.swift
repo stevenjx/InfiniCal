@@ -83,7 +83,7 @@ final class AppState: ObservableObject {
     @Published var chargeVal: Int = 80 {
         didSet {
             store(chargeVal, "chargeVal")
-            applyChargeLimitIfNeeded()
+            invalidateAppliedLimit()
             // A limit the user typed in means they took over; stop tracking the
             // one-shot top-up instead of overwriting their choice later.
             if !suppressTopUpCancel, topUpRestore != nil, chargeVal != 100 {
@@ -383,12 +383,17 @@ final class AppState: ObservableObject {
         }
         updateChargeState()
         notifyLimitReached()
-        if tickCount % 10 == 0 { refreshEnergyApps() }
+        // `ps` is a process spawn; skip it while nobody can see the list.
+        if tickCount % 10 == 0, dashboardBackgroundUpdates || NSApp.isActive {
+            refreshEnergyApps()
+        }
         if tickCount % 30 == 0 {
             helperInstalled = HelperClient.shared.refreshInstallState()
-            saveHistory()
             DailyHistory.shared.save()
         }
+        // ~150 KB of JSON per write. Five minutes is plenty for a rolling
+        // three-hour window, and a crash loses at most that much.
+        if tickCount % 150 == 0 { saveHistory() }
     }
 
     // MARK: - Long-term history
@@ -515,7 +520,8 @@ final class AppState: ObservableObject {
         }
     }
 
-    private func applyChargeLimitIfNeeded() {
+    /// Forces the next tick to write the ceiling again.
+    private func invalidateAppliedLimit() {
         lastAppliedLimit = nil
     }
 
@@ -1038,14 +1044,14 @@ final class AppState: ObservableObject {
         return base.appendingPathComponent("history.json")
     }
 
-    private func saveHistory() {
+    func saveHistory() {
         struct Stored: Codable { var battery: [HistoryPoint]; var temperature: [HistoryPoint]; var power: [HistoryPoint]; var capacity: [HistoryPoint] }
         let stored = Stored(battery: history.battery.suffix(600).map { $0 },
                             temperature: history.temperature.suffix(600).map { $0 },
                             power: history.power.suffix(600).map { $0 },
                             capacity: history.capacity.suffix(600).map { $0 })
         if let data = try? JSONEncoder().encode(stored) {
-            try? data.write(to: historyURL)
+            try? data.write(to: historyURL, options: .atomic)
         }
     }
 
@@ -1157,7 +1163,14 @@ final class AppState: ObservableObject {
     /// SoC: measured through powermetrics when the helper is installed (root),
     /// otherwise a labelled estimate. Display: always a labelled estimate on this
     /// platform because no backlight power counter exists.
+    ///
+    /// powermetrics is run by the root daemon, so its cost never appears in this
+    /// process — asking for it every 8 s in the background is invisible in
+    /// Activity Monitor and still wakes the machine. Nothing renders these two
+    /// values but the flow diagram, so they are only refreshed while the app is
+    /// actually on screen.
     private func refreshComponentPower() {
+        guard dashboardBackgroundUpdates || NSApp.isActive else { return }
         let now = Date()
         if helperInstalled, !socRequestInFlight, now.timeIntervalSince(lastHelperSocPoll) > 8 {
             lastHelperSocPoll = now

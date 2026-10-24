@@ -159,7 +159,6 @@ final class CalibrationEngine: ObservableObject {
     // MARK: Estimates
 
     @Published var aiRemainingMinutes: Int = 0
-    @Published var aiRemainingMAh: Double = 0
     @Published var aiTrueCapacityMAh: Double = 0
     @Published var aiTrueHealthPercent: Double = 0
     @Published var aiConfidence: Double = 0
@@ -373,10 +372,15 @@ final class CalibrationEngine: ObservableObject {
         holdStart = nil
         phase = .idle
         append(reason ?? t("用户中止了校准"))
-        if telemetryPageUsers == 0 {
-            timer?.invalidate()
-            timer = nil
-        }
+        stopTelemetryIfIdle()
+    }
+
+    /// The 1 Hz timer is only needed while a session runs or the panel is on
+    /// screen. `finish()` used to leave it running for the life of the process.
+    private func stopTelemetryIfIdle() {
+        guard !isRunning, telemetryPageUsers == 0 else { return }
+        timer?.invalidate()
+        timer = nil
     }
 
     /// Quit path: a session must never leave the pack blocked or the sleep
@@ -463,7 +467,6 @@ final class CalibrationEngine: ObservableObject {
         aiTrueCapacityMAh = estimate.capacityMAh
         aiTrueHealthPercent = estimate.healthPercent
         aiConfidence = estimate.confidence
-        aiRemainingMAh = estimate.capacityMAh * Double(percentage) / 100
 
         if signedAmperage < -0.05 || isDischargingOnAC {
             aiRemainingMinutes = model.remainingMinutes(percentage: percentage,
@@ -625,6 +628,7 @@ final class CalibrationEngine: ObservableObject {
         defaults.set(Date().timeIntervalSince1970, forKey: Keys.lastRun)
         refreshLastRunDate()
         notify(t("校准完成"), tf("真实容量 {p} mAh，健康度 {p}。", String(format: "%.0f", measuredCapacityMAh), String(format: "%.1f%%", measuredHealth)))
+        stopTelemetryIfIdle()
     }
 
     // MARK: - Hardware control (own helper, no external app)
