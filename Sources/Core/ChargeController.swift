@@ -18,10 +18,10 @@ enum ChargeStrategy: String {
 
     var title: String {
         switch self {
-        case .bclm: return "BCLM（充电上限）"
-        case .ch0bch0c: return "CH0B / CH0C（充电禁止）"
-        case .chie: return "CHIE（充电禁止标志）"
-        case .unavailable: return "不可用"
+        case .bclm: return t("BCLM（充电上限）")
+        case .ch0bch0c: return t("CH0B / CH0C（充电禁止）")
+        case .chie: return t("CHIE（充电禁止标志）")
+        case .unavailable: return t("不可用")
         }
     }
 }
@@ -40,10 +40,10 @@ struct ChargeCapabilities {
 
     var summary: String {
         switch strategy {
-        case .bclm: return "通过 BCLM 直接设置充电上限"
-        case .ch0bch0c: return "通过 CH0B/CH0C 禁止充电，由守护进程按阈值控制"
-        case .chie: return "通过 CHIE 禁止充电，由守护进程按阈值控制"
-        case .unavailable: return "此机型未暴露可写的充电控制键"
+        case .bclm: return t("通过 BCLM 直接设置充电上限")
+        case .ch0bch0c: return t("通过 CH0B/CH0C 禁止充电，由守护进程按阈值控制")
+        case .chie: return t("通过 CHIE 禁止充电，由守护进程按阈值控制")
+        case .unavailable: return t("此机型未暴露可写的充电控制键")
         }
     }
 }
@@ -55,9 +55,9 @@ enum HelperError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .notInstalled: return "需要安装特权助手才能写入 SMC"
-        case .noResponse(let detail): return "特权助手无响应：\(detail)"
-        case .smc(let detail): return "SMC 操作失败：\(detail)"
+        case .notInstalled: return t("需要安装特权助手才能写入 SMC")
+        case .noResponse(let detail): return tf("特权助手无响应：{p}", detail)
+        case .smc(let detail): return tf("SMC 操作失败：{p}", detail)
         }
     }
 }
@@ -141,7 +141,7 @@ final class HelperClient {
     func install() throws {
         let source = bundledHelperPath
         guard FileManager.default.fileExists(atPath: source) else {
-            throw HelperError.noResponse("安装包内缺少助手可执行文件")
+            throw HelperError.noResponse(t("安装包内缺少助手可执行文件"))
         }
         let uid = getuid()
         let plist = """
@@ -189,14 +189,14 @@ final class HelperClient {
         var errorInfo: NSDictionary?
         NSAppleScript(source: appleScript)?.executeAndReturnError(&errorInfo)
         if let errorInfo {
-            throw HelperError.noResponse(errorInfo[NSAppleScript.errorMessage] as? String ?? "授权失败")
+            throw HelperError.noResponse(errorInfo[NSAppleScript.errorMessage] as? String ?? t("授权失败"))
         }
         // Give launchd a moment to start the daemon.
         for _ in 0..<20 {
             if ping() { lastKnownInstalled = true; return }
             Thread.sleep(forTimeInterval: 0.25)
         }
-        throw HelperError.noResponse("助手已安装但未能启动")
+        throw HelperError.noResponse(t("助手已安装但未能启动"))
     }
 
     func uninstall() {
@@ -246,10 +246,10 @@ final class HelperClient {
         guard lastKnownInstalled else { throw HelperError.notInstalled }
         let hex = String(format: "%02x", value)
         guard let response = request(["cmd": "write", "key": key, "bytes": hex]) else {
-            throw HelperError.noResponse("写入 \(key) 超时")
+            throw HelperError.noResponse(tf("写入 {p} 超时", key))
         }
         guard (response["ok"] as? Bool) == true else {
-            throw HelperError.smc((response["error"] as? String) ?? "未知错误")
+            throw HelperError.smc((response["error"] as? String) ?? t("未知错误"))
         }
     }
 
@@ -263,10 +263,10 @@ final class HelperClient {
         guard lastKnownInstalled else { throw HelperError.notInstalled }
         let hex = bytes.map { String(format: "%02x", $0) }.joined()
         guard let response = request(["cmd": "write", "key": key, "bytes": hex]) else {
-            throw HelperError.noResponse("写入 \(key) 超时")
+            throw HelperError.noResponse(tf("写入 {p} 超时", key))
         }
         guard (response["ok"] as? Bool) == true else {
-            throw HelperError.smc((response["error"] as? String) ?? "未知错误")
+            throw HelperError.smc((response["error"] as? String) ?? t("未知错误"))
         }
     }
 
@@ -283,10 +283,10 @@ final class HelperClient {
     func runPrivileged(_ path: String, _ arguments: [String]) throws -> String {
         guard lastKnownInstalled else { throw HelperError.notInstalled }
         guard let response = request(["cmd": "exec", "path": path, "args": arguments], timeout: 6) else {
-            throw HelperError.noResponse("执行 \(path) 超时")
+            throw HelperError.noResponse(tf("执行 {p} 超时", path))
         }
         guard (response["ok"] as? Bool) == true else {
-            throw HelperError.smc((response["error"] as? String) ?? "未知错误")
+            throw HelperError.smc((response["error"] as? String) ?? t("未知错误"))
         }
         return (response["output"] as? String) ?? ""
     }
@@ -325,7 +325,7 @@ final class ChargeController {
                 let value = (try? SMC.shared.readDouble(key)) ?? 0
                 rows.append((key, "\(info.type) · \(String(format: "%.2f", value))"))
             } else {
-                rows.append((key, "不存在"))
+                rows.append((key, t("不存在")))
             }
         }
         caps.rawKeys = rows
@@ -345,7 +345,7 @@ final class ChargeController {
         case .chie:
             break
         case .unavailable:
-            throw HelperError.smc("此机型未暴露充电限制键")
+            throw HelperError.smc(t("此机型未暴露充电限制键"))
         }
     }
 
@@ -364,7 +364,7 @@ final class ChargeController {
         case .chie:
             try HelperClient.shared.smcWrite("CHIE", allowed ? 0x00 : 0x01)
         case .unavailable:
-            throw HelperError.smc("此机型未暴露充电控制键")
+            throw HelperError.smc(t("此机型未暴露充电控制键"))
         }
     }
 

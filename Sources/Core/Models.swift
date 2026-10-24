@@ -17,13 +17,13 @@ enum ChargeState: String {
 
     var title: String {
         switch self {
-        case .charging: return "充电中"
-        case .paused: return "充电已暂停"
-        case .discharging: return "放电中"
-        case .full: return "已充满"
-        case .calibrating: return "校准中"
-        case .noBattery: return "无电池"
-        case .noAdapter: return "未接电源"
+        case .charging: return t("充电中")
+        case .paused: return t("充电已暂停")
+        case .discharging: return t("放电中")
+        case .full: return t("已充满")
+        case .calibrating: return t("校准中")
+        case .noBattery: return t("无电池")
+        case .noAdapter: return t("未接电源")
         }
     }
 
@@ -49,11 +49,11 @@ enum CalibrationStage: Int, CaseIterable {
 
     var title: String {
         switch self {
-        case .chargeToFull: return "充电至 100%"
-        case .dischargeToTen: return "放电至 10%"
-        case .chargeToFullAgain: return "充电至 100%"
-        case .hold: return "保持"
-        case .dischargeToLimit: return "放电到 80%"
+        case .chargeToFull: return t("充电至 100%")
+        case .dischargeToTen: return t("放电至 10%")
+        case .chargeToFullAgain: return t("充电至 100%")
+        case .hold: return t("保持")
+        case .dischargeToLimit: return t("放电到 80%")
         }
     }
 }
@@ -69,11 +69,11 @@ enum TaskKind: String, Codable, CaseIterable {
 
     var title: String {
         switch self {
-        case .topUp: return "充满"
-        case .stopCharging: return "暂停充电"
-        case .startDischarge: return "开始放电"
-        case .calibrate: return "启动校准模式"
-        case .setLimit: return "设置充电限制"
+        case .topUp: return t("充满")
+        case .stopCharging: return t("暂停充电")
+        case .startDischarge: return t("开始放电")
+        case .calibrate: return t("启动校准模式")
+        case .setLimit: return t("设置充电限制")
         }
     }
 
@@ -102,9 +102,9 @@ struct ScheduledTask: Identifiable, Codable, Equatable {
     var timeText: String { String(format: "%02d:%02d", hour, minute) }
 
     var weekdayText: String {
-        if weekdays.count == 7 { return "每天" }
-        let names = ["一", "二", "三", "四", "五", "六", "日"]
-        return weekdays.sorted().map { "周" + names[$0 - 1] }.joined(separator: " ")
+        if weekdays.count == 7 { return t("每天") }
+        let names = [t("一"), t("二"), t("三"), t("四"), t("五"), t("六"), t("日")]
+        return weekdays.sorted().map { t("周") + names[$0 - 1] }.joined(separator: " ")
     }
 }
 

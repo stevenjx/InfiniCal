@@ -26,21 +26,21 @@ struct DashboardView: View {
                 // One row of four equal charts. The right column used to sit next to
                 // these, which squeezed each card to ~90 pt and wrapped the titles.
                 HStack(alignment: .top, spacing: 14) {
-                    chartCard(title: "电池电量",
+                    chartCard(title: t("电池电量"),
                               value: "\(state.snapshot.percentage) %",
                               symbol: "battery.100",
                               color: theme.chartGreen,
                               points: state.history.battery,
                               limit: state.limitMarkerFraction,
                               range: 0...100)
-                    chartCard(title: "电池温度",
+                    chartCard(title: t("电池温度"),
                               value: state.snapshot.temperature > 0 ? String(format: "%.0f°C", state.snapshot.temperature) : "--",
                               symbol: "thermometer",
                               color: theme.chartBlue,
                               points: state.history.temperature,
                               limit: nil,
                               range: nil)
-                    chartCard(title: "耗电量",
+                    chartCard(title: t("耗电量"),
                               value: PowerFormat.watts(state.energyUseWatts),
                               caption: remainingTimeText,
                               symbol: "bolt.horizontal",
@@ -48,7 +48,7 @@ struct DashboardView: View {
                               points: state.history.power,
                               limit: nil,
                               range: nil)
-                    chartCard(title: "最大容量",
+                    chartCard(title: t("最大容量"),
                               value: "\(state.snapshot.healthPercent) %",
                               caption: "\(state.snapshot.maxCapacity) / \(state.snapshot.designCapacity) mAh",
                               symbol: "heart",
@@ -76,14 +76,14 @@ struct DashboardView: View {
     private var batterySpecs: some View {
         Card {
             VStack(alignment: .leading, spacing: 5) {
-                cardHeader("bolt.fill", "电池规格")
-                spec("电流", String(format: "%.2f A", abs(state.snapshot.amperage)))
-                spec("电压", String(format: "%.2f V", state.snapshot.voltage))
-                spec("功率", String(format: "%.1f W", abs(state.snapshot.power)))
-                spec("系统负载", String(format: "%.1f W", state.totalPowerWatts),
-                     trailing: String(format: "1 分钟均值 %.1f W", state.snapshot.systemLoad))
-                spec("低电量模式", state.snapshot.lowPowerMode ? "已开启" : "已关闭")
-                spec("电池充电", "\(state.snapshot.currentCapacity) mAh")
+                cardHeader("bolt.fill", t("电池规格"))
+                spec(t("电流"), String(format: "%.2f A", abs(state.snapshot.amperage)))
+                spec(t("电压"), String(format: "%.2f V", state.snapshot.voltage))
+                spec(t("功率"), String(format: "%.1f W", abs(state.snapshot.power)))
+                spec(t("系统负载"), String(format: "%.1f W", state.totalPowerWatts),
+                     trailing: String(format: t("1 分钟均值 %.1f W"), state.snapshot.systemLoad))
+                spec(t("低电量模式"), state.snapshot.lowPowerMode ? t("已开启") : t("已关闭"))
+                spec(t("电池充电"), "\(state.snapshot.currentCapacity) mAh")
                 Spacer(minLength: 0)
             }
         }
@@ -92,11 +92,11 @@ struct DashboardView: View {
     private var batteryHealth: some View {
         Card {
             VStack(alignment: .leading, spacing: 5) {
-                cardHeader("heart.fill", "电池健康")
-                spec("设计容量", "\(state.snapshot.designCapacity) mAh")
-                spec("最大容量", "\(state.snapshot.maxCapacity) mAh", trailing: "\(state.snapshot.healthPercent) %")
-                spec("macOS 状态", state.snapshot.conditionText)
-                spec("循环次数", "\(state.snapshot.cycleCount)")
+                cardHeader("heart.fill", t("电池健康"))
+                spec(t("设计容量"), "\(state.snapshot.designCapacity) mAh")
+                spec(t("最大容量"), "\(state.snapshot.maxCapacity) mAh", trailing: "\(state.snapshot.healthPercent) %")
+                spec(t("macOS 状态"), state.snapshot.conditionText)
+                spec(t("循环次数"), "\(state.snapshot.cycleCount)")
                 Spacer(minLength: 0)
             }
         }
@@ -105,22 +105,22 @@ struct DashboardView: View {
     private var adapterSpecs: some View {
         Card {
             VStack(alignment: .leading, spacing: 5) {
-                cardHeader("powerplug.fill", "电源适配器规格")
+                cardHeader("powerplug.fill", t("电源适配器规格"))
                 if state.snapshot.adapter.isEmpty {
-                    Text("未连接电源适配器")
+                    Text(t("未连接电源适配器"))
                         .font(.system(size: 12))
                         .foregroundColor(theme.textSecondary)
                         .padding(.top, 8)
                 } else {
-                    spec("电流", String(format: "%.2f A", state.snapshot.adapter.current),
-                         trailing: String(format: "的 %.2f A", state.snapshot.adapter.maxCurrent))
-                    spec("电压", String(format: "%.2f V", state.snapshot.adapter.voltage),
-                         trailing: String(format: "的 %.0f V", state.snapshot.adapter.maxVoltage))
-                    spec("功率", String(format: "%.1f W", state.snapshot.adapter.power),
-                         trailing: "的 \(state.snapshot.adapter.watts) W")
-                    spec("名称", state.snapshot.adapter.name)
-                    spec("制造商", state.snapshot.adapter.manufacturer)
-                    spec("序列号", state.snapshot.adapter.serial)
+                    spec(t("电流"), String(format: "%.2f A", state.snapshot.adapter.current),
+                         trailing: String(format: t("的 %.2f A"), state.snapshot.adapter.maxCurrent))
+                    spec(t("电压"), String(format: "%.2f V", state.snapshot.adapter.voltage),
+                         trailing: String(format: t("的 %.0f V"), state.snapshot.adapter.maxVoltage))
+                    spec(t("功率"), String(format: "%.1f W", state.snapshot.adapter.power),
+                         trailing: tf("的 {p} W", "\(state.snapshot.adapter.watts)"))
+                    spec(t("名称"), state.snapshot.adapter.name)
+                    spec(t("制造商"), state.snapshot.adapter.manufacturer)
+                    spec(t("序列号"), state.snapshot.adapter.serial)
                 }
                 Spacer(minLength: 0)
             }
@@ -179,9 +179,9 @@ struct DashboardView: View {
     private var remainingTimeText: String {
         if state.snapshot.isPluggedIn {
             if let minutes = state.snapshot.timeToFull, minutes > 0, minutes < 24 * 60 {
-                return "充满约 \(minutes / 60) 小时 \(minutes % 60) 分"
+                return tf("充满约 {p} 小时 {p} 分", "\(minutes / 60)", "\(minutes % 60)")
             }
-            return state.snapshot.isCharging ? "充电中" : "已接电源"
+            return state.snapshot.isCharging ? t("充电中") : t("已接电源")
         }
         guard let hours = state.snapshot.remainingHours(atPower: state.energyUseWatts) else {
             return "—"
@@ -189,7 +189,7 @@ struct DashboardView: View {
         // Round to the nearest minute; a seconds-precision estimate would imply
         // accuracy the measurement does not have.
         let totalMinutes = max(1, Int((hours * 60).rounded()))
-        return "剩余 \(totalMinutes / 60) 小时 \(totalMinutes % 60) 分"
+        return tf("剩余 {p} 小时 {p} 分", "\(totalMinutes / 60)", "\(totalMinutes % 60)")
     }
 
     // MARK: - Bottom row cards
@@ -197,7 +197,7 @@ struct DashboardView: View {
     private var highUsageCard: some View {
         Card(padding: 12) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("高功耗的应用程序")
+                Text(t("高功耗的应用程序"))
                     .font(.system(size: 11))
                     .foregroundColor(theme.textSecondary)
                 if state.highUsageApps.isEmpty {
@@ -206,7 +206,7 @@ struct DashboardView: View {
                             .fill(theme.innerControl)
                             .frame(width: 26, height: 26)
                             .overlay(Image(systemName: "app.dashed").font(.system(size: 12)).foregroundColor(theme.textTertiary))
-                        Text("暂无")
+                        Text(t("暂无"))
                             .font(.system(size: 12))
                             .foregroundColor(theme.textSecondary)
                     }
@@ -236,7 +236,7 @@ struct DashboardView: View {
         Card(padding: 12) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("上一次校准")
+                    Text(t("上一次校准"))
                         .font(.system(size: 11))
                         .foregroundColor(theme.textSecondary)
                     Spacer()
@@ -250,7 +250,7 @@ struct DashboardView: View {
                     HStack(spacing: 6) {
                         Image(systemName: state.calibration == nil ? "play.fill" : "stop.fill")
                             .font(.system(size: 10))
-                        Text(state.calibration == nil ? "开始校准" : "停止校准")
+                        Text(state.calibration == nil ? t("开始校准") : t("停止校准"))
                             .font(.system(size: 12, weight: .medium))
                         Spacer()
                         Image(systemName: "chevron.right").font(.system(size: 9))
@@ -283,17 +283,17 @@ private struct PowerFlowCard: View {
         Card(padding: 12) {
             VStack(spacing: 10) {
                 HStack(spacing: 8) {
-                    chip("powerplug.fill", "电源适配器", PowerFormat.watts(state.snapshot.isPluggedIn ? flowTicker.shownSource : 0), tint: Color(red: 0.95, green: 0.72, blue: 0.30))
+                    chip("powerplug.fill", t("电源适配器"), PowerFormat.watts(state.snapshot.isPluggedIn ? flowTicker.shownSource : 0), tint: Color(red: 0.95, green: 0.72, blue: 0.30))
                     divider
                     chip("laptopcomputer", "MacBook", PowerFormat.watts(flowTicker.shownSystem), tint: Color(red: 0.36, green: 0.58, blue: 0.98))
                     divider
-                    chip("battery.100", "电池", PowerFormat.signedWatts(state.snapshot.voltage * state.snapshot.amperage), tint: Color(red: 0.30, green: 0.78, blue: 0.45))
+                    chip("battery.100", t("电池"), PowerFormat.signedWatts(state.snapshot.voltage * state.snapshot.amperage), tint: Color(red: 0.30, green: 0.78, blue: 0.45))
                     divider
                     chip("cpu", "SoC", reading(state.soc, flowTicker.shownSinks["soc"]), tint: Color(red: 0.55, green: 0.47, blue: 0.96))
                     divider
-                    chip("display", "显示", reading(state.displayPower, flowTicker.shownSinks["display"]), tint: Color(red: 0.36, green: 0.58, blue: 0.98))
+                    chip("display", t("显示"), reading(state.displayPower, flowTicker.shownSinks["display"]), tint: Color(red: 0.36, green: 0.58, blue: 0.98))
                     divider
-                    chip("ellipsis", "其他", PowerFormat.watts(flowTicker.shownSinks["other"]))
+                    chip("ellipsis", t("其他"), PowerFormat.watts(flowTicker.shownSinks["other"]))
                     Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 4)

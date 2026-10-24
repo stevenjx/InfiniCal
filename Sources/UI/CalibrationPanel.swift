@@ -37,13 +37,13 @@ struct CalibrationPanel: View {
                 healthCard
             }
             HStack(spacing: 10) {
-                hostCard(title: "CPU 功耗",
+                hostCard(title: t("CPU 功耗"),
                          value: String(format: "%.1f", engine.cpuPowerWatts),
                          unit: "W",
                          symbol: "cpu",
                          tint: theme.chartOrange,
                          progress: min(1, engine.cpuPowerWatts / 50))
-                hostCard(title: "CPU 温度",
+                hostCard(title: t("CPU 温度"),
                          value: engine.cpuTemperature > 0 ? String(format: "%.0f", engine.cpuTemperature) : "--",
                          unit: "°C",
                          symbol: "thermometer.medium",
@@ -53,8 +53,8 @@ struct CalibrationPanel: View {
             }
             HStack(spacing: 10) {
                 scopeCard(title: engine.phase == .discharging
-                          ? "放电曲线（\(engine.dischargeStartPercentage)% → \(engine.dischargeTarget)%）"
-                          : "电量趋势",
+                          ? tf("放电曲线（{p}% → {p}%）", "\(engine.dischargeStartPercentage)", "\(engine.dischargeTarget)")
+                          : t("电量趋势"),
                           badge: "\(engine.percentage)",
                           badgeUnit: "%",
                           tint: theme.chartBlue,
@@ -63,7 +63,7 @@ struct CalibrationPanel: View {
                           unit: "%",
                           points: engine.dischargeCurve.isEmpty ? engine.chartPoints : engine.dischargeCurve,
                           keyPath: \.percentage)
-                scopeCard(title: "瞬时功率",
+                scopeCard(title: t("瞬时功率"),
                           badge: String(format: "%.2f", engine.batteryPower),
                           badgeUnit: "W",
                           tint: theme.chartOrange,
@@ -96,12 +96,12 @@ struct CalibrationPanel: View {
     private var header: some View {
         HStack(spacing: 10) {
             IconBadge(symbol: "wrench.and.screwdriver")
-            Text("电池校准")
+            Text(t("电池校准"))
                 .font(.system(size: 13))
                 .foregroundColor(theme.textPrimary)
-            HelpDot(text: "完整走一遍 满充 → 受控放电 → 复充 → 静置 → 回落 的循环，用库仑积分算出电池真实的满充容量与健康度。全过程本地完成，不依赖任何第三方 App。")
+            HelpDot(text: t("完整走一遍 满充 → 受控放电 → 复充 → 静置 → 回落 的循环，用库仑积分算出电池真实的满充容量与健康度。全过程本地完成，不依赖任何第三方 App。"))
             if let last = engine.lastCalibrationDate {
-                Text("上次校准 \(Self.lastRun.string(from: last))")
+                Text(tf("上次校准 {p}", Self.lastRun.string(from: last)))
                     .font(.system(size: 10))
                     .foregroundColor(theme.textTertiary)
             }
@@ -113,7 +113,7 @@ struct CalibrationPanel: View {
                 HStack(spacing: 6) {
                     Image(systemName: engine.isRunning ? "stop.fill" : "play.fill")
                         .font(.system(size: 10))
-                    Text(engine.isRunning ? "停止校准" : "开始校准")
+                    Text(engine.isRunning ? t("停止校准") : t("开始校准"))
                         .font(.system(size: 12, weight: .medium))
                 }
                 .padding(.horizontal, 16)
@@ -177,7 +177,7 @@ struct CalibrationPanel: View {
                             Circle()
                                 .fill(engine.isExternalConnected ? theme.chartGreen : theme.textTertiary)
                                 .frame(width: 5, height: 5)
-                            Text("设计 \(Int(engine.designCapacityMAh)) mAh · 固件满充 \(Int(engine.rawMaxCapacityMAh)) mAh")
+                            Text(tf("设计 {p} mAh · 固件满充 {p} mAh", "\(Int(engine.designCapacityMAh))", "\(Int(engine.rawMaxCapacityMAh))"))
                                 .font(.system(size: 9.5))
                                 .foregroundColor(theme.textTertiary)
                                 .lineLimit(1)
@@ -192,26 +192,26 @@ struct CalibrationPanel: View {
                                     GridItem(.flexible(), spacing: 10),
                                     GridItem(.flexible(), spacing: 10)],
                           alignment: .leading, spacing: 9) {
-                    metric("电压", String(format: "%.2f", engine.voltage), "V", "bolt", theme.textPrimary)
-                    metric("电流", String(format: "%.2f", engine.signedAmperage), "A",
+                    metric(t("电压"), String(format: "%.2f", engine.voltage), "V", "bolt", theme.textPrimary)
+                    metric(t("电流"), String(format: "%.2f", engine.signedAmperage), "A",
                            "arrow.left.arrow.right", amperageTint)
-                    metric("电池功率", String(format: "%.2f", engine.batteryPower), "W", "power", theme.chartOrange)
-                    metric("电池温度",
+                    metric(t("电池功率"), String(format: "%.2f", engine.batteryPower), "W", "power", theme.chartOrange)
+                    metric(t("电池温度"),
                            engine.temperature > 0 ? String(format: "%.1f", engine.temperature) : "--",
                            "°C", "thermometer.medium",
                            engine.temperature >= engine.highTemperature ? .red : theme.textPrimary)
-                    metric("剩余容量", String(format: "%.0f", engine.remainingCapacityMAh), "mAh", "battery.50", theme.textPrimary)
-                    metric("循环次数", "\(engine.cycleCount)", "", "arrow.triangle.2.circlepath", theme.textPrimary)
+                    metric(t("剩余容量"), String(format: "%.0f", engine.remainingCapacityMAh), "mAh", "battery.50", theme.textPrimary)
+                    metric(t("循环次数"), "\(engine.cycleCount)", "", "arrow.triangle.2.circlepath", theme.textPrimary)
                 }
             }
         }
     }
 
     private var powerStateText: String {
-        if engine.isDischargingOnAC { return "正在放电（接电但已阻断充电）" }
-        if engine.isCharging { return "正在充电" }
-        if engine.isExternalConnected { return "已连接电源，未充电" }
-        return "正在使用电池"
+        if engine.isDischargingOnAC { return t("正在放电（接电但已阻断充电）") }
+        if engine.isCharging { return t("正在充电") }
+        if engine.isExternalConnected { return t("已连接电源，未充电") }
+        return t("正在使用电池")
     }
 
     private var amperageTint: Color {
@@ -272,7 +272,7 @@ struct CalibrationPanel: View {
                     Image(systemName: "arrow.triangle.branch")
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundColor(theme.textSecondary)
-                    Text("校准流程")
+                    Text(t("校准流程"))
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(theme.textPrimary)
                     Spacer()
@@ -297,9 +297,9 @@ struct CalibrationPanel: View {
     }
 
     private var pipelineProgressText: String {
-        if currentIndex < 0 { return "尚未开始" }
-        if currentIndex >= steps.count { return "已完成" }
-        return "第 \(currentIndex + 1) / \(steps.count) 步"
+        if currentIndex < 0 { return t("尚未开始") }
+        if currentIndex >= steps.count { return t("已完成") }
+        return tf("第 {p} / {p} 步", "\(currentIndex + 1)", "\(steps.count)")
     }
 
     private func pipelineStep(index: Int, phase: CalibrationPhase) -> some View {
@@ -330,11 +330,11 @@ struct CalibrationPanel: View {
 
     private func stepTitle(_ phase: CalibrationPhase) -> String {
         switch phase {
-        case .chargingToFull: return "预充至\n100%"
-        case .discharging: return "受控放电\n至 \(engine.dischargeTarget)%"
-        case .rechargingToFull: return "复充至\n100%"
-        case .holdingAtFull: return "满电静置\n10 分钟"
-        case .dischargingToBuffer: return "回落至\n\(engine.storageLevel)%"
+        case .chargingToFull: return t("预充至\n100%")
+        case .discharging: return tf("受控放电\n至 {p}%", "\(engine.dischargeTarget)")
+        case .rechargingToFull: return t("复充至\n100%")
+        case .holdingAtFull: return t("满电静置\n10 分钟")
+        case .dischargingToBuffer: return tf("回落至\n{p}%", "\(engine.storageLevel)")
         default: return phase.title
         }
     }
@@ -344,9 +344,9 @@ struct CalibrationPanel: View {
     private var enduranceCard: some View {
         Card(padding: 14) {
             VStack(alignment: .leading, spacing: 8) {
-                cardTitle("clock", "续航评估", tint: theme.chartOrange) {
+                cardTitle("clock", t("续航评估"), tint: theme.chartOrange) {
                     if engine.aiRemainingMinutes > 0 {
-                        Text("AI 预测")
+                        Text(t("AI 预测"))
                             .font(.system(size: 9, weight: .semibold))
                             .foregroundColor(theme.chartPurple)
                     }
@@ -358,15 +358,15 @@ struct CalibrationPanel: View {
                         .font(.system(size: 20, weight: .bold, design: .rounded))
                         .foregroundColor(minutes > 0 ? theme.chartOrange : theme.textSecondary)
                         .monospacedDigit()
-                    Text("预计可用")
+                    Text(t("预计可用"))
                         .font(.system(size: 9))
                         .foregroundColor(theme.textSecondary)
                     Spacer(minLength: 0)
                 }
 
                 HStack(spacing: 10) {
-                    metric("全周期耗时", Self.duration(engine.totalDischargeRuntimeMinutes), "", "hourglass", theme.textPrimary)
-                    metric("平均放电功耗", String(format: "%.1f", engine.dischargeAveragePower), "W", "bolt.slash", theme.textPrimary)
+                    metric(t("全周期耗时"), Self.duration(engine.totalDischargeRuntimeMinutes), "", "hourglass", theme.textPrimary)
+                    metric(t("平均放电功耗"), String(format: "%.1f", engine.dischargeAveragePower), "W", "bolt.slash", theme.textPrimary)
                 }
             }
         }
@@ -375,9 +375,9 @@ struct CalibrationPanel: View {
     private var healthCard: some View {
         Card(padding: 14) {
             VStack(alignment: .leading, spacing: 8) {
-                cardTitle("heart", "健康度与容量", tint: theme.chartBlue) {
+                cardTitle("heart", t("健康度与容量"), tint: theme.chartBlue) {
                     if engine.aiConfidence > 0 {
-                        Text("置信度 \(Int(engine.aiConfidence))%")
+                        Text(tf("置信度 {p}%", "\(Int(engine.aiConfidence))"))
                             .font(.system(size: 9))
                             .foregroundColor(theme.textSecondary)
                     }
@@ -394,23 +394,23 @@ struct CalibrationPanel: View {
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundColor(theme.textSecondary)
                     }
-                    Text("电池健康度")
+                    Text(t("电池健康度"))
                         .font(.system(size: 9))
                         .foregroundColor(theme.textSecondary)
                     Spacer(minLength: 0)
                 }
 
                 HStack(spacing: 10) {
-                    metric("真实满充容量",
+                    metric(t("真实满充容量"),
                            engine.aiTrueCapacityMAh > 0 ? String(format: "%.0f", engine.aiTrueCapacityMAh) : "--",
                            "mAh", "battery.100", theme.textPrimary)
-                    metric("直流内阻",
+                    metric(t("直流内阻"),
                            engine.internalResistanceMilliohm > 0 ? String(format: "%.1f", engine.internalResistanceMilliohm) : "--",
                            "mΩ", "waveform.path.ecg", theme.textPrimary)
                 }
 
                 if !engine.cellVoltages.isEmpty {
-                    Text("电芯 \(engine.cellVoltages.map { String(format: "%.3f", $0) }.joined(separator: " / ")) V · 压差 \(String(format: "%.1f", engine.cellDeltaMillivolts)) mV")
+                    Text(tf("电芯 {p} V · 压差 {p} mV", engine.cellVoltages.map { String(format: "%.3f", $0) }.joined(separator: " / "), String(format: "%.1f", engine.cellDeltaMillivolts)))
                         .font(.system(size: 9.5, design: .monospaced))
                         .foregroundColor(theme.textTertiary)
                         .lineLimit(1)
@@ -493,7 +493,7 @@ struct CalibrationPanel: View {
                 .frame(width: 30, height: 30)
 
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("风扇转速")
+                    Text(t("风扇转速"))
                         .font(.system(size: 10))
                         .foregroundColor(theme.textSecondary)
                     HStack(alignment: .firstTextBaseline, spacing: 2) {
@@ -506,8 +506,8 @@ struct CalibrationPanel: View {
                             .foregroundColor(theme.textSecondary)
                     }
                     Text(hasFan
-                         ? (current > 0 ? "最高 · \(readings.count) 个风扇" : "已停转（正常待机）")
-                         : "此机型无风扇")
+                         ? (current > 0 ? tf("最高 · {p} 个风扇", "\(readings.count)") : t("已停转（正常待机）"))
+                         : t("此机型无风扇"))
                         .font(.system(size: 9))
                         .foregroundColor(theme.textTertiary)
                         .lineLimit(1)
@@ -539,7 +539,7 @@ struct CalibrationPanel: View {
                 Image(systemName: "slider.horizontal.3")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundColor(theme.textSecondary)
-                Text("放电负载")
+                Text(t("放电负载"))
                     .font(.system(size: 11))
                     .foregroundColor(theme.textSecondary)
                     .fixedSize()
@@ -558,22 +558,22 @@ struct CalibrationPanel: View {
             .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(theme.innerControl))
 
             HStack(spacing: 6) {
-                Text("放电至")
+                Text(t("放电至"))
                     .font(.system(size: 11))
                     .foregroundColor(theme.textSecondary)
                 Picker("", selection: Binding(get: { engine.dischargeTarget },
                                               set: { engine.dischargeTarget = $0 })) {
-                    Text("5%（深度）").tag(5)
-                    Text("10%（推荐）").tag(10)
-                    Text("15%（温和）").tag(15)
-                    Text("20%（快速）").tag(20)
+                    Text(t("5%（深度）")).tag(5)
+                    Text(t("10%（推荐）")).tag(10)
+                    Text(t("15%（温和）")).tag(15)
+                    Text(t("20%（快速）")).tag(20)
                 }
                 .labelsHidden()
                 .frame(width: 118)
             }
 
             HStack(spacing: 6) {
-                Text("温度保护")
+                Text(t("温度保护"))
                     .font(.system(size: 11))
                     .foregroundColor(theme.textSecondary)
                 Picker("", selection: Binding(get: { Int(engine.highTemperature) },
@@ -594,7 +594,7 @@ struct CalibrationPanel: View {
             if engine.isThermalCutoffActive {
                 HStack(spacing: 4) {
                     Image(systemName: "thermometer.sun.fill").font(.system(size: 9, weight: .bold))
-                    Text("温度保护中").font(.system(size: 10, weight: .medium))
+                    Text(t("温度保护中")).font(.system(size: 10, weight: .medium))
                 }
                 .foregroundColor(.red)
                 .padding(.horizontal, 8)
@@ -602,7 +602,7 @@ struct CalibrationPanel: View {
                 .background(Capsule().fill(Color.red.opacity(0.14)))
             }
 
-            SmallActionButton(title: "历史记录", symbol: "clock.arrow.circlepath") {
+            SmallActionButton(title: t("历史记录"), symbol: "clock.arrow.circlepath") {
                 showHistory.value = true
             }
             .frame(width: 100)
@@ -611,8 +611,8 @@ struct CalibrationPanel: View {
 
     static func duration(_ minutes: Int) -> String {
         guard minutes > 0 else { return "--" }
-        if minutes < 60 { return "\(minutes) 分钟" }
-        return "\(minutes / 60) 小时 \(minutes % 60) 分"
+        if minutes < 60 { return tf("{p} 分钟", "\(minutes)") }
+        return tf("{p} 小时 {p} 分", "\(minutes / 60)", "\(minutes % 60)")
     }
 
     static let lastRun: DateFormatter = {
@@ -964,22 +964,28 @@ private struct CalibrationHistorySheet: View {
             HStack(spacing: 8) {
                 Image(systemName: "clock.arrow.circlepath")
                     .foregroundColor(theme.accent)
-                Text("历史校准记录")
+                Text(t("历史校准记录"))
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(theme.textPrimary)
                 Spacer()
                 if !engine.records.isEmpty {
-                    Button("清空") { engine.clearHistory() }
+                    Button(t("清空")) { engine.clearHistory() }
                         .buttonStyle(.plain)
                         .foregroundColor(.red)
                         .font(.system(size: 12))
                 }
-                Button("完成") { isPresented = false }
+                Button(t("完成")) { isPresented = false }
                     .keyboardShortcut(.cancelAction)
             }
             .padding(14)
 
             Divider().background(theme.divider)
+
+            if engine.records.count >= 2 {
+                trendBlock
+                    .padding(.horizontal, 14)
+                    .padding(.top, 12)
+            }
 
             if engine.records.isEmpty {
                 VStack(spacing: 10) {
@@ -987,10 +993,10 @@ private struct CalibrationHistorySheet: View {
                     Image(systemName: "archivebox")
                         .font(.system(size: 32))
                         .foregroundColor(theme.textTertiary)
-                    Text("还没有校准记录")
+                    Text(t("还没有校准记录"))
                         .font(.system(size: 12))
                         .foregroundColor(theme.textSecondary)
-                    Text("完成一次校准后，结果会自动保存在这里")
+                    Text(t("完成一次校准后，结果会自动保存在这里"))
                         .font(.system(size: 10.5))
                         .foregroundColor(theme.textTertiary)
                     Spacer()
@@ -1007,8 +1013,53 @@ private struct CalibrationHistorySheet: View {
                 }
             }
         }
-        .frame(width: 620, height: 460)
+        .frame(width: 620, height: 580)
         .background(theme.windowBackground)
+    }
+
+    // MARK: - Trend
+    //
+    // Sort by date instead of trusting the stored order: the charts read left to
+    // right, and the headline number has to be the newest session.
+
+    private var chronological: [CalibrationRecord] {
+        engine.records.sorted { $0.startDate < $1.startDate }
+    }
+
+    private var latestRecord: CalibrationRecord? { chronological.last }
+
+    private var trendBlock: some View {
+        Card(padding: 12) {
+            HStack(alignment: .top, spacing: 16) {
+                MiniChart(title: t("健康度"),
+                          valueText: String(format: "%.1f%%", latestRecord?.batteryHealthPercentage ?? 0),
+                          symbol: "heart",
+                          color: theme.chartOrange,
+                          points: chronological.map {
+                              HistoryPoint(date: $0.startDate, value: $0.batteryHealthPercentage)
+                          })
+                MiniChart(title: t("实测容量"),
+                          valueText: "\(Int(latestRecord?.calculatedCapacityMAh ?? 0)) mAh",
+                          symbol: "battery.100",
+                          color: theme.chartGreen,
+                          points: chronological.map {
+                              HistoryPoint(date: $0.startDate, value: $0.calculatedCapacityMAh)
+                          })
+                if dcirPoints.count >= 2 {
+                    MiniChart(title: t("直流内阻"),
+                              valueText: String(format: "%.1f mΩ", latestRecord?.internalResistanceMilliohm ?? 0),
+                              symbol: "bolt.horizontal",
+                              color: theme.chartBlue,
+                              points: dcirPoints)
+                }
+            }
+        }
+    }
+
+    private var dcirPoints: [HistoryPoint] {
+        chronological
+            .filter { $0.internalResistanceMilliohm > 0 }
+            .map { HistoryPoint(date: $0.startDate, value: $0.internalResistanceMilliohm) }
     }
 
     private func recordRow(_ record: CalibrationRecord) -> some View {
@@ -1035,18 +1086,18 @@ private struct CalibrationHistorySheet: View {
             }
 
             HStack(spacing: 14) {
-                value("实测容量", "\(Int(record.calculatedCapacityMAh)) mAh")
-                value("放电能量", String(format: "%.2f Wh", record.dischargeEnergyWh))
-                value("设计容量", "\(Int(record.designCapacityMAh)) mAh")
-                value("库仑效率", String(format: "%.1f%%", record.coulombicEfficiency))
-                value("循环", "\(record.cycleCount)")
+                value(t("实测容量"), "\(Int(record.calculatedCapacityMAh)) mAh")
+                value(t("放电能量"), String(format: "%.2f Wh", record.dischargeEnergyWh))
+                value(t("设计容量"), "\(Int(record.designCapacityMAh)) mAh")
+                value(t("库仑效率"), String(format: "%.1f%%", record.coulombicEfficiency))
+                value(t("循环"), "\(record.cycleCount)")
                 if record.internalResistanceMilliohm > 0 {
                     value("DCIR", String(format: "%.1f mΩ", record.internalResistanceMilliohm))
                 }
             }
 
             if let report = record.reportFilePath, FileManager.default.fileExists(atPath: report) {
-                Button("查看报告") {
+                Button(t("查看报告")) {
                     NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: report)])
                 }
                 .buttonStyle(.link)

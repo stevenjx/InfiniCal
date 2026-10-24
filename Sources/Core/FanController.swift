@@ -45,9 +45,9 @@ enum FanMode: String, Codable {
 
     var title: String {
         switch self {
-        case .auto: return "自动"
-        case .fixed: return "自定义"
-        case .full: return "全速"
+        case .auto: return t("自动")
+        case .fixed: return t("自定义")
+        case .full: return t("全速")
         }
     }
 }
@@ -94,6 +94,7 @@ final class FanController: ObservableObject {
     @Published var curveEnabled: Bool = false {
         didSet {
             UserDefaults.standard.set(curveEnabled, forKey: Keys.curveEnabled)
+            lastCurveTemperature = nil
             DispatchQueue.main.async { [weak self] in self?.applyCurveIfNeeded(force: true) }
         }
     }
@@ -105,6 +106,15 @@ final class FanController: ObservableObject {
     }
     @Published var curvePeakTemperature: Double = 85 {
         didSet { UserDefaults.standard.set(curvePeakTemperature, forKey: Keys.curvePeak) }
+    }
+    /// Middle anchor: the curve is piecewise linear, so a laptop can stay quiet
+    /// through the idle range and still ramp hard near the top.
+    @Published var curveMidTemperature: Double = 68 {
+        didSet { UserDefaults.standard.set(curveMidTemperature, forKey: Keys.curveMid) }
+    }
+    /// Fan speed at the middle anchor, as a percentage of the usable range.
+    @Published var curveMidPercent: Double = 45 {
+        didSet { UserDefaults.standard.set(curveMidPercent, forKey: Keys.curveMidPercent) }
     }
 
     @Published private(set) var presets: [FanPreset] = []
@@ -121,12 +131,15 @@ final class FanController: ObservableObject {
         static let curveSensor = "fanCurveSensor"
         static let curveStart = "fanCurveStart"
         static let curvePeak = "fanCurvePeak"
+        static let curveMid = "fanCurveMidTemperature"
+        static let curveMidPercent = "fanCurveMidPercent"
     }
 
     private let defaults = UserDefaults.standard
     private var timer: Timer?
     private var pageUsers = 0
     private var lastCurveWrite: [Int: Int] = [:]
+    private var lastCurveTemperature: Double?
     private var lastAppliedFixed: [Int: Int] = [:]
 
     private init() {
@@ -233,9 +246,9 @@ final class FanController: ObservableObject {
 
     private func fanLabel(index: Int, total: Int) -> String {
         if let label = readString("F\(index)ID"), !label.isEmpty { return label }
-        if total == 1 { return "风扇" }
-        if total == 2 { return index == 0 ? "风扇 1（左）" : "风扇 2（右）" }
-        return "风扇 \(index + 1)"
+        if total == 1 { return t("风扇") }
+        if total == 2 { return index == 0 ? t("风扇 1（左）") : t("风扇 2（右）") }
+        return tf("风扇 {p}", "\(index + 1)")
     }
 
     private func readMode(index: Int) -> Bool {
@@ -271,16 +284,16 @@ final class FanController: ObservableObject {
         let cpu = hidCPU ?? smcCPUFallback()
         if cpu > 0 {
             result.append(ThermalReading(key: "cpu-die", name: "CPU",
-                                         source: hidCPU != nil ? "HID · PMU tdie 平均" : "SMC Tp01/Tp05/Tp09/Tp0D 平均",
+                                         source: hidCPU != nil ? t("HID · PMU tdie 平均") : t("SMC Tp01/Tp05/Tp09/Tp0D 平均"),
                                          celsius: cpu))
         }
 
         if let battery = readFloat("TB0T"), battery > 5, battery < 110 {
-            result.append(ThermalReading(key: "battery", name: "电池", source: "SMC TB0T", celsius: battery))
+            result.append(ThermalReading(key: "battery", name: t("电池"), source: "SMC TB0T", celsius: battery))
         }
 
         if let nand = hidAverage({ $0.lowercased().contains("nand") }) {
-            result.append(ThermalReading(key: "ssd", name: "固态硬盘", source: "HID · NAND", celsius: nand))
+            result.append(ThermalReading(key: "ssd", name: t("固态硬盘"), source: "HID · NAND", celsius: nand))
         }
 
         if let gpu = smcGPUReading() {
@@ -315,7 +328,7 @@ final class FanController: ObservableObject {
         return buckets.keys.sorted().compactMap { name in
             guard let values = buckets[name], !values.isEmpty else { return nil }
             return ThermalReading(key: name, name: name,
-                                  source: values.count > 1 ? "HID · \(values.count) 个服务平均" : "HID",
+                                  source: values.count > 1 ? tf("HID · {p} 个服务平均", "\(values.count)") : "HID",
                                   celsius: values.reduce(0, +) / Double(values.count))
         }
     }
@@ -374,7 +387,7 @@ final class FanController: ObservableObject {
                 self.modes[fan.index] = .auto
                 self.applyAuto(index: fan.index)
             }
-            self.activePresetName = "自动"
+            self.activePresetName = t("自动")
         }
     }
 
@@ -386,7 +399,7 @@ final class FanController: ObservableObject {
                 self.modes[fan.index] = .full
                 self.applyFixed(index: fan.index, rpm: fan.maxRPM)
             }
-            self.activePresetName = "全速"
+            self.activePresetName = t("全速")
         }
     }
 
@@ -402,7 +415,7 @@ final class FanController: ObservableObject {
 
     private func applyFixed(index: Int, rpm: Int) {
         guard let fan = fan(index), fan.canControl else {
-            lastError = "此机型未暴露可写的风扇控制键"
+            lastError = t("此机型未暴露可写的风扇控制键")
             return
         }
         let clamped = min(max(rpm, fan.minRPM), fan.maxRPM)
@@ -434,12 +447,12 @@ final class FanController: ObservableObject {
             try HelperClient.shared.smcWriteBytes("FS! ", bytes)
             return
         }
-        throw HelperError.smc("此机型未暴露风扇模式键")
+        throw HelperError.smc(t("此机型未暴露风扇模式键"))
     }
 
     private func writeFloat(_ key: String, _ value: Double) throws {
-        guard let info = SMC.shared.keyInfo(key) else { throw HelperError.smc("SMC 键 \(key) 不存在") }
-        guard info.isWritable else { throw HelperError.smc("SMC 键 \(key) 为只读") }
+        guard let info = SMC.shared.keyInfo(key) else { throw HelperError.smc(tf("SMC 键 {p} 不存在", key)) }
+        guard info.isWritable else { throw HelperError.smc(tf("SMC 键 {p} 为只读", key)) }
         let bytes = try encode(value, for: info)
         try HelperClient.shared.smcWriteBytes(key, bytes)
     }
@@ -468,7 +481,7 @@ final class FanController: ObservableObject {
             let raw = UInt16(clamping: Int((value * 4).rounded()))
             return [UInt8(raw >> 8), UInt8(raw & 0xff)]
         default:
-            throw HelperError.smc("不支持写入类型 \(info.type)")
+            throw HelperError.smc(tf("不支持写入类型 {p}", info.type))
         }
     }
 
@@ -477,8 +490,18 @@ final class FanController: ObservableObject {
     private func applyCurveIfNeeded(force: Bool = false) {
         guard curveEnabled else { return }
         guard let temperature = curveTemperature() else { return }
+        // 1 °C deadband: without it a sensor sitting on a threshold rewrites the
+        // same target every second and the fan audibly hunts.
+        if !force, let last = lastCurveTemperature, abs(temperature - last) < 1.0 { return }
+        lastCurveTemperature = temperature
+
         for fan in fans where fan.canControl {
-            let target = curveRPM(temperature: temperature, fan: fan)
+            var target = curveRPM(temperature: temperature, fan: fan)
+            if !force, let previous = lastCurveWrite[fan.index] {
+                // Ramp limit: 150 RPM per tick (1 s), so a step in temperature
+                // becomes a sweep instead of an audible jump.
+                target = min(max(target, previous - 150), previous + 150)
+            }
             if !force, let last = lastCurveWrite[fan.index], abs(last - target) < 40 { continue }
             lastCurveWrite[fan.index] = target
             do {
@@ -504,11 +527,34 @@ final class FanController: ObservableObject {
         }
     }
 
-    private func curveRPM(temperature: Double, fan: FanInfo) -> Int {
-        let start = min(curveStartTemperature, curvePeakTemperature - 1)
-        let peak = max(curvePeakTemperature, start + 1)
-        let ratio = min(max((temperature - start) / (peak - start), 0), 1)
-        return fan.minRPM + Int((Double(fan.maxRPM - fan.minRPM) * ratio).rounded())
+    /// Piecewise linear through three anchors: (start → min), (mid → mid %),
+    /// (peak → max). Temperatures outside the anchors clamp to the ends.
+    func curveRPM(temperature: Double, fan: FanInfo) -> Int {
+        let start = min(curveStartTemperature, curvePeakTemperature - 2)
+        let peak = max(curvePeakTemperature, start + 2)
+        let mid = min(max(curveMidTemperature, start + 1), peak - 1)
+        let span = Double(fan.maxRPM - fan.minRPM)
+        let midRPM = Double(fan.minRPM) + span * min(100, max(0, curveMidPercent)) / 100
+
+        let rpm: Double
+        if temperature <= start {
+            rpm = Double(fan.minRPM)
+        } else if temperature < mid {
+            let ratio = (temperature - start) / (mid - start)
+            rpm = Double(fan.minRPM) + (midRPM - Double(fan.minRPM)) * ratio
+        } else if temperature < peak {
+            let ratio = (temperature - mid) / (peak - mid)
+            rpm = midRPM + (Double(fan.maxRPM) - midRPM) * ratio
+        } else {
+            rpm = Double(fan.maxRPM)
+        }
+        return Int(min(max(rpm, Double(fan.minRPM)), Double(fan.maxRPM)).rounded())
+    }
+
+    /// Target RPM for the current temperature, for the UI readout.
+    func projectedRPM(temperature: Double) -> Int? {
+        guard let fan = fans.first else { return nil }
+        return curveRPM(temperature: temperature, fan: fan)
     }
 
     // MARK: - Presets
@@ -572,6 +618,11 @@ final class FanController: ObservableObject {
         if start > 0 { curveStartTemperature = start }
         let peak = defaults.double(forKey: Keys.curvePeak)
         if peak > 0 { curvePeakTemperature = peak }
+        let mid = defaults.double(forKey: Keys.curveMid)
+        if mid > 0 { curveMidTemperature = mid }
+        if defaults.object(forKey: Keys.curveMidPercent) != nil {
+            curveMidPercent = defaults.double(forKey: Keys.curveMidPercent)
+        }
     }
 
     private func persistModes() {

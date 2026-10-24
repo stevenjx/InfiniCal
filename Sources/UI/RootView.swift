@@ -106,6 +106,7 @@ struct RootView: View {
             case .calibration: CalibrationPage()
             case .fanControl: FanControlPage()
             case .sleep: SleepEnergyView()
+            case .history: HistoryView()
             case .schedule: ScheduleView()
             case .other: OtherView()
             }

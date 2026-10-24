@@ -31,13 +31,13 @@ enum CalibrationPhase: String {
 
     var title: String {
         switch self {
-        case .idle: return "就绪"
-        case .chargingToFull: return "预充至 100%"
-        case .discharging: return "受控放电"
-        case .rechargingToFull: return "复充至 100%"
-        case .holdingAtFull: return "满电静置"
-        case .dischargingToBuffer: return "回落至存储电量"
-        case .completed: return "已完成"
+        case .idle: return t("就绪")
+        case .chargingToFull: return t("预充至 100%")
+        case .discharging: return t("受控放电")
+        case .rechargingToFull: return t("复充至 100%")
+        case .holdingAtFull: return t("满电静置")
+        case .dischargingToBuffer: return t("回落至存储电量")
+        case .completed: return t("已完成")
         }
     }
 
@@ -76,17 +76,17 @@ enum DischargeStressMode: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .silent: return "静音"
-        case .balanced: return "均衡"
-        case .aggressive: return "性能"
+        case .silent: return t("静音")
+        case .balanced: return t("均衡")
+        case .aggressive: return t("性能")
         }
     }
 
     var detail: String {
         switch self {
-        case .silent: return "不施加负载，仅靠系统自身耗电放电"
-        case .balanced: return "约一半核心参与负载"
-        case .aggressive: return "除一个核心外全部参与负载"
+        case .silent: return t("不施加负载，仅靠系统自身耗电放电")
+        case .balanced: return t("约一半核心参与负载")
+        case .aggressive: return t("除一个核心外全部参与负载")
         }
     }
 
@@ -342,9 +342,9 @@ final class CalibrationEngine: ObservableObject {
         dischargeCurve.removeAll()
 
         enableSleepBlock()
-        append(">>> 开始电池校准 <<<")
+        append(t(">>> 开始电池校准 <<<"))
         if !isExternalConnected {
-            append("未连接电源适配器：请接入电源，否则无法完成预充与复充阶段")
+            append(t("未连接电源适配器：请接入电源，否则无法完成预充与复充阶段"))
         }
 
         if signedAmperage < -0.05 || isDischargingOnAC {
@@ -352,13 +352,13 @@ final class CalibrationEngine: ObservableObject {
             dischargeStartPercentage = percentage
             dischargeStart = Date()
             dischargeCurve.removeAll()
-            append("电池已在放电，直接进入受控放电阶段")
+            append(t("电池已在放电，直接进入受控放电阶段"))
             startStressLoad()
             holdDischarge(to: dischargeTarget)
         } else {
             phase = .chargingToFull
             dischargeStart = nil
-            append("等待电池充满至 100%…")
+            append(t("等待电池充满至 100%…"))
             stopStressLoad()
             releaseDischarge()
         }
@@ -372,7 +372,7 @@ final class CalibrationEngine: ObservableObject {
         isRunning = false
         holdStart = nil
         phase = .idle
-        append(reason ?? "用户中止了校准")
+        append(reason ?? t("用户中止了校准"))
         if telemetryPageUsers == 0 {
             timer?.invalidate()
             timer = nil
@@ -552,8 +552,8 @@ final class CalibrationEngine: ObservableObject {
                                                 voltage: voltage,
                                                 amperage: signedAmperage,
                                                 temperature: temperature))
-        append("预充完成，转入受控放电阶段（\(percentage)%）[\(stressMode.title)]")
-        notify("预充完成", "电池已充至 \(percentage)%，开始受控放电校准。")
+        append(tf("预充完成，转入受控放电阶段（{p}%）[{p}]", "\(percentage)", stressMode.title))
+        notify(t("预充完成"), tf("电池已充至 {p}%，开始受控放电校准。", "\(percentage)"))
         startStressLoad()
         holdDischarge(to: dischargeTarget)
     }
@@ -561,27 +561,27 @@ final class CalibrationEngine: ObservableObject {
     private func endDischargePhase() {
         let hours = Int(dischargeElapsedSeconds) / 3600
         let minutes = (Int(dischargeElapsedSeconds) % 3600) / 60
-        finalDischargeDurationText = "\(hours) 小时 \(minutes) 分（平均 \(String(format: "%.1f", dischargeAveragePower)) W）"
-        append("放电完成（\(dischargeTarget)%），耗时 \(hours) 小时 \(minutes) 分，平均放电功率 \(String(format: "%.2f", dischargeAveragePower)) W")
+        finalDischargeDurationText = tf("{p} 小时 {p} 分（平均 {p} W）", "\(hours)", "\(minutes)", String(format: "%.1f", dischargeAveragePower))
+        append(tf("放电完成（{p}%），耗时 {p} 小时 {p} 分，平均放电功率 {p} W", "\(dischargeTarget)", "\(hours)", "\(minutes)", String(format: "%.2f", dischargeAveragePower)))
 
         stopStressLoad()
         releaseDischarge(limit: 100)
         phase = .rechargingToFull
-        notify("放电完成", "电量已放至目标值，请保持电源连接以完成满电复充。")
+        notify(t("放电完成"), t("电量已放至目标值，请保持电源连接以完成满电复充。"))
     }
 
     private func beginHoldPhase() {
         phase = .holdingAtFull
         holdStart = Date()
-        append("电池已充满，进入 10 分钟满电静置")
-        notify("满电静置", "电池已充至 100%，正在静置以消除极化。")
+        append(t("电池已充满，进入 10 分钟满电静置"))
+        notify(t("满电静置"), t("电池已充至 100%，正在静置以消除极化。"))
     }
 
     private func beginStorageDrop() {
-        append("静置完成，开始回落至 \(storageLevel)% 存储电量")
+        append(tf("静置完成，开始回落至 {p}% 存储电量", "\(storageLevel)"))
         phase = .dischargingToBuffer
         holdDischarge(to: storageLevel)
-        notify("回落至存储电量", "校准即将完成，正在缓慢放电至 \(storageLevel)% 存储电量。")
+        notify(t("回落至存储电量"), tf("校准即将完成，正在缓慢放电至 {p}% 存储电量。", "\(storageLevel)"))
     }
 
     private func finish() {
@@ -593,13 +593,13 @@ final class CalibrationEngine: ObservableObject {
         phase = .completed
 
         append("==========================================")
-        append("          电池校准圆满完成          ")
-        append("总放电耗时: \(finalDischargeDurationText)")
-        append("放电能耗: \(String(format: "%.2f", dischargeEnergyWh)) Wh | 复充能耗: \(String(format: "%.2f", rechargeEnergyWh)) Wh")
-        append("实测容量: \(String(format: "%.2f", measuredCapacityWh)) Wh (\(String(format: "%.0f", measuredCapacityMAh)) mAh)")
-        append("健康度: \(designCapacityMAh > 0 ? String(format: "%.1f%%", measuredHealth) : "--")")
-        append("库仑效率: \(rechargeEnergyAh > 0 ? String(format: "%.1f%%", coulombicEfficiency) : "--")")
-        append("直流内阻 (DCIR): \(internalResistanceMilliohm > 0 ? String(format: "%.1f mΩ", internalResistanceMilliohm) : "--")")
+        append(t("          电池校准圆满完成          "))
+        append(tf("总放电耗时: {p}", finalDischargeDurationText))
+        append(tf("放电能耗: {p} Wh | 复充能耗: {p} Wh", String(format: "%.2f", dischargeEnergyWh), String(format: "%.2f", rechargeEnergyWh)))
+        append(tf("实测容量: {p} Wh ({p} mAh)", String(format: "%.2f", measuredCapacityWh), String(format: "%.0f", measuredCapacityMAh)))
+        append(tf("健康度: {p}", designCapacityMAh > 0 ? String(format: "%.1f%%", measuredHealth) : "--"))
+        append(tf("库仑效率: {p}", rechargeEnergyAh > 0 ? String(format: "%.1f%%", coulombicEfficiency) : "--"))
+        append(tf("直流内阻 (DCIR): {p}", internalResistanceMilliohm > 0 ? String(format: "%.1f mΩ", internalResistanceMilliohm) : "--"))
         append("==========================================")
 
         let record = CalibrationRecord(startDate: sessionStart ?? Date(),
@@ -624,7 +624,7 @@ final class CalibrationEngine: ObservableObject {
         aggregated = CalibrationStore.aggregate(records)
         defaults.set(Date().timeIntervalSince1970, forKey: Keys.lastRun)
         refreshLastRunDate()
-        notify("校准完成", "真实容量 \(String(format: "%.0f", measuredCapacityMAh)) mAh，健康度 \(String(format: "%.1f%%", measuredHealth))。")
+        notify(t("校准完成"), tf("真实容量 {p} mAh，健康度 {p}。", String(format: "%.0f", measuredCapacityMAh), String(format: "%.1f%%", measuredHealth)))
     }
 
     // MARK: - Hardware control (own helper, no external app)
@@ -636,14 +636,14 @@ final class CalibrationEngine: ObservableObject {
         switch controller.capabilities.strategy {
         case .bclm:
             do { try controller.applyChargeLimit(target) } catch {
-                append("SMC: 写入放电上限失败 — \(error.localizedDescription)")
+                append(tf("SMC: 写入放电上限失败 — {p}", error.localizedDescription))
             }
         case .ch0bch0c, .chie:
             do { try controller.setChargingAllowed(false) } catch {
-                append("SMC: 阻断充电失败 — \(error.localizedDescription)")
+                append(tf("SMC: 阻断充电失败 — {p}", error.localizedDescription))
             }
         case .unavailable:
-            append("SMC: 此机型未暴露充电控制键，无法在接电时强制放电")
+            append(t("SMC: 此机型未暴露充电控制键，无法在接电时强制放电"))
         }
     }
 
@@ -679,14 +679,14 @@ final class CalibrationEngine: ObservableObject {
             }
             stressTasks.append(task)
         }
-        append("放电负载已启动 [\(stressMode.title)]: \(workers) 个工作线程")
+        append(tf("放电负载已启动 [{p}]: {p} 个工作线程", stressMode.title, "\(workers)"))
     }
 
     private func stopStressLoad() {
         guard !stressTasks.isEmpty else { return }
         for task in stressTasks { task.cancel() }
         stressTasks.removeAll()
-        append("已停止放电负载")
+        append(t("已停止放电负载"))
     }
 
     // MARK: - Thermal protection
@@ -698,12 +698,12 @@ final class CalibrationEngine: ObservableObject {
         if temperature >= highTemperature, !isThermalCutoffActive {
             isThermalCutoffActive = true
             stopStressLoad()
-            append("过热保护: \(String(format: "%.1f", temperature))°C ≥ 阈值 \(Int(highTemperature))°C，已暂停负载")
-            notify("过热保护已触发", "电池温度已达 \(String(format: "%.1f", temperature))°C，放电负载已暂停等待降温。")
+            append(tf("过热保护: {p}°C ≥ 阈值 {p}°C，已暂停负载", String(format: "%.1f", temperature), "\(Int(highTemperature))"))
+            notify(t("过热保护已触发"), tf("电池温度已达 {p}°C，放电负载已暂停等待降温。", String(format: "%.1f", temperature)))
         } else if temperature <= resumeLine, isThermalCutoffActive {
             isThermalCutoffActive = false
             startStressLoad()
-            append("温度恢复: \(String(format: "%.1f", temperature))°C ≤ 恢复线 \(Int(resumeLine))°C，已恢复负载")
+            append(tf("温度恢复: {p}°C ≤ 恢复线 {p}°C，已恢复负载", String(format: "%.1f", temperature), "\(Int(resumeLine))"))
         }
     }
 
@@ -823,7 +823,7 @@ final class CalibrationEngine: ObservableObject {
                                                   &assertionID)
         if created == kIOReturnSuccess {
             assertionActive = true
-            append("已阻止系统空闲睡眠，保证采样连续")
+            append(t("已阻止系统空闲睡眠，保证采样连续"))
         }
     }
 
@@ -831,7 +831,7 @@ final class CalibrationEngine: ObservableObject {
         guard assertionActive else { return }
         IOPMAssertionRelease(assertionID)
         assertionActive = false
-        append("已恢复系统睡眠策略")
+        append(t("已恢复系统睡眠策略"))
     }
 
     // MARK: - Notifications
@@ -912,45 +912,46 @@ final class CalibrationEngine: ObservableObject {
         dateFormatter.timeStyle = .medium
         let startText = sessionStart.map { dateFormatter.string(from: $0) } ?? "--"
 
-        var text = """
-        ==================================================
-        InfiniCal 电池校准分析报告
-        ==================================================
-        设备型号: \(hardwareModel)
-        电池序列号: \(batterySerial)
-        校准开始时间: \(startText)
-        校准结束时间: \(dateFormatter.string(from: Date()))
-        起始放电电量: \(dischargeStartPercentage)%
-        总放电时长: \(finalDischargeDurationText)
-        循环次数: \(cycleCount)
-        设计容量: \(String(format: "%.0f", designCapacityMAh)) mAh
-        实测容量: \(String(format: "%.2f", record.calculatedCapacityWh)) Wh (\(String(format: "%.0f", record.calculatedCapacityMAh)) mAh)
-        单次健康度: \(String(format: "%.1f%%", record.batteryHealthPercentage))
-
-        ----------------- 多周期加权评估 -----------------
-        """
+        var lines: [String] = [
+            "==================================================",
+            t("InfiniCal 电池校准分析报告"),
+            "==================================================",
+            tf("设备型号: {p}", hardwareModel),
+            tf("电池序列号: {p}", batterySerial),
+            tf("校准开始时间: {p}", startText),
+            tf("校准结束时间: {p}", dateFormatter.string(from: Date())),
+            tf("起始放电电量: {p}%", "\(dischargeStartPercentage)"),
+            tf("总放电时长: {p}", finalDischargeDurationText),
+            tf("循环次数: {p}", "\(cycleCount)"),
+            tf("设计容量: {p} mAh", String(format: "%.0f", designCapacityMAh)),
+            tf("实测容量: {p} Wh ({p} mAh)", String(format: "%.2f", record.calculatedCapacityWh), String(format: "%.0f", record.calculatedCapacityMAh)),
+            tf("单次健康度: {p}", String(format: "%.1f%%", record.batteryHealthPercentage)),
+            "",
+            t("----------------- 多周期加权评估 -----------------")
+        ]
         if let aggregated {
-            text += """
-
-            有效样本数: \(aggregated.sessionCount)
-            综合真实容量: \(String(format: "%.0f", aggregated.capacityMAh)) mAh (\(String(format: "%.2f", aggregated.capacityWh)) Wh)
-            综合真实健康度: \(String(format: "%.1f%%", aggregated.healthPercent))
-            置信度: \(String(format: "%.0f%%", aggregated.confidence))
-            """
+            lines += [
+                "",
+                tf("有效样本数: {p}", "\(aggregated.sessionCount)"),
+                tf("综合真实容量: {p} mAh ({p} Wh)", String(format: "%.0f", aggregated.capacityMAh), String(format: "%.2f", aggregated.capacityWh)),
+                tf("综合真实健康度: {p}", String(format: "%.1f%%", aggregated.healthPercent)),
+                tf("置信度: {p}", String(format: "%.0f%%", aggregated.confidence))
+            ]
         }
-        text += """
-
-        ----------------- 电芯性能与内阻 -----------------
-        直流内阻 (DCIR): \(internalResistanceMilliohm > 0 ? String(format: "%.1f mΩ", internalResistanceMilliohm) : "--")
-        电芯电压: \(cellVoltages.map { String(format: "%.3fV", $0) }.joined(separator: ", "))
-        电芯压差 (ΔV): \(String(format: "%.1f mV", cellDeltaMillivolts))
-        放电能量: \(String(format: "%.2f", dischargeEnergyWh)) Wh (\(String(format: "%.3f", dischargeEnergyAh)) Ah)
-        复充能量: \(String(format: "%.2f", rechargeEnergyWh)) Wh (\(String(format: "%.3f", rechargeEnergyAh)) Ah)
-        库仑效率: \(rechargeEnergyAh > 0 ? String(format: "%.1f%%", coulombicEfficiency) : "--")
-        终止电压: \(String(format: "%.2f V", voltage))
-        终止温度: \(String(format: "%.1f °C", temperature))
-        ----------------- 过程日志 -----------------
-        """
+        lines += [
+            "",
+            t("----------------- 电芯性能与内阻 -----------------"),
+            tf("直流内阻 (DCIR): {p}", internalResistanceMilliohm > 0 ? String(format: "%.1f mΩ", internalResistanceMilliohm) : "--"),
+            tf("电芯电压: {p}", cellVoltages.map { String(format: "%.3fV", $0) }.joined(separator: ", ")),
+            tf("电芯压差 (ΔV): {p}", String(format: "%.1f mV", cellDeltaMillivolts)),
+            tf("放电能量: {p} Wh ({p} Ah)", String(format: "%.2f", dischargeEnergyWh), String(format: "%.3f", dischargeEnergyAh)),
+            tf("复充能量: {p} Wh ({p} Ah)", String(format: "%.2f", rechargeEnergyWh), String(format: "%.3f", rechargeEnergyAh)),
+            tf("库仑效率: {p}", rechargeEnergyAh > 0 ? String(format: "%.1f%%", coulombicEfficiency) : "--"),
+            tf("终止电压: {p}", String(format: "%.2f V", voltage)),
+            tf("终止温度: {p}", String(format: "%.1f °C", temperature)),
+            t("----------------- 过程日志 -----------------")
+        ]
+        var text = lines.joined(separator: "\n")
         for line in log { text += "\n\(line)" }
         text += "\n==================================================\n"
 
@@ -968,9 +969,9 @@ final class CalibrationEngine: ObservableObject {
         lastCSVURL = sessionCSVURL
 
         if let report = sessionReportURL {
-            append("报告已导出: \(report.lastPathComponent) → \(report.deletingLastPathComponent().path)")
+            append(tf("报告已导出: {p} → {p}", report.lastPathComponent, report.deletingLastPathComponent().path))
         } else {
-            append("报告导出失败：目标目录不可写")
+            append(t("报告导出失败：目标目录不可写"))
         }
     }
 

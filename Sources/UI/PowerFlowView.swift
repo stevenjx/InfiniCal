@@ -68,18 +68,18 @@ struct PowerFlowModel {
             if let value = display.watts {
                 let scaled = value * scale
                 display = PowerReading(watts: scaled, quality: display.quality,
-                                       note: (display.note ?? "") + String(format: "（按总量约束缩放 ×%.2f）", scale))
+                                       note: (display.note ?? "") + String(format: t("（按总量约束缩放 ×%.2f）"), scale))
             }
             if let value = soc.watts {
                 let scaled = value * scale
                 soc = PowerReading(watts: scaled, quality: soc.quality,
-                                   note: (soc.note ?? "") + String(format: "（按总量约束缩放 ×%.2f）", scale))
+                                   note: (soc.note ?? "") + String(format: t("（按总量约束缩放 ×%.2f）"), scale))
             }
         }
 
         var sinks: [PowerFlowSink] = []
         if let watts = display.watts {
-            sinks.append(PowerFlowSink(kind: .display, title: "显示", symbol: "display",
+            sinks.append(PowerFlowSink(kind: .display, title: t("显示"), symbol: "display",
                                        color: Color(red: 0.36, green: 0.58, blue: 0.98),
                                        watts: watts, quality: display.quality, detail: display.note))
         }
@@ -90,10 +90,10 @@ struct PowerFlowModel {
         }
         if plugged {
             let charge = max(0, batteryWatts)
-            sinks.append(PowerFlowSink(kind: .battery, title: "电池", symbol: "battery.100.bolt",
+            sinks.append(PowerFlowSink(kind: .battery, title: t("电池"), symbol: "battery.100.bolt",
                                        color: Color(red: 0.30, green: 0.78, blue: 0.45),
                                        watts: charge, quality: .measured,
-                                       detail: charge < 0.05 ? "未充电" : "充电中"))
+                                       detail: charge < 0.05 ? t("未充电") : t("充电中")))
         }
         if let watts = usb.watts {
             sinks.append(PowerFlowSink(kind: .usb, title: "USB", symbol: "cable.connector",
@@ -108,10 +108,10 @@ struct PowerFlowModel {
         // and the residual would then be a fabricated number.
         let other = (totalIsLive && totalPower >= 3) ? max(0, totalPower - known) : 0
         let hasEstimate = sinks.contains { $0.quality == .estimated }
-        sinks.append(PowerFlowSink(kind: .other, title: "其他", symbol: "ellipsis",
+        sinks.append(PowerFlowSink(kind: .other, title: t("其他"), symbol: "ellipsis",
                                    color: Color(red: 0.30, green: 0.68, blue: 0.60),
                                    watts: other, quality: .measured,
-                                   detail: hasEstimate ? "总数 − 已知分项（含估算误差）" : "总数 − 已知分项"))
+                                   detail: hasEstimate ? t("总数 − 已知分项（含估算误差）") : t("总数 − 已知分项")))
 
         // Adapter side carries the whole input; the MacBook only consumes what
         // is left after the battery takes its charge.
@@ -120,9 +120,9 @@ struct PowerFlowModel {
         let sourcePower = totalPower
         let detail: String
         if plugged {
-            detail = snapshot.adapter.isEmpty ? "电源适配器" : snapshot.adapter.name
+            detail = snapshot.adapter.isEmpty ? t("电源适配器") : snapshot.adapter.name
         } else {
-            detail = "电池供电"
+            detail = t("电池供电")
         }
 
         return PowerFlowModel(source: plugged ? .adapter : .battery,
@@ -607,7 +607,7 @@ struct PowerFlowView: View {
                         .font(.system(size: compact ? 8 : 9, weight: .semibold))
                         .foregroundColor(tint)
                         .opacity(isAdapter ? pulse : 1)
-                    Text(isAdapter ? "电源适配器" : "电池供电")
+                    Text(isAdapter ? t("电源适配器") : t("电池供电"))
                         .font(.system(size: compact ? 8.5 : 9.5, weight: .medium))
                         .foregroundColor(theme.textTertiary)
                         .lineLimit(1)
@@ -617,7 +617,7 @@ struct PowerFlowView: View {
                     .foregroundColor(theme.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.55)
-                Text(isAdapter ? "已接入电源" : "放电中")
+                Text(isAdapter ? t("已接入电源") : t("放电中"))
                     .font(.system(size: compact ? 8 : 9))
                     .foregroundColor(theme.textTertiary)
                     .lineLimit(1)
@@ -629,7 +629,7 @@ struct PowerFlowView: View {
         }
         .frame(width: layout.cardW, height: layout.cardH)
         .offset(x: layout.cardX, y: layout.cardY)
-        .help(isAdapter ? "电源适配器输入功率" : "电池输出功率")
+        .help(isAdapter ? t("电源适配器输入功率") : t("电池输出功率"))
     }
 
     /// Same square, same corner radius, same typography as a sink tile. Only the
@@ -677,7 +677,7 @@ struct PowerFlowView: View {
         }
         .frame(width: layout.sinkW, height: item.tileHeight)
         .offset(x: layout.ribbonEnd, y: item.tileTop)
-        .help([item.sink.title + (item.sink.quality == .estimated ? "（估算）" : ""), item.sink.detail]
+        .help([item.sink.title + (item.sink.quality == .estimated ? t("（估算）") : ""), item.sink.detail]
             .compactMap { $0 }.joined(separator: " · "))
     }
 }

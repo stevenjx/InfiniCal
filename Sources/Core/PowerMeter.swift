@@ -102,13 +102,13 @@ final class PowerMeter {
         // Intel / older SMC: no PSTR. The 60 s snapshot is all we have.
         if fallback.systemLoad > 0.01 {
             reading.total = fallback.systemLoad
-            reading.source = "SystemLoad（60 秒快照）"
+            reading.source = t("SystemLoad（60 秒快照）")
             reading.isLive = false
             return reading
         }
 
         reading.total = lastGood
-        reading.source = "SMC PSTR（缓存）"
+        reading.source = t("SMC PSTR（缓存）")
         reading.isLive = false
         return reading
     }

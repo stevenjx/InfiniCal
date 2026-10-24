@@ -18,6 +18,7 @@ struct ThemedRoot: View {
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var window: NSWindow?
+    private var menuBar: MenuBarController?
     private let state = AppState.shared
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -25,13 +26,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
            let panel = Panel(rawValue: CommandLine.arguments[index + 1]) {
             state.selectedPanel = panel
         }
+        // The app is an accessory (no Dock icon), so the status item is the only
+        // way back once the window is closed.
+        menuBar = MenuBarController { [weak self] in self?.openMainWindow() }
         showWindow()
+        if CommandLine.arguments.contains("--menubar") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+                self?.menuBar?.showPopover()
+            }
+        }
         observeThemeChanges()
+    }
+
+    /// Reopen path: the window is closable but the process keeps running.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showWindow()
+        return true
+    }
+
+    private func openMainWindow() {
+        menuBar?.closePopover()
+        showWindow()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         CalibrationEngine.shared.prepareForTermination()
         FanController.shared.restoreSystemControl()
+        DailyHistory.shared.save()
         if state.exitInhibitCharge {
             try? ChargeController.shared.setChargingAllowed(true)
         }

@@ -29,12 +29,12 @@ enum SMCError: Error, CustomStringConvertible {
 
     var description: String {
         switch self {
-        case .serviceNotFound: return "未找到 AppleSMC 服务"
-        case .openFailed(let kr): return String(format: "无法连接 AppleSMC (0x%x)", kr)
-        case .keyNotFound(let k): return "SMC 键 \(k) 不存在"
-        case .readFailed(let k, let r): return "读取 \(k) 失败 (0x\(String(r, radix: 16)))"
-        case .writeFailed(let k, let r): return "写入 \(k) 失败 (0x\(String(r, radix: 16)))"
-        case .unsupportedType(let t): return "不支持的数据类型 \(t)"
+        case .serviceNotFound: return t("未找到 AppleSMC 服务")
+        case .openFailed(let kr): return String(format: t("无法连接 AppleSMC (0x%x)"), kr)
+        case .keyNotFound(let k): return tf("SMC 键 {p} 不存在", k)
+        case .readFailed(let k, let r): return tf("读取 {p} 失败 (0x{p})", k, String(r, radix: 16))
+        case .writeFailed(let k, let r): return tf("写入 {p} 失败 (0x{p})", k, String(r, radix: 16))
+        case .unsupportedType(let t): return tf("不支持的数据类型 {p}", t)
         }
     }
 }

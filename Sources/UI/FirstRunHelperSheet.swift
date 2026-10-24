@@ -9,21 +9,21 @@ struct FirstRunHelperSheet: View {
             Image(systemName: "lock.shield.fill")
                 .font(.system(size: 34))
                 .foregroundColor(theme.accent)
-            Text("安装特权助手")
+            Text(t("安装特权助手"))
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundColor(theme.textPrimary)
-            Text("InfiniCal 需要特权助手才能精确读取 SMC 数据，并执行充电限制、放电和电池校准。助手只用于本机电池控制，不联网。")
+            Text(t("InfiniCal 需要特权助手才能精确读取 SMC 数据，并执行充电限制、放电和电池校准。助手只用于本机电池控制，不联网。"))
                 .font(.system(size: 12))
                 .foregroundColor(theme.textSecondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 10) {
-                Button("稍后安装") {
+                Button(t("稍后安装")) {
                     state.dismissFirstRunHelperPrompt()
                 }
                 .buttonStyle(.plain)
                 .foregroundColor(theme.textSecondary)
-                Button("安装特权助手") {
+                Button(t("安装特权助手")) {
                     // Close the sheet first: the system authorization dialog is
                     // modal, and overlapping it with the sheet transition leaves
                     // SwiftUI's gesture recognizers stuck (AppKit logs a

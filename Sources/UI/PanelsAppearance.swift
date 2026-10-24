@@ -14,19 +14,19 @@ struct OtherView: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 10) {
                     IconBadge(symbol: "circle.lefthalf.filled")
-                    Text("外观模式")
+                    Text(t("外观模式"))
                         .font(.system(size: 13))
                         .foregroundColor(theme.textPrimary)
                     Spacer()
                     HStack(spacing: 18) {
-                        appearanceDot(mode: 0, label: "系统", symbol: "circle.lefthalf.filled")
-                        appearanceDot(mode: 1, label: "浅色", symbol: "sun.max.fill")
-                        appearanceDot(mode: 2, label: "深色", symbol: "moon.fill")
+                        appearanceDot(mode: 0, label: t("系统"), symbol: "circle.lefthalf.filled")
+                        appearanceDot(mode: 1, label: t("浅色"), symbol: "sun.max.fill")
+                        appearanceDot(mode: 2, label: t("深色"), symbol: "moon.fill")
                     }
                 }
                 .frame(height: 44)
 
-                Text("合盖模式")
+                Text(t("合盖模式"))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(theme.textTertiary)
                     .padding(.leading, 4)
@@ -34,15 +34,15 @@ struct OtherView: View {
 
                 Card {
                     VStack(spacing: 4) {
-                        ToggleRow(symbol: "laptopcomputer", title: "合盖时保持唤醒", help: "合上盖子时阻止系统睡眠，方便外接显示器使用。", isOn: $state.completelyDisableSleep)
+                        ToggleRow(symbol: "laptopcomputer", title: t("合盖时保持唤醒"), help: t("合上盖子时阻止系统睡眠，方便外接显示器使用。"), isOn: $state.completelyDisableSleep)
                         Divider().background(theme.divider)
-                        ToggleRow(symbol: "display", title: "关闭内建显示器", isOn: $state.displayOffWhenSleepDisabled)
+                        ToggleRow(symbol: "display", title: t("关闭内建显示器"), isOn: $state.displayOffWhenSleepDisabled)
                         Divider().background(theme.divider)
-                        ToggleRow(symbol: "lock", title: "合盖时锁定屏幕", isOn: $state.lockScreenWhenClosed)
+                        ToggleRow(symbol: "lock", title: t("合盖时锁定屏幕"), isOn: $state.lockScreenWhenClosed)
                     }
                 }
 
-                Text("管理许可证")
+                Text(t("管理许可证"))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(theme.textTertiary)
                     .padding(.leading, 4)
@@ -50,11 +50,11 @@ struct OtherView: View {
 
                 Card {
                     HStack {
-                        Text("InfiniCal 专业版功能已全部解锁")
+                        Text(t("InfiniCal 专业版功能已全部解锁"))
                             .font(.system(size: 12))
                             .foregroundColor(theme.textPrimary)
                         Spacer()
-                        Text("本地授权")
+                        Text(t("本地授权"))
                             .font(.system(size: 11))
                             .foregroundColor(theme.textSecondary)
                     }
@@ -62,12 +62,12 @@ struct OtherView: View {
 
                 Card {
                     HStack(spacing: 8) {
-                        SmallActionButton(title: "简介", symbol: "info.circle") { about.value = true }
+                        SmallActionButton(title: t("简介"), symbol: "info.circle") { about.value = true }
                         Spacer()
                     }
                 }
 
-                Text("功率数据源")
+                Text(t("功率数据源"))
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundColor(theme.textTertiary)
                     .padding(.leading, 4)
@@ -75,17 +75,17 @@ struct OtherView: View {
 
                 Card {
                     VStack(spacing: 6) {
-                        powerSourceRow("电源适配器输入", "SMC PSTR · 1 Hz", quality: state.snapshot.isPluggedIn ? .measured : .unavailable)
-                        powerSourceRow("MacBook 总功耗", "PSTR − 电池充电", quality: .measured)
-                        powerSourceRow("电池充放电", "Voltage × Amperage", quality: .measured)
-                        powerSourceRow("1 分钟均值", "SystemLoad（60 s 快照）", quality: state.livePower.isLive ? .estimated : .measured)
+                        powerSourceRow(t("电源适配器输入"), "SMC PSTR · 1 Hz", quality: state.snapshot.isPluggedIn ? .measured : .unavailable)
+                        powerSourceRow(t("MacBook 总功耗"), t("PSTR − 电池充电"), quality: .measured)
+                        powerSourceRow(t("电池充放电"), "Voltage × Amperage", quality: .measured)
+                        powerSourceRow(t("1 分钟均值"), t("SystemLoad（60 s 快照）"), quality: state.livePower.isLive ? .estimated : .measured)
                         powerSourceRow("SoC", sourceName(for: state.soc), quality: state.soc.quality)
-                        powerSourceRow("显示", sourceName(for: state.displayPower), quality: state.displayPower.quality)
-                        powerSourceRow("USB", "无可用数据源", quality: .unavailable)
+                        powerSourceRow(t("显示"), sourceName(for: state.displayPower), quality: state.displayPower.quality)
+                        powerSourceRow("USB", t("无可用数据源"), quality: .unavailable)
                         Divider().background(theme.divider)
                         HStack(alignment: .top, spacing: 6) {
                             Image(systemName: "info.circle").font(.system(size: 9))
-                            Text("「其他」= MacBook 总功耗 − 已知分项，属于残差而不是独立测量值。")
+                            Text(t("「其他」= MacBook 总功耗 − 已知分项，属于残差而不是独立测量值。"))
                                 .font(.system(size: 10))
                                 .fixedSize(horizontal: false, vertical: true)
                             Spacer(minLength: 0)
@@ -97,7 +97,7 @@ struct OtherView: View {
                 if state.capabilities.strategy == .unavailable || !state.helperInstalled {
                     Card {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("充电控制状态")
+                            Text(t("充电控制状态"))
                                 .font(.system(size: 12, weight: .semibold))
                                 .foregroundColor(theme.textPrimary)
                             Text(state.capabilities.summary)
@@ -105,7 +105,7 @@ struct OtherView: View {
                                 .foregroundColor(theme.textSecondary)
                             if !state.helperInstalled {
                                 Button { state.installHelper() } label: {
-                                    Text("安装特权助手")
+                                    Text(t("安装特权助手"))
                                         .font(.system(size: 11, weight: .medium))
                                         .padding(.horizontal, 12)
                                         .padding(.vertical, 6)
@@ -138,11 +138,11 @@ struct OtherView: View {
                     .font(.system(size: 34))
                     .foregroundColor(theme.accent)
                 Text("InfiniCal 1.0.0").font(.system(size: 14, weight: .semibold))
-                Text("电池充电管理工具\n适配 Intel 与 Apple Silicon，支持 macOS 12 及以上。")
+                Text(t("电池充电管理工具\n适配 Intel 与 Apple Silicon，支持 macOS 12 及以上。"))
                     .font(.system(size: 11))
                     .multilineTextAlignment(.center)
                     .foregroundColor(theme.textSecondary)
-                Button("好") { about.value = false }
+                Button(t("好")) { about.value = false }
                     .buttonStyle(.plain)
                     .foregroundColor(theme.accent)
                     .padding(.top, 6)
@@ -155,8 +155,8 @@ struct OtherView: View {
     private func sourceName(for reading: PowerReading) -> String {
         switch reading.quality {
         case .measured: return "powermetrics"
-        case .estimated: return "亮度/占用率模型"
-        case .unavailable: return "无可用数据源"
+        case .estimated: return t("亮度/占用率模型")
+        case .unavailable: return t("无可用数据源")
         }
     }
 

@@ -18,3 +18,6 @@ ref/
 
 # WorkBuddy project metadata
 .workbuddy-ai/
+
+# Release artifacts
+dist/

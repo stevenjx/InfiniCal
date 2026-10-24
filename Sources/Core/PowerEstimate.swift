@@ -18,9 +18,9 @@ enum PowerQuality {
 
     var badge: String {
         switch self {
-        case .measured: return "实测"
-        case .estimated: return "估算"
-        case .unavailable: return "不可用"
+        case .measured: return t("实测")
+        case .estimated: return t("估算")
+        case .unavailable: return t("不可用")
         }
     }
 }
@@ -120,8 +120,8 @@ final class BrightnessReader {
 /// mistaken for a sensor reading.
 final class PowerEstimator {
 
-    static let socFormula = "SoC ≈ 1.2 W + 22.0 × CPU占用^1.25"
-    static let displayFormula = "显示 ≈ 0.6 W + 4.4 × 亮度^1.6（14 英寸 mini-LED 典型值）"
+    static let socFormula = t("SoC ≈ 1.2 W + 22.0 × CPU占用^1.25")
+    static let displayFormula = t("显示 ≈ 0.6 W + 4.4 × 亮度^1.6（14 英寸 mini-LED 典型值）")
 
     let cpu = CPULoadSampler()
     let brightness = BrightnessReader()
@@ -136,14 +136,14 @@ final class PowerEstimator {
     func estimateSoC() -> PowerReading {
         let load = loadFilter.push(cpu.read())
         let watts = 1.2 + 22.0 * pow(load, 1.25)
-        return .estimated(watts, note: Self.socFormula + String(format: "，8 秒均值 CPU %.0f%%", load * 100))
+        return .estimated(watts, note: Self.socFormula + String(format: t("，8 秒均值 CPU %.0f%%"), load * 100))
     }
 
     func estimateDisplay() -> PowerReading {
         guard let level = brightness.brightness() else { return .unavailable }
         let stable = brightnessFilter.push(level)
         let watts = 0.6 + 4.4 * pow(stable, 1.6)
-        return .estimated(watts, note: Self.displayFormula + String(format: "，当前亮度 %.0f%%", stable * 100))
+        return .estimated(watts, note: Self.displayFormula + String(format: t("，当前亮度 %.0f%%"), stable * 100))
     }
 }
 

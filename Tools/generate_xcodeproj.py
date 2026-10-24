@@ -29,6 +29,7 @@ def rel(path: str) -> str:
 
 APP_SOURCES = [
     "Sources/Core/SMC.swift",
+    "Sources/Core/L10n.swift",
     "Sources/Core/Battery.swift",
     "Sources/Core/PowerEstimate.swift",
     "Sources/Core/PowerMeter.swift",
@@ -38,6 +39,9 @@ APP_SOURCES = [
     "Sources/Core/CalibrationModel.swift",
     "Sources/Core/CalibrationMath.swift",
     "Sources/Core/CalibrationEngine.swift",
+    "Sources/Core/HistoryStore.swift",
+    "Sources/Core/Notifier.swift",
+    "Sources/Core/SleepControl.swift",
     "Sources/Core/FanController.swift",
     "Sources/Core/Theme.swift",
     "Sources/Core/AppState.swift",
@@ -50,18 +54,21 @@ APP_SOURCES = [
     "Sources/UI/PanelsBattery.swift",
     "Sources/UI/PanelsAutomation.swift",
     "Sources/UI/PanelsAppearance.swift",
+    "Sources/UI/HistoryPanel.swift",
     "Sources/UI/RootView.swift",
     "Sources/UI/AppDelegate.swift",
+    "Sources/UI/MenuBar.swift",
     "Sources/UI/FirstRunHelperSheet.swift",
     "Sources/main.swift",
 ]
 
 HELPER_SOURCES = [
+    "Sources/Core/L10n.swift",
     "Sources/Core/SMC.swift",
     "Helper/main.swift",
 ]
 
-RESOURCES = ["Resources/AppIcon.icns"]
+RESOURCES = ["Resources/AppIcon.icns", "Resources/en.json"]
 PLIST = "Resources/Info.plist"
 
 for path in APP_SOURCES + HELPER_SOURCES + RESOURCES + [PLIST]:

@@ -14,10 +14,10 @@ struct ScheduleView: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 10) {
                     IconBadge(symbol: "calendar.badge.clock")
-                    Text("任务")
+                    Text(t("任务"))
                         .font(.system(size: 13))
                         .foregroundColor(theme.textPrimary)
-                    HelpDot(text: "在指定时间自动执行充电、放电或校准操作。")
+                    HelpDot(text: t("在指定时间自动执行充电、放电或校准操作。"))
                     Spacer()
                 }
                 .frame(height: 34)
@@ -25,7 +25,7 @@ struct ScheduleView: View {
                 Card(padding: 0) {
                     Group {
                         if state.tasks.isEmpty {
-                            Text("点击 “+” 按钮添加新任务，或从现有模板中选择。")
+                            Text(t("点击 “+” 按钮添加新任务，或从现有模板中选择。"))
                                 .font(.system(size: 12))
                                 .foregroundColor(theme.textSecondary)
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -57,28 +57,28 @@ struct ScheduleView: View {
                     .buttonStyle(.plain)
 
                     Menu {
-                        Button("周末充满") {
+                        Button(t("周末充满")) {
                             var task = ScheduledTask()
                             task.kind = .topUp
                             task.hour = 9
                             task.weekdays = [6, 7]
                             state.addTask(task)
                         }
-                        Button("周一早晨充满") {
+                        Button(t("周一早晨充满")) {
                             var task = ScheduledTask()
                             task.kind = .topUp
                             task.hour = 7
                             task.weekdays = [1]
                             state.addTask(task)
                         }
-                        Button("每月校准") {
+                        Button(t("每月校准")) {
                             var task = ScheduledTask()
                             task.kind = .calibrate
                             task.hour = 9
                             task.weekdays = [1]
                             state.addTask(task)
                         }
-                        Button("每两周校准") {
+                        Button(t("每两周校准")) {
                             var task = ScheduledTask()
                             task.kind = .calibrate
                             task.hour = 9
@@ -88,7 +88,7 @@ struct ScheduleView: View {
                     } label: {
                         HStack(spacing: 5) {
                             Image(systemName: "doc.on.doc").font(.system(size: 11))
-                            Text("模板").font(.system(size: 12, weight: .medium))
+                            Text(t("模板")).font(.system(size: 12, weight: .medium))
                         }
                         .padding(.horizontal, 12)
                         .frame(height: 26)
@@ -101,19 +101,19 @@ struct ScheduleView: View {
                 }
 
                 ToggleRow(symbol: "arrow.triangle.2.circlepath",
-                          title: "自动补做未完成的任务",
-                          help: "启用后，AIBattery 会自动运行 MacBook 处于睡眠或关机状态时未执行的任务。",
+                          title: t("自动补做未完成的任务"),
+                          help: t("启用后，AIBattery 会自动运行 MacBook 处于睡眠或关机状态时未执行的任务。"),
                           isOn: $state.startTasksAfterDue)
 
                 HStack(spacing: 10) {
                     IconBadge(symbol: "list.bullet.rectangle")
-                    Text("任务历史")
+                    Text(t("任务历史"))
                         .font(.system(size: 13))
                         .foregroundColor(theme.textPrimary)
-                    HelpDot(text: "已执行的任务会记录在此处。")
+                    HelpDot(text: t("已执行的任务会记录在此处。"))
                     Spacer()
                     if !state.taskHistory.isEmpty {
-                        Button("清除") { state.clearTaskHistory() }
+                        Button(t("清除")) { state.clearTaskHistory() }
                             .buttonStyle(.plain)
                             .font(.system(size: 11))
                             .foregroundColor(theme.textSecondary)
@@ -125,7 +125,7 @@ struct ScheduleView: View {
                 Card(padding: 0) {
                     Group {
                         if state.taskHistory.isEmpty {
-                            Text("已执行的任务将显示在此处。")
+                            Text(t("已执行的任务将显示在此处。"))
                                 .font(.system(size: 12))
                                 .foregroundColor(theme.textSecondary)
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -242,15 +242,15 @@ struct TaskEditor: View {
     var onSave: (ScheduledTask) -> Void
     var onCancel: () -> Void
 
-    private let weekdays = ["一", "二", "三", "四", "五", "六", "日"]
+    private let weekdays = [t("一"), t("二"), t("三"), t("四"), t("五"), t("六"), t("日")]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("新建任务")
+            Text(t("新建任务"))
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(theme.textPrimary)
 
-            Picker("操作", selection: $draft.kind) {
+            Picker(t("操作"), selection: $draft.kind) {
                 ForEach(TaskKind.allCases, id: \.self) { kind in
                     Text(kind.title).tag(kind)
                 }
@@ -259,7 +259,7 @@ struct TaskEditor: View {
 
             if draft.kind == .setLimit || draft.kind == .startDischarge {
                 HStack {
-                    Text("目标电量").font(.system(size: 12))
+                    Text(t("目标电量")).font(.system(size: 12))
                     Spacer()
                     ValueStepper(value: $draft.value, range: 10...100, step: 5)
                         .frame(width: 110)
@@ -267,7 +267,7 @@ struct TaskEditor: View {
             }
 
             HStack {
-                Text("时间").font(.system(size: 12))
+                Text(t("时间")).font(.system(size: 12))
                 Spacer()
                 Picker("", selection: $draft.hour) {
                     ForEach(0..<24, id: \.self) { Text(String(format: "%02d", $0)).tag($0) }
@@ -300,10 +300,10 @@ struct TaskEditor: View {
 
             HStack {
                 Spacer()
-                Button("取消") { onCancel() }
+                Button(t("取消")) { onCancel() }
                     .buttonStyle(.plain)
                     .foregroundColor(theme.textSecondary)
-                Button("保存") { onSave(draft.task) }
+                Button(t("保存")) { onSave(draft.task) }
                     .buttonStyle(.plain)
                     .foregroundColor(theme.accent)
                     .padding(.leading, 14)

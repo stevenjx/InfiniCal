@@ -48,10 +48,10 @@ struct FanControlPage: View {
     private var header: some View {
         HStack(spacing: 10) {
             IconBadge(symbol: "fanblades")
-            Text("风扇控制")
+            Text(t("风扇控制"))
                 .font(.system(size: 13))
                 .foregroundColor(theme.textPrimary)
-            HelpDot(text: "直接读写 SMC 的风扇目标转速与模式键：自动交给系统，自定义与全速由本 App 强制。退出 App 时自动恢复系统控制。")
+            HelpDot(text: t("直接读写 SMC 的风扇目标转速与模式键：自动交给系统，自定义与全速由本 App 强制。退出 App 时自动恢复系统控制。"))
             Spacer()
             statusPill
         }
@@ -63,7 +63,7 @@ struct FanControlPage: View {
         return HStack(spacing: 5) {
             Image(systemName: manual ? "hand.raised.fill" : "gearshape.2.fill")
                 .font(.system(size: 9, weight: .bold))
-            Text(manual ? "手动控制" : "系统自动")
+            Text(manual ? t("手动控制") : t("系统自动"))
                 .font(.system(size: 11, weight: .medium))
         }
         .foregroundColor(manual ? theme.chartOrange : theme.chartGreen)
@@ -79,10 +79,10 @@ struct FanControlPage: View {
                     .font(.system(size: 18))
                     .foregroundColor(theme.textTertiary)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("此机型没有风扇")
+                    Text(t("此机型没有风扇"))
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(theme.textPrimary)
-                    Text("SMC 未报告任何风扇（FNum = 0），散热完全被动。温度数据仍然可用。")
+                    Text(t("SMC 未报告任何风扇（FNum = 0），散热完全被动。温度数据仍然可用。"))
                         .font(.system(size: 10.5))
                         .foregroundColor(theme.textSecondary)
                 }
@@ -97,12 +97,12 @@ struct FanControlPage: View {
                 Image(systemName: "lock.shield")
                     .font(.system(size: 11))
                     .foregroundColor(theme.textSecondary)
-                Text("调整风扇需要特权助手（写入 SMC 必须 root）")
+                Text(t("调整风扇需要特权助手（写入 SMC 必须 root）"))
                     .font(.system(size: 11))
                     .foregroundColor(theme.textSecondary)
                 Spacer()
                 Button { state.installHelper() } label: {
-                    Text("安装")
+                    Text(t("安装"))
                         .font(.system(size: 11, weight: .medium))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
@@ -123,17 +123,17 @@ struct FanControlPage: View {
                     Image(systemName: "thermometer.medium")
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundColor(theme.chartBlue)
-                    Text("温度")
+                    Text(t("温度"))
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(theme.textPrimary)
                     Spacer()
-                    Text("1 Hz 实时")
+                    Text(t("1 Hz 实时"))
                         .font(.system(size: 9))
                         .foregroundColor(theme.textTertiary)
                 }
 
                 if controller.sensors.isEmpty {
-                    Text("未读到温度传感器")
+                    Text(t("未读到温度传感器"))
                         .font(.system(size: 11))
                         .foregroundColor(theme.textSecondary)
                 } else {
@@ -148,7 +148,7 @@ struct FanControlPage: View {
                     HStack(spacing: 5) {
                         Image(systemName: showAllSensors.value ? "chevron.down" : "chevron.right")
                             .font(.system(size: 9, weight: .semibold))
-                        Text(showAllSensors.value ? "收起全部传感器" : "显示全部传感器")
+                        Text(showAllSensors.value ? t("收起全部传感器") : t("显示全部传感器"))
                             .font(.system(size: 10.5))
                     }
                     .foregroundColor(theme.textSecondary)
@@ -158,7 +158,7 @@ struct FanControlPage: View {
                 if showAllSensors.value {
                     let all = controller.allHIDSensors()
                     if all.isEmpty {
-                        Text("HID 未报告可用的温度服务")
+                        Text(t("HID 未报告可用的温度服务"))
                             .font(.system(size: 10))
                             .foregroundColor(theme.textTertiary)
                     } else {
@@ -223,10 +223,10 @@ struct FanControlPage: View {
                     Image(systemName: "chart.line.uptrend.xyaxis")
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundColor(theme.chartPurple)
-                    Text("温度曲线")
+                    Text(t("温度曲线"))
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(theme.textPrimary)
-                    HelpDot(text: "按选定传感器温度线性调整转速：低于起始温度保持最低转速，达到满载温度时全速。每秒更新一次，仅在本页可见时运行。")
+                    HelpDot(text: t("按选定传感器温度分三段调整转速：低于起始温度保持最低转速，中点给一个中间转速，达到满载温度时全速。每秒更新一次，温度变化小于 1°C 时不重写，转速每秒最多变化 150 RPM。"))
                     Spacer()
                     Toggle("", isOn: Binding(get: { controller.curveEnabled }, set: { controller.setCurveEnabled($0) }))
                     .labelsHidden()
@@ -238,7 +238,7 @@ struct FanControlPage: View {
                 }
 
                 HStack(spacing: 10) {
-                    Text("传感器")
+                    Text(t("传感器"))
                         .font(.system(size: 11))
                         .foregroundColor(theme.textSecondary)
                     Picker("", selection: Binding(get: { controller.curveSensorKey },
@@ -251,7 +251,7 @@ struct FanControlPage: View {
                     .frame(width: 120)
                     .disabled(!controller.curveEnabled)
 
-                    Text("起始")
+                    Text(t("起始"))
                         .font(.system(size: 11))
                         .foregroundColor(theme.textSecondary)
                     ValueStepper(value: Binding(get: { Int(controller.curveStartTemperature) },
@@ -260,7 +260,7 @@ struct FanControlPage: View {
                         .frame(width: 96)
                         .disabled(!controller.curveEnabled)
 
-                    Text("满载")
+                    Text(t("满载"))
                         .font(.system(size: 11))
                         .foregroundColor(theme.textSecondary)
                     ValueStepper(value: Binding(get: { Int(controller.curvePeakTemperature) },
@@ -273,8 +273,35 @@ struct FanControlPage: View {
                 }
                 .opacity(controller.hasFans ? 1 : 0.5)
 
+                HStack(spacing: 10) {
+                    Text(t("中点"))
+                        .font(.system(size: 11))
+                        .foregroundColor(theme.textSecondary)
+                    ValueStepper(value: Binding(get: { Int(controller.curveMidTemperature) },
+                                                set: { controller.curveMidTemperature = Double($0) }),
+                                 range: 40...100, step: 1, suffix: "°C")
+                        .frame(width: 96)
+                        .disabled(!controller.curveEnabled)
+
+                    Text(t("转速"))
+                        .font(.system(size: 11))
+                        .foregroundColor(theme.textSecondary)
+                    ValueStepper(value: Binding(get: { Int(controller.curveMidPercent) },
+                                                set: { controller.curveMidPercent = Double($0) }),
+                                 range: 0...100, step: 5, suffix: "%")
+                        .frame(width: 96)
+                        .disabled(!controller.curveEnabled)
+
+                    Spacer(minLength: 0)
+
+                    Text(t("三段折线：起始 → 中点 → 满载"))
+                        .font(.system(size: 9))
+                        .foregroundColor(theme.textTertiary)
+                }
+                .opacity(controller.hasFans ? 1 : 0.5)
+
                 if controller.curveEnabled, let current = curveCurrentTemperature {
-                    Text("当前 \(String(format: "%.1f", current))°C → \(curveTargetText)")
+                    Text(tf("当前 {p}°C → {p}", String(format: "%.1f", current), curveTargetText))
                         .font(.system(size: 10, design: .monospaced))
                         .foregroundColor(theme.textTertiary)
                 }
@@ -291,11 +318,8 @@ struct FanControlPage: View {
     }
 
     private var curveTargetText: String {
-        guard let fan = controller.fans.first, let temperature = curveCurrentTemperature else { return "--" }
-        let start = min(controller.curveStartTemperature, controller.curvePeakTemperature - 1)
-        let peak = max(controller.curvePeakTemperature, start + 1)
-        let ratio = min(max((temperature - start) / (peak - start), 0), 1)
-        let rpm = fan.minRPM + Int((Double(fan.maxRPM - fan.minRPM) * ratio).rounded())
+        guard let temperature = curveCurrentTemperature,
+              let rpm = controller.projectedRPM(temperature: temperature) else { return "--" }
         return "\(rpm) RPM"
     }
 
@@ -303,14 +327,14 @@ struct FanControlPage: View {
 
     private var presetRow: some View {
         HStack(spacing: 8) {
-            Text("预设")
+            Text(t("预设"))
                 .font(.system(size: 11))
                 .foregroundColor(theme.textSecondary)
 
-            ChipButton(title: "自动", symbol: "gearshape.2", selected: !controller.isAnyManual && !controller.curveEnabled) {
+            ChipButton(title: t("自动"), symbol: "gearshape.2", selected: !controller.isAnyManual && !controller.curveEnabled) {
                 controller.setAllAuto()
             }
-            ChipButton(title: "全速", symbol: "wind", selected: controller.fans.allSatisfy { $0.isManual && $0.targetRPM >= $0.maxRPM - 20 } && controller.hasFans) {
+            ChipButton(title: t("全速"), symbol: "wind", selected: controller.fans.allSatisfy { $0.isManual && $0.targetRPM >= $0.maxRPM - 20 } && controller.hasFans) {
                 controller.setAllFull()
             }
 
@@ -322,7 +346,7 @@ struct FanControlPage: View {
 
             Spacer(minLength: 8)
 
-            SmallActionButton(title: "保存当前", symbol: "plus") {
+            SmallActionButton(title: t("保存当前"), symbol: "plus") {
                 savePreset()
             }
             .frame(width: 96)
@@ -333,7 +357,7 @@ struct FanControlPage: View {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "HH:mm"
-        controller.savePreset(named: "预设 \(formatter.string(from: Date()))")
+        controller.savePreset(named: tf("预设 {p}", formatter.string(from: Date())))
     }
 }
 
@@ -383,7 +407,7 @@ private struct FanCard: View {
                     HStack(spacing: 6) {
                         Image(systemName: "chart.line.uptrend.xyaxis")
                             .font(.system(size: 9, weight: .semibold))
-                        Text("由温度曲线控制")
+                        Text(t("由温度曲线控制"))
                             .font(.system(size: 10.5))
                         Spacer(minLength: 0)
                     }
@@ -391,9 +415,9 @@ private struct FanCard: View {
                 } else {
                     HStack(spacing: 8) {
                         Picker("", selection: Binding(get: { mode }, set: { controller.setMode($0, for: fan.index) })) {
-                            Text("自动").tag(FanMode.auto)
-                            Text("自定义").tag(FanMode.fixed)
-                            Text("全速").tag(FanMode.full)
+                            Text(t("自动")).tag(FanMode.auto)
+                            Text(t("自定义")).tag(FanMode.fixed)
+                            Text(t("全速")).tag(FanMode.full)
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()
@@ -414,7 +438,7 @@ private struct FanCard: View {
                                 .font(.system(size: 9))
                                 .foregroundColor(theme.textSecondary)
                         } else {
-                            Text(mode == .auto ? "由系统按温度自动调节" : "保持最大转速")
+                            Text(mode == .auto ? t("由系统按温度自动调节") : t("保持最大转速"))
                                 .font(.system(size: 10))
                                 .foregroundColor(theme.textTertiary)
                             Spacer(minLength: 0)
@@ -423,7 +447,7 @@ private struct FanCard: View {
                 }
 
                 if !fan.canControl {
-                    Text("此机型未暴露可写的风扇模式键，只能读取转速")
+                    Text(t("此机型未暴露可写的风扇模式键，只能读取转速"))
                         .font(.system(size: 9.5))
                         .foregroundColor(theme.textTertiary)
                 }
