@@ -32,6 +32,8 @@ SOURCES=(
   "$ROOT/Sources/Core/CalibrationModel.swift"
   "$ROOT/Sources/Core/CalibrationMath.swift"
   "$ROOT/Sources/Core/CalibrationEngine.swift"
+  "$ROOT/Sources/Core/GPUStress.swift"
+  "$ROOT/Sources/Core/ProcessSampler.swift"
   "$ROOT/Sources/Core/HistoryStore.swift"
   "$ROOT/Sources/Core/Notifier.swift"
   "$ROOT/Sources/Core/SleepControl.swift"

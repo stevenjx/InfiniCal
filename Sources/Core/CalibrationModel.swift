@@ -18,6 +18,16 @@ struct CalibrationSample: Identifiable {
     let amperage: Double
     let temperature: Double
 
+    /// SoC (CPU + GPU + ANE) draw from powermetrics. Zero when no source could
+    /// produce it — the quality field says which case this is.
+    var socPower: Double = 0
+    var socPowerQuality: PowerQuality = .unavailable
+
+    /// Display backlight draw. No platform exposes this as a sensor, so it is
+    /// always a model output and always labelled as one.
+    var displayPower: Double = 0
+    var displayPowerQuality: PowerQuality = .unavailable
+
     /// Timestamps are unique inside a session, so they double as identity: a
     /// decimated rebuild of the array does not invalidate every row in the UI.
     var id: Date { timestamp }

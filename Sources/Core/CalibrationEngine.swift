@@ -105,6 +105,17 @@ enum DischargeStressMode: String, CaseIterable, Identifiable {
         case .aggressive: return 100
         }
     }
+
+    /// Fraction of wall-clock time the GPU should be executing. The GPU is
+    /// driven separately from the CPU workers so it can be dropped on its own
+    /// when the die gets hot.
+    var gpuDutyCycle: Double {
+        switch self {
+        case .silent: return 0
+        case .balanced: return 0.5
+        case .aggressive: return 1
+        }
+    }
 }
 
 // MARK: - Engine
@@ -135,9 +146,18 @@ final class CalibrationEngine: ObservableObject {
 
     // MARK: Host telemetry
 
-    @Published var cpuPowerWatts: Double = 0
+    /// SoC draw (CPU + GPU + ANE). Measured through powermetrics when the
+    /// privileged helper is installed, otherwise a labelled estimate — never a
+    /// number invented from the battery reading.
+    @Published var socPowerWatts: Double = 0
+    @Published var socPowerQuality: PowerQuality = .unavailable
+    /// Display backlight draw. No platform exposes this as a sensor, so it is
+    /// always a model output and always labelled as one.
+    @Published var displayPowerWatts: Double = 0
+    @Published var displayPowerQuality: PowerQuality = .unavailable
     @Published var cpuTemperature: Double = 0
     @Published var internalResistanceMilliohm: Double = 0
+    @Published var isGPUStressActive: Bool = false
 
     // MARK: Session measurements
 
@@ -156,6 +176,19 @@ final class CalibrationEngine: ObservableObject {
     @Published var totalDischargeRuntimeMinutes: Int = 0
     @Published var isThermalCutoffActive: Bool = false
 
+    // MARK: Preconditions
+
+    /// True when the pack is on AC, below full, and the system refuses to
+    /// charge it. Calibration cannot pass 预充 in that state.
+    @Published var isChargeHeld = false
+    /// Set once the user confirms they turned the system charging limit off.
+    /// Deliberately in-memory: a fresh launch re-checks, which is what
+    /// 「首次运行或启动校准前检查」 asks for.
+    @Published var obcAcknowledged = false
+
+    /// Whether the panel may unlock 开始校准.
+    var canStart: Bool { !isChargeHeld || obcAcknowledged }
+
     // MARK: Estimates
 
     @Published var aiRemainingMinutes: Int = 0
@@ -163,6 +196,16 @@ final class CalibrationEngine: ObservableObject {
     @Published var aiTrueHealthPercent: Double = 0
     @Published var aiConfidence: Double = 0
     @Published var aggregated: AggregatedHealth?
+
+    // MARK: Insight
+
+    /// Decay trend from the daily history. Nil until there is enough data to
+    /// say anything — see `BatteryTrend.minimumSamples`.
+    @Published private(set) var trend: BatteryTrend?
+    /// Live CPU / GPU / ANE split of `socPowerWatts`; zero when unknown.
+    @Published var socCPUWatts: Double = 0
+    @Published var socGPUWatts: Double = 0
+    @Published var socANEWatts: Double = 0
 
     // MARK: Charts & log
 
@@ -226,8 +269,40 @@ final class CalibrationEngine: ObservableObject {
     private var downsampleCounter = 0
     private var stressTasks: [Task<Void, Never>] = []
     private var assertionID: IOPMAssertionID = 0
+    private var displayAssertionID: IOPMAssertionID = 0
     private var assertionActive = false
-    private var previousCPUTicks: (user: UInt32, system: UInt32, idle: UInt32, nice: UInt32)?
+
+    private let gpu = GPUStress()
+    private let estimator = PowerEstimator()
+    private var gpuUnavailableLogged = false
+    /// powermetrics is a root process that takes ~1.5 s to answer, so it is
+    /// polled on a slow cadence from a background queue and held in between.
+    /// At 30 s the extra energy it burns is well under 1 % of a discharge.
+    private var socPowerFetchInFlight = false
+    private var lastSocPowerFetch = Date.distantPast
+    private var lastSocPowerSuccess: Date?
+    private let socPowerInterval: TimeInterval = 30
+    private let socPowerStaleAfter: TimeInterval = 90
+
+    /// Accumulated over a discharge so the report can say where the energy went
+    /// instead of only how much of it there was.
+    private var splitSamples = 0
+    private var splitCPUSum = 0.0
+    private var splitGPUSum = 0.0
+    private var splitANESum = 0.0
+    private var processTally: [String: Int] = [:]
+    private var processSamples = 0
+    /// The mode the discharge actually ran under. `stressMode` can be changed
+    /// mid-session, and the report must not describe a run by the setting that
+    /// happened to be selected when it finished.
+    private var sessionStressMode: DischargeStressMode = .balanced
+
+    /// Consecutive ticks the pack has been held below full while on AC. macOS
+    /// gives no readable flag for 「优化电池充电」 or 「充电上限」 — verified by
+    /// diffing `AppleSmartBattery` before and after toggling it: the property
+    /// list is identical apart from live counters. The hold itself is the only
+    /// observable symptom, so it is what the gate watches.
+    private var chargeHoldTicks = 0
 
     private var sessionStart: Date?
     private var dischargeStart: Date?
@@ -268,6 +343,7 @@ final class CalibrationEngine: ObservableObject {
         hardwareModel = Self.machineModel()
         records = CalibrationStore.load()
         aggregated = CalibrationStore.aggregate(records)
+        trend = BatteryTrend.compute(days: DailyHistory.shared.days)
         refreshLastRunDate()
         refreshNotificationPermission()
 
@@ -283,10 +359,14 @@ final class CalibrationEngine: ObservableObject {
         timer?.invalidate()
         for task in stressTasks { task.cancel() }
         if assertionActive { IOPMAssertionRelease(assertionID) }
+        if displayAssertionID != 0 { IOPMAssertionRelease(displayAssertionID) }
     }
 
     func beginTelemetryPage() {
         telemetryPageUsers += 1
+        // The daily history moves at most once a day; recomputing on entry
+        // keeps the trend from going stale in a long-running process.
+        trend = BatteryTrend.compute(days: DailyHistory.shared.days)
         ensureTelemetryTimer()
     }
 
@@ -307,8 +387,20 @@ final class CalibrationEngine: ObservableObject {
 
     // MARK: - Session control
 
-    func start() {
-        guard !isRunning else { return }
+    /// Returns false when a precondition refused the run, so the caller can put
+    /// its own mirror state back instead of showing a session that never began.
+    @discardableResult
+    func start() -> Bool {
+        guard !isRunning else { return false }
+
+        // A fresh read, because the gate may be evaluated from the menu bar
+        // before the calibration page has ever ticked.
+        if !obcAcknowledged, Self.isHoldingCharge(BatteryReader.read()) {
+            chargeHoldTicks = 5
+            isChargeHeld = true
+            append(t("已取消启动：系统正在限制充电，无法充至 100%。请先关闭「优化电池充电」或调高「充电上限」"))
+            return false
+        }
 
         isRunning = true
         ensureTelemetryTimer()
@@ -339,6 +431,13 @@ final class CalibrationEngine: ObservableObject {
         isThermalCutoffActive = false
         sessionPoints.removeAll()
         dischargeCurve.removeAll()
+        splitSamples = 0
+        splitCPUSum = 0
+        splitGPUSum = 0
+        splitANESum = 0
+        processTally.removeAll()
+        processSamples = 0
+        sessionStressMode = stressMode
 
         enableSleepBlock()
         append(t(">>> 开始电池校准 <<<"))
@@ -361,6 +460,7 @@ final class CalibrationEngine: ObservableObject {
             stopStressLoad()
             releaseDischarge()
         }
+        return true
     }
 
     func stop(reason: String? = nil) {
@@ -406,10 +506,11 @@ final class CalibrationEngine: ObservableObject {
         let uptime = ProcessInfo.processInfo.systemUptime
         let snapshot = BatteryReader.read()
         apply(snapshot)
+        updateChargeHold(snapshot)
 
-        let cpuRatio = cpuUsageRatio()
         let smoothedPower = model.smoothPower(batteryPower)
-        refreshThermal(smoothedPower: smoothedPower, cpuRatio: cpuRatio)
+        refreshThermal()
+        refreshPowerSources(now: now)
 
         if let resistance = dcir.feed(uptime: uptime, currentAmps: signedAmperage, voltageVolts: voltage) {
             internalResistanceMilliohm = resistance
@@ -420,7 +521,11 @@ final class CalibrationEngine: ObservableObject {
                                       power: batteryPower,
                                       voltage: voltage,
                                       amperage: signedAmperage,
-                                      temperature: temperature)
+                                      temperature: temperature,
+                                      socPower: socPowerWatts,
+                                      socPowerQuality: socPowerQuality,
+                                      displayPower: displayPowerWatts,
+                                      displayPowerQuality: displayPowerQuality)
         appendChartPoint(point)
         updateEstimates(smoothedPower: smoothedPower)
 
@@ -457,6 +562,52 @@ final class CalibrationEngine: ObservableObject {
             cellDeltaMillivolts = 0
         }
         if !snapshot.batterySerial.isEmpty { batterySerial = snapshot.batterySerial }
+    }
+
+    // MARK: - Charging precondition
+
+    /// The only symptom macOS exposes for a charge hold. It cannot say *why*
+    /// the pack is not charging, so the UI names the likely causes instead of
+    /// claiming one.
+    ///
+    /// Above 98 % the pack is topping off and pulses charging on and off; that
+    /// is normal and must not read as a limit. A BCLM ceiling is InfiniCal's own
+    /// charge-limit feature and `start()` lifts it, so it is excluded too.
+    static func isHoldingCharge(_ snapshot: BatterySnapshot) -> Bool {
+        guard snapshot.isPluggedIn,
+              !snapshot.isCharging,
+              !snapshot.fullyCharged,
+              snapshot.percentage > 0,
+              snapshot.percentage < 98 else { return false }
+        return !ChargeController.hasChargeCeiling()
+    }
+
+    /// Five consecutive ticks, so the pause between two top-off pulses at 99 %
+    /// does not raise a false alarm. Suspended while a session runs: a session
+    /// holds the pack down on purpose, and that is not a precondition failure.
+    private func updateChargeHold(_ snapshot: BatterySnapshot, force: Bool = false) {
+        guard !isRunning else {
+            chargeHoldTicks = 0
+            isChargeHeld = false
+            return
+        }
+        let held = Self.isHoldingCharge(snapshot)
+        chargeHoldTicks = held ? chargeHoldTicks + 1 : 0
+        if held, force { chargeHoldTicks = max(chargeHoldTicks, 5) }
+        isChargeHeld = held && chargeHoldTicks >= 5
+    }
+
+    /// Re-reads the pack on demand — the 「刷新状态」 button.
+    func refreshChargeHold() {
+        let snapshot = BatteryReader.read()
+        apply(snapshot)
+        updateChargeHold(snapshot, force: true)
+    }
+
+    /// The user says the system limit is off. Trust it for this launch.
+    func acknowledgeChargeHold() {
+        obcAcknowledged = true
+        append(t("已确认关闭系统充电限制，允许开始校准"))
     }
 
     private func updateEstimates(smoothedPower: Double) {
@@ -546,6 +697,9 @@ final class CalibrationEngine: ObservableObject {
 
     private func beginDischargePhase() {
         phase = .discharging
+        // The span this phase will extrapolate from starts here, so anything
+        // the pack happened to give up while topping up must not be counted.
+        integrator.resetDischargeBucket()
         dischargeStartPercentage = percentage
         dischargeStart = Date()
         dischargeCurve.removeAll()
@@ -554,7 +708,11 @@ final class CalibrationEngine: ObservableObject {
                                                 power: batteryPower,
                                                 voltage: voltage,
                                                 amperage: signedAmperage,
-                                                temperature: temperature))
+                                                temperature: temperature,
+                                                socPower: socPowerWatts,
+                                                socPowerQuality: socPowerQuality,
+                                                displayPower: displayPowerWatts,
+                                                displayPowerQuality: displayPowerQuality))
         append(tf("预充完成，转入受控放电阶段（{p}%）[{p}]", "\(percentage)", stressMode.title))
         notify(t("预充完成"), tf("电池已充至 {p}%，开始受控放电校准。", "\(percentage)"))
         startStressLoad()
@@ -569,6 +727,9 @@ final class CalibrationEngine: ObservableObject {
 
         stopStressLoad()
         releaseDischarge(limit: 100)
+        // Everything charged before this moment belongs to the pre-charge. Only
+        // what follows is the recharge the discharge is compared against.
+        integrator.resetRechargeBucket()
         phase = .rechargingToFull
         notify(t("放电完成"), t("电量已放至目标值，请保持电源连接以完成满电复充。"))
     }
@@ -625,8 +786,15 @@ final class CalibrationEngine: ObservableObject {
         }
         records = CalibrationStore.append(record)
         aggregated = CalibrationStore.aggregate(records)
+        trend = BatteryTrend.compute(days: DailyHistory.shared.days)
         defaults.set(Date().timeIntervalSince1970, forKey: Keys.lastRun)
         refreshLastRunDate()
+        if splitSamples > 0 {
+            append(tf("功耗归因: CPU {p} W · GPU {p} W · ANE {p} W",
+                      String(format: "%.2f", splitCPUSum / Double(splitSamples)),
+                      String(format: "%.2f", splitGPUSum / Double(splitSamples)),
+                      String(format: "%.2f", splitANESum / Double(splitSamples))))
+        }
         notify(t("校准完成"), tf("真实容量 {p} mAh，健康度 {p}。", String(format: "%.0f", measuredCapacityMAh), String(format: "%.1f%%", measuredHealth)))
         stopTelemetryIfIdle()
     }
@@ -684,36 +852,90 @@ final class CalibrationEngine: ObservableObject {
             stressTasks.append(task)
         }
         append(tf("放电负载已启动 [{p}]: {p} 个工作线程", stressMode.title, "\(workers)"))
+        startGPULoad()
     }
 
     private func stopStressLoad() {
+        stopGPULoad()
         guard !stressTasks.isEmpty else { return }
         for task in stressTasks { task.cancel() }
         stressTasks.removeAll()
         append(t("已停止放电负载"))
     }
 
+    /// GPU load runs on its own axis so the thermal guard can drop it while the
+    /// CPU workers keep going.
+    private func startGPULoad() {
+        guard stressMode.gpuDutyCycle > 0 else { return }
+        guard gpu.isAvailable else {
+            if !gpuUnavailableLogged {
+                gpuUnavailableLogged = true
+                append(t("未找到可用的 GPU 计算设备，GPU 加压跳过"))
+            }
+            return
+        }
+        gpu.start(dutyCycle: stressMode.gpuDutyCycle)
+        isGPUStressActive = true
+        append(t("GPU 加压已启动"))
+    }
+
+    private func stopGPULoad() {
+        guard isGPUStressActive else { return }
+        gpu.stop()
+        isGPUStressActive = false
+        append(t("GPU 加压已停止"))
+    }
+
     // MARK: - Thermal protection
+
+    /// Die temperature we refuse to exceed while injecting load ourselves.
+    /// Apple Silicon throttles around 100–105 °C; cutting at 95 °C keeps the
+    /// stress load from being the thing that heats the machine up. This is a
+    /// self-imposed policy, not a value read from the hardware.
+    private let socTemperatureCeiling: Double = 95
+    private let socTemperatureResume: Double = 85
+    /// The GPU line sits below the SoC line: the GPU is the hottest thing we add
+    /// and the cheapest to take back, so it comes off first and the CPU load
+    /// keeps running.
+    private let gpuTemperatureCeiling: Double = 90
+    private let gpuTemperatureResume: Double = 82
 
     private func handleThermalCutoff() {
         guard phase == .discharging else { return }
         let resumeLine = min(resumeTemperature, highTemperature - 1)
+        // Two independent sensors, because a 45 °C cell and a 95 °C die are
+        // both unsafe and neither implies the other.
+        let cellHot = temperature >= highTemperature
+        let socHot = cpuTemperature >= socTemperatureCeiling
 
-        if temperature >= highTemperature, !isThermalCutoffActive {
+        if (cellHot || socHot), !isThermalCutoffActive {
             isThermalCutoffActive = true
             stopStressLoad()
-            append(tf("过热保护: {p}°C ≥ 阈值 {p}°C，已暂停负载", String(format: "%.1f", temperature), "\(Int(highTemperature))"))
-            notify(t("过热保护已触发"), tf("电池温度已达 {p}°C，放电负载已暂停等待降温。", String(format: "%.1f", temperature)))
-        } else if temperature <= resumeLine, isThermalCutoffActive {
+            let source = cellHot ? t("电芯") : t("SoC")
+            let value = cellHot ? temperature : cpuTemperature
+            let limit = cellHot ? highTemperature : socTemperatureCeiling
+            append(tf("过热保护（{p}）: {p}°C ≥ 阈值 {p}°C，已暂停负载", source, String(format: "%.1f", value), "\(Int(limit))"))
+            notify(t("过热保护已触发"), tf("温度已达 {p}°C（{p}），放电负载已暂停等待降温。", String(format: "%.1f", value), source))
+        } else if isThermalCutoffActive, temperature <= resumeLine, cpuTemperature <= socTemperatureResume {
             isThermalCutoffActive = false
             startStressLoad()
             append(tf("温度恢复: {p}°C ≤ 恢复线 {p}°C，已恢复负载", String(format: "%.1f", temperature), "\(Int(resumeLine))"))
+        }
+
+        // GPU sub-fuse, only meaningful while the main load is allowed to run.
+        guard !isThermalCutoffActive else { return }
+        if isGPUStressActive, cpuTemperature >= gpuTemperatureCeiling {
+            stopGPULoad()
+            append(tf("GPU 过热保护: {p}°C ≥ 阈值 {p}°C，已单独撤除 GPU 负载", String(format: "%.1f", cpuTemperature), "\(Int(gpuTemperatureCeiling))"))
+        } else if !isGPUStressActive, stressMode.gpuDutyCycle > 0, gpu.isAvailable,
+                  cpuTemperature > 0, cpuTemperature <= gpuTemperatureResume {
+            startGPULoad()
         }
     }
 
     // MARK: - Host telemetry
 
-    private func refreshThermal(smoothedPower: Double, cpuRatio: Double) {
+    private func refreshThermal() {
         if let cpu = hidCPUTemperature(), cpu > 10, cpu < 115 {
             cpuTemperature = cpu
         } else if cpuTemperature <= 0 {
@@ -724,52 +946,71 @@ final class CalibrationEngine: ObservableObject {
                 }
             }
         }
+    }
 
-        if signedAmperage < -0.05 || isDischargingOnAC {
-            cpuPowerWatts = max(0.8, smoothedPower * 0.55)
+    /// SoC and display draw for the current sample. Both carry their quality:
+    /// powermetrics is a measurement, the brightness model is not, and neither
+    /// is ever promoted to look like a sensor.
+    private func refreshPowerSources(now: Date) {
+        let display = estimator.estimateDisplay()
+        displayPowerWatts = display.watts ?? 0
+        displayPowerQuality = display.watts == nil ? .unavailable : display.quality
+
+        guard HelperClient.shared.lastKnownInstalled else {
+            let estimate = estimator.estimateSoC()
+            socPowerWatts = estimate.watts ?? 0
+            socPowerQuality = estimate.watts == nil ? .unavailable : estimate.quality
+            return
+        }
+
+        if let last = lastSocPowerSuccess, now.timeIntervalSince(last) <= socPowerStaleAfter {
+            socPowerQuality = .measured
         } else {
-            cpuPowerWatts = max(1.2, cpuRatio * 45)
+            socPowerQuality = .unavailable
+            socPowerWatts = 0
+        }
+        fetchSocPowerIfDue(now: now)
+    }
+
+    /// powermetrics answers in ~1.5 s, so the call runs off the main thread and
+    /// the result is held until the next poll.
+    private func fetchSocPowerIfDue(now: Date) {
+        guard !socPowerFetchInFlight,
+              now.timeIntervalSince(lastSocPowerFetch) >= socPowerInterval else { return }
+        socPowerFetchInFlight = true
+        lastSocPowerFetch = now
+        // Read on the main thread: the sampler blocks for a second and there is
+        // no reason to pay that outside a session.
+        let attributing = isRunning
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let split = HelperClient.shared.socPowerSplit()
+            let processes = attributing
+                ? ProcessSampler.topProcesses(interval: 1.0, limit: 3, excluding: [getpid()])
+                : []
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.socPowerFetchInFlight = false
+                guard let split else { return }
+                self.socPowerWatts = split.combined
+                self.socPowerQuality = .measured
+                self.socCPUWatts = split.cpu
+                self.socGPUWatts = split.gpu
+                self.socANEWatts = split.ane
+                self.lastSocPowerSuccess = Date()
+                if self.isRunning { self.recordSplit(split, processes: processes) }
+            }
         }
     }
 
-    private func cpuUsageRatio() -> Double {
-        var info: processor_info_array_t?
-        var count: mach_msg_type_number_t = 0
-        var processors: natural_t = 0
-        let result = host_processor_info(mach_host_self(), PROCESSOR_CPU_LOAD_INFO,
-                                         &processors, &info, &count)
-        guard result == KERN_SUCCESS, let info else { return 0.05 }
-        defer {
-            vm_deallocate(mach_task_self_,
-                          vm_address_t(bitPattern: info),
-                          vm_size_t(count * UInt32(MemoryLayout<integer_t>.stride)))
-        }
-
-        var user: UInt32 = 0, system: UInt32 = 0, idle: UInt32 = 0, nice: UInt32 = 0
-        let loads = info.withMemoryRebound(to: processor_cpu_load_info.self, capacity: Int(processors)) { pointer in
-            Array(UnsafeBufferPointer(start: pointer, count: Int(processors)))
-        }
-        for cpu in loads {
-            user += cpu.cpu_ticks.0
-            system += cpu.cpu_ticks.1
-            idle += cpu.cpu_ticks.2
-            nice += cpu.cpu_ticks.3
-        }
-
-        guard let previous = previousCPUTicks else {
-            previousCPUTicks = (user, system, idle, nice)
-            return 0.08
-        }
-        // 32-bit tick counters wrap; &- keeps that from trapping.
-        let deltaUser = Double(user &- previous.user)
-        let deltaSystem = Double(system &- previous.system)
-        let deltaIdle = Double(idle &- previous.idle)
-        let deltaNice = Double(nice &- previous.nice)
-        previousCPUTicks = (user, system, idle, nice)
-
-        let total = deltaUser + deltaSystem + deltaIdle + deltaNice
-        guard total > 0 else { return 0.05 }
-        return min(1, max(0.01, (deltaUser + deltaSystem + deltaNice) / total))
+    private func recordSplit(_ split: (cpu: Double, gpu: Double, ane: Double, combined: Double),
+                             processes: [ProcessLoad]) {
+        splitSamples += 1
+        splitCPUSum += split.cpu
+        splitGPUSum += split.gpu
+        splitANESum += split.ane
+        guard !processes.isEmpty else { return }
+        processSamples += 1
+        for process in processes { processTally[process.name, default: 0] += 1 }
     }
 
     /// CPU die temperature from the HID sensor page — works on Intel and Apple
@@ -821,21 +1062,47 @@ final class CalibrationEngine: ObservableObject {
 
     private func enableSleepBlock() {
         guard !assertionActive else { return }
-        let created = IOPMAssertionCreateWithName(kIOPMAssertionTypePreventUserIdleSystemSleep as CFString,
-                                                  IOPMAssertionLevel(kIOPMAssertionLevelOn),
-                                                  "InfiniCal Calibration" as CFString,
-                                                  &assertionID)
-        if created == kIOReturnSuccess {
-            assertionActive = true
-            append(t("已阻止系统空闲睡眠，保证采样连续"))
+        guard createAssertion(&assertionID,
+                              kIOPMAssertionTypePreventUserIdleSystemSleep,
+                              "InfiniCal Calibration") else { return }
+        assertionActive = true
+        // Display sleep is a second, independent assertion: the panel has to
+        // stay readable and the sample interval must not be disturbed by the
+        // screen powering down. A headless or clamshell Mac may refuse it.
+        if createAssertion(&displayAssertionID,
+                           kIOPMAssertionTypePreventUserIdleDisplaySleep,
+                           "InfiniCal Calibration Display") {
+            append(t("已阻止系统睡眠与息屏，保证采样连续"))
+        } else {
+            append(t("已阻止系统睡眠（息屏断言未生效）"))
         }
     }
 
     private func disableSleepBlock() {
-        guard assertionActive else { return }
-        IOPMAssertionRelease(assertionID)
-        assertionActive = false
-        append(t("已恢复系统睡眠策略"))
+        guard assertionActive || displayAssertionID != 0 else { return }
+        if assertionActive {
+            IOPMAssertionRelease(assertionID)
+            assertionID = 0
+            assertionActive = false
+        }
+        if displayAssertionID != 0 {
+            IOPMAssertionRelease(displayAssertionID)
+            displayAssertionID = 0
+        }
+        append(t("已恢复系统睡眠与息屏策略"))
+    }
+
+    private func createAssertion(_ id: inout IOPMAssertionID,
+                                 _ type: String,
+                                 _ name: String) -> Bool {
+        var created: IOPMAssertionID = 0
+        let result = IOPMAssertionCreateWithName(type as CFString,
+                                                 IOPMAssertionLevel(kIOPMAssertionLevelOn),
+                                                 name as CFString,
+                                                 &created)
+        guard result == kIOReturnSuccess else { return false }
+        id = created
+        return true
     }
 
     // MARK: - Notifications
@@ -890,7 +1157,11 @@ final class CalibrationEngine: ObservableObject {
                 power: slice.reduce(0) { $0 + $1.power } / count,
                 voltage: slice.reduce(0) { $0 + $1.voltage } / count,
                 amperage: slice.reduce(0) { $0 + $1.amperage } / count,
-                temperature: slice.reduce(0) { $0 + $1.temperature } / count
+                temperature: slice.reduce(0) { $0 + $1.temperature } / count,
+                socPower: slice.reduce(0) { $0 + $1.socPower } / count,
+                socPowerQuality: slice.last?.socPowerQuality ?? .unavailable,
+                displayPower: slice.reduce(0) { $0 + $1.displayPower } / count,
+                displayPowerQuality: slice.last?.displayPowerQuality ?? .unavailable
             ))
             index = end
         }
@@ -952,9 +1223,34 @@ final class CalibrationEngine: ObservableObject {
             tf("复充能量: {p} Wh ({p} Ah)", String(format: "%.2f", rechargeEnergyWh), String(format: "%.3f", rechargeEnergyAh)),
             tf("库仑效率: {p}", rechargeEnergyAh > 0 ? String(format: "%.1f%%", coulombicEfficiency) : "--"),
             tf("终止电压: {p}", String(format: "%.2f V", voltage)),
-            tf("终止温度: {p}", String(format: "%.1f °C", temperature)),
-            t("----------------- 过程日志 -----------------")
+            tf("终止温度: {p}", String(format: "%.1f °C", temperature))
         ]
+
+        if splitSamples > 0 {
+            let cpu = splitCPUSum / Double(splitSamples)
+            let gpu = splitGPUSum / Double(splitSamples)
+            let ane = splitANESum / Double(splitSamples)
+            let total = max(0.001, cpu + gpu + ane)
+            lines += [
+                "",
+                t("----------------- 功耗归因 -----------------"),
+                tf("SoC 分项均值: CPU {p} W ({p}%) · GPU {p} W ({p}%) · ANE {p} W ({p}%)",
+                   String(format: "%.2f", cpu), "\(Int(cpu / total * 100))",
+                   String(format: "%.2f", gpu), "\(Int(gpu / total * 100))",
+                   String(format: "%.2f", ane), "\(Int(ane / total * 100))"),
+                tf("分项采样: {p} 次（每 30 秒一次）", "\(splitSamples)")
+            ]
+            let processes = topProcessSummary()
+            if !processes.isEmpty {
+                lines.append(tf("放电期间高频进程: {p}", processes))
+            }
+            if sessionStressMode == .silent, gpu / total >= 0.4 {
+                lines.append(t("GPU 占比偏高，但本次未施加 GPU 负载：放电期间可能有图形密集型应用在活跃。"))
+            }
+            lines.append(t("说明: 分项为 powermetrics 实测；进程占比是 CPU 占用，不是焦耳，仅作粗粒度参考。"))
+        }
+
+        lines.append(t("----------------- 过程日志 -----------------"))
         var text = lines.joined(separator: "\n")
         for line in log { text += "\n\(line)" }
         text += "\n==================================================\n"
@@ -962,12 +1258,15 @@ final class CalibrationEngine: ObservableObject {
         sessionReportURL = write(text, name: "InfiniCal_Calibration_Report_\(stamp).txt")
         lastReportURL = sessionReportURL
 
-        var csv = "Timestamp,Percentage,Power(W),Voltage(V),Amperage(A),Temperature(C)\n"
+        var csv = "Timestamp,Percentage,Power(W),Voltage(V),Amperage(A),Temperature(C),"
+        csv += "SocPower(W),SocPowerSource,DisplayPower(W),DisplayPowerSource\n"
         let iso = ISO8601DateFormatter()
         for point in sessionPoints {
             csv += "\(iso.string(from: point.timestamp)),\(point.percentage),"
             csv += "\(String(format: "%.3f", point.power)),\(String(format: "%.3f", point.voltage)),"
-            csv += "\(String(format: "%.3f", point.amperage)),\(String(format: "%.2f", point.temperature))\n"
+            csv += "\(String(format: "%.3f", point.amperage)),\(String(format: "%.2f", point.temperature)),"
+            csv += "\(String(format: "%.2f", point.socPower)),\(Self.qualityToken(point.socPowerQuality)),"
+            csv += "\(String(format: "%.2f", point.displayPower)),\(Self.qualityToken(point.displayPowerQuality))\n"
         }
         sessionCSVURL = write(csv, name: "InfiniCal_Telemetry_\(stamp).csv")
         lastCSVURL = sessionCSVURL
@@ -976,6 +1275,26 @@ final class CalibrationEngine: ObservableObject {
             append(tf("报告已导出: {p} → {p}", report.lastPathComponent, report.deletingLastPathComponent().path))
         } else {
             append(t("报告导出失败：目标目录不可写"))
+        }
+    }
+
+    /// Most frequently seen names in the discharge window, with how often they
+    /// appeared out of the samples taken.
+    private func topProcessSummary() -> String {
+        guard processSamples > 0 else { return "" }
+        return processTally
+            .sorted { $0.value > $1.value }
+            .prefix(3)
+            .map { tf("{p} ({p}/{p})", $0.key, "\($0.value)", "\(processSamples)") }
+            .joined(separator: " · ")
+    }
+
+    /// Stable ASCII tokens: a CSV is data, not UI, so it must not be localised.
+    private static func qualityToken(_ quality: PowerQuality) -> String {
+        switch quality {
+        case .measured: return "measured"
+        case .estimated: return "estimated"
+        case .unavailable: return "unavailable"
         }
     }
 

@@ -16,6 +16,9 @@ probes/
 # Reference dumps (ioreg output, AlDente localisation strings)
 ref/
 
+# Charging-state captures taken while checking 「优化电池充电」
+优化充电/
+
 # WorkBuddy project metadata
 .workbuddy-ai/
 

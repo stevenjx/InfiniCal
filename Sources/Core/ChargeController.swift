@@ -265,6 +265,43 @@ final class HelperClient {
         return watts
     }
 
+    /// Same measurement as `socPower()`, but keeps the per-block breakdown.
+    ///
+    /// Runs powermetrics through the existing `exec` whitelist instead of the
+    /// dedicated command, so the daemon binary is unchanged. Output format,
+    /// verified on macOS 26 / M2 Pro:
+    ///     CPU Power: 2504 mW
+    ///     GPU Power: 939 mW
+    ///     ANE Power: 0 mW
+    ///     Combined Power (CPU + GPU + ANE): 3443 mW
+    func socPowerSplit() -> (cpu: Double, gpu: Double, ane: Double, combined: Double)? {
+        guard lastKnownInstalled,
+              let response = request(["cmd": "exec",
+                                      "path": "/usr/bin/powermetrics",
+                                      "args": ["--samplers", "cpu_power", "-n", "1", "-i", "400"]],
+                                     timeout: 8),
+              (response["ok"] as? Bool) == true,
+              let output = response["output"] as? String else { return nil }
+
+        var cpu = 0.0, gpu = 0.0, ane = 0.0, combined = 0.0
+        for rawLine in output.split(separator: "\n") {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("CPU Power:") { cpu = Self.watts(line) }
+            else if line.hasPrefix("GPU Power:") { gpu = Self.watts(line) }
+            else if line.hasPrefix("ANE Power:") { ane = Self.watts(line) }
+            else if line.contains("Combined Power") { combined = Self.watts(line) }
+        }
+        guard combined > 0 || cpu > 0 else { return nil }
+        return (cpu, gpu, ane, combined > 0 ? combined : cpu + gpu + ane)
+    }
+
+    /// "CPU Power: 2504 mW" → 2.504
+    private static func watts(_ line: String) -> Double {
+        let digits = line.compactMap { $0.isNumber ? $0 : nil }
+        guard !digits.isEmpty, let value = Double(String(digits)) else { return 0 }
+        return line.contains("mW") ? value / 1000 : value
+    }
+
     func runPrivileged(_ path: String, _ arguments: [String]) throws -> String {
         guard lastKnownInstalled else { throw HelperError.notInstalled }
         guard let response = request(["cmd": "exec", "path": path, "args": arguments], timeout: 6) else {
@@ -351,6 +388,21 @@ final class ChargeController {
         case .unavailable:
             throw HelperError.smc(t("此机型未暴露充电控制键"))
         }
+    }
+
+    /// True when BCLM is holding a ceiling below full.
+    ///
+    /// That is InfiniCal's own normal state — the charge-limit feature — and
+    /// `start()` lifts it, so the calibration gate must not report it as a
+    /// system limit.
+    ///
+    /// The inhibit flags (CHIE / CH0B / CH0C) are deliberately *not* excluded.
+    /// Outside a session this app leaves them cleared on every exit path, so an
+    /// inhibit that is set belongs to something else (another charge-limiter
+    /// tool, for instance) and does block a run.
+    static func hasChargeCeiling() -> Bool {
+        guard let limit = try? SMC.shared.readDouble("BCLM") else { return false }
+        return limit < 99.5
     }
 
     enum LowPowerMode: Int {

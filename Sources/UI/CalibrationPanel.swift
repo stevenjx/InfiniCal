@@ -30,6 +30,7 @@ struct CalibrationPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
+            chargeGateCard
             statusCard
             pipelineCard
             HStack(alignment: .top, spacing: 10) {
@@ -37,12 +38,22 @@ struct CalibrationPanel: View {
                 healthCard
             }
             HStack(spacing: 10) {
-                hostCard(title: t("CPU 功耗"),
-                         value: String(format: "%.1f", engine.cpuPowerWatts),
+                hostCard(title: t("SoC 功耗"),
+                         value: engine.socPowerQuality == .unavailable
+                                ? "--" : String(format: "%.1f", engine.socPowerWatts),
                          unit: "W",
                          symbol: "cpu",
                          tint: theme.chartOrange,
-                         progress: min(1, engine.cpuPowerWatts / 50))
+                         progress: min(1, engine.socPowerWatts / 50),
+                         note: socNote)
+                hostCard(title: t("屏幕功耗"),
+                         value: engine.displayPowerQuality == .unavailable
+                                ? "--" : String(format: "%.1f", engine.displayPowerWatts),
+                         unit: "W",
+                         symbol: "display",
+                         tint: theme.chartBlue,
+                         progress: min(1, engine.displayPowerWatts / 8),
+                         note: engine.displayPowerQuality.badge)
                 hostCard(title: t("CPU 温度"),
                          value: engine.cpuTemperature > 0 ? String(format: "%.0f", engine.cpuTemperature) : "--",
                          unit: "°C",
@@ -118,10 +129,13 @@ struct CalibrationPanel: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 7)
-                .background(Capsule().fill(engine.isRunning ? Color.red.opacity(0.18) : theme.accent))
-                .foregroundColor(engine.isRunning ? Color.red : .white)
+                .background(Capsule().fill(engine.isRunning ? Color.red.opacity(0.18)
+                                              : (engine.canStart ? theme.accent : theme.innerControl)))
+                .foregroundColor(engine.isRunning ? Color.red
+                                 : (engine.canStart ? Color.white : theme.textTertiary))
             }
             .buttonStyle(.plain)
+            .disabled(!engine.isRunning && !engine.canStart)
         }
         .frame(height: 34)
     }
@@ -147,6 +161,80 @@ struct CalibrationPanel: View {
         case .holdingAtFull: return theme.chartPurple
         case .completed: return theme.chartGreen
         }
+    }
+
+    // MARK: - Charging precondition
+
+    /// Shown only while the system is holding the pack below full and the user
+    /// has not confirmed they cleared it. macOS exposes no flag for
+    /// 「优化电池充电」 / 「充电上限」, so the copy names the symptom first and
+    /// the likely causes second instead of asserting one.
+    @ViewBuilder
+    private var chargeGateCard: some View {
+        if engine.isChargeHeld, !engine.obcAcknowledged, !engine.isRunning {
+            Card(padding: 14) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(theme.chartOrange)
+                        Text(tf("系统正在限制充电（当前 {p}%），校准无法充至 100%", "\(engine.percentage)"))
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(theme.textPrimary)
+                        Spacer(minLength: 6)
+                    }
+
+                    Text(t("「优化电池充电」会在 80% 附近暂停充电，新版 macOS 的「充电上限」也会把电量锁在设定值；适配器功率不足或温度过高同样会暂停。校准需要连续充到满电，请先按以下步骤关闭。若设置里已经是 100% 仍不充电，拔插一次电源后再点「刷新状态」："))
+                        .font(.system(size: 11))
+                        .foregroundColor(theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        stepLine(1, t("打开「系统设置」→「电池」"))
+                        stepLine(2, t("点按「电池健康」右侧的 ⓘ"))
+                        stepLine(3, t("关闭「优化电池充电」，并把充电上限调到 100%"))
+                    }
+
+                    HStack(spacing: 8) {
+                        SmallActionButton(title: t("打开系统设置"), symbol: "gearshape") {
+                            openBatterySettings()
+                        }
+                        SmallActionButton(title: t("刷新状态"), symbol: "arrow.clockwise") {
+                            engine.refreshChargeHold()
+                        }
+                        SmallActionButton(title: t("已关闭，允许开始"), symbol: "checkmark") {
+                            engine.acknowledgeChargeHold()
+                        }
+                    }
+                    .padding(.top, 2)
+                }
+            }
+        }
+    }
+
+    private func stepLine(_ index: Int, _ text: String) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Text("\(index).")
+                .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                .foregroundColor(theme.textTertiary)
+            Text(text)
+                .font(.system(size: 11))
+                .foregroundColor(theme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// Verified on this machine: `com.apple.Battery-Settings.extension` is the
+    /// bundle id of `/System/Library/ExtensionKit/Extensions/PowerPreferences.appex`.
+    /// That pane only exists from Ventura, so Monterey falls back to the legacy
+    /// preference pane.
+    private func openBatterySettings() {
+        if #available(macOS 13.0, *),
+           let url = URL(string: "x-apple.systempreferences:com.apple.Battery-Settings.extension"),
+           NSWorkspace.shared.open(url) {
+            return
+        }
+        NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Library/PreferencePanes/Battery.prefPane"))
     }
 
     // MARK: - Live status
@@ -418,7 +506,41 @@ struct CalibrationPanel: View {
                         .foregroundColor(theme.textTertiary)
                         .lineLimit(1)
                 }
+
+                trendLine
             }
+        }
+    }
+
+    /// Straight-line decay from the daily history, or an honest "not enough
+    /// data yet" — never a guessed number.
+    @ViewBuilder
+    private var trendLine: some View {
+        if let trend = engine.trend {
+            HStack(spacing: 5) {
+                Image(systemName: trend.isAccelerating ? "arrow.down.right" : "arrow.down.forward")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundColor(trend.isAccelerating ? theme.chartOrange : theme.textTertiary)
+                Text(tf("衰减 {p} ± {p} %/100 次循环 · {p} 个样本",
+                        String(format: "%.2f", trend.slopePer100Cycles),
+                        String(format: "%.2f", trend.slopeMargin),
+                        "\(trend.sampleCount)"))
+                    .font(.system(size: 9.5))
+                    .foregroundColor(theme.textTertiary)
+                    .lineLimit(1)
+                if let cycles = trend.cyclesToThreshold, cycles > 0 {
+                    Text(tf("· 约 {p} 次循环后降至 {p}%", "\(cycles)", "\(Int(trend.threshold))"))
+                        .font(.system(size: 9.5))
+                        .foregroundColor(theme.textTertiary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+        } else {
+            Text(t("衰减趋势: 样本不足（至少 8 个不同循环数、跨度 20 次），继续使用后可推算"))
+                .font(.system(size: 9.5))
+                .foregroundColor(theme.textTertiary)
+                .lineLimit(1)
         }
     }
 
@@ -436,10 +558,21 @@ struct CalibrationPanel: View {
         }
     }
 
+    /// Quality badge, plus the CPU/GPU split when powermetrics produced one.
+    private var socNote: String {
+        guard engine.socPowerQuality == .measured, engine.socCPUWatts > 0 else {
+            return engine.socPowerQuality.badge
+        }
+        return tf("{p} · CPU {p} · GPU {p}", engine.socPowerQuality.badge,
+                  String(format: "%.1f", engine.socCPUWatts),
+                  String(format: "%.1f", engine.socGPUWatts))
+    }
+
     // MARK: - Host telemetry
 
     private func hostCard(title: String, value: String, unit: String,
-                          symbol: String, tint: Color, progress: Double) -> some View {
+                          symbol: String, tint: Color, progress: Double,
+                          note: String? = nil) -> some View {
         Card(padding: 10) {
             HStack(spacing: 9) {
                 ZStack {
@@ -466,6 +599,12 @@ struct CalibrationPanel: View {
                         Text(unit)
                             .font(.system(size: 9))
                             .foregroundColor(theme.textSecondary)
+                    }
+                    if let note {
+                        Text(note)
+                            .font(.system(size: 9))
+                            .foregroundColor(theme.textTertiary)
+                            .lineLimit(1)
                     }
                 }
                 Spacer(minLength: 0)
@@ -593,6 +732,17 @@ struct CalibrationPanel: View {
             }
 
             Spacer(minLength: 8)
+
+            if engine.isGPUStressActive {
+                HStack(spacing: 4) {
+                    Image(systemName: "bolt.horizontal.circle.fill").font(.system(size: 9, weight: .bold))
+                    Text(t("GPU 加压中")).font(.system(size: 10, weight: .medium))
+                }
+                .foregroundColor(theme.chartOrange)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3.5)
+                .background(Capsule().fill(theme.chartOrange.opacity(0.14)))
+            }
 
             if engine.isThermalCutoffActive {
                 HStack(spacing: 4) {

@@ -54,6 +54,24 @@ final class CoulombIntegrator {
         lastPower = 0
     }
 
+    /// Zeroes one bucket without touching the other, and without breaking the
+    /// trapezoid: `lastCurrent` / `lastPower` stay, so the next slice is still
+    /// integrated from the previous sample.
+    ///
+    /// Phase transitions need this. Charge moved while topping up to 100 % is
+    /// neither part of the discharge span nor part of the recharge that follows
+    /// it, and leaving it in the recharge bucket understates coulombic
+    /// efficiency by however long the pre-charge took.
+    func resetDischargeBucket() {
+        totals.dischargeAh = 0
+        totals.dischargeWh = 0
+    }
+
+    func resetRechargeBucket() {
+        totals.rechargeAh = 0
+        totals.rechargeWh = 0
+    }
+
     func step(uptime: TimeInterval, currentSignedAmps: Double, voltageVolts: Double) -> CoulombTotals {
         let current = abs(currentSignedAmps) <= deadband ? 0 : currentSignedAmps
         let power = voltageVolts * current

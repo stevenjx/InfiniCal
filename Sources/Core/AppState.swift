@@ -798,6 +798,14 @@ final class AppState: ObservableObject {
 
     func startCalibration() {
         guard !calibrationEngine.isRunning else { return }
+        // Started first: the engine refuses when the system is holding the
+        // charge below full, and this mirror must not claim a session that
+        // never began.
+        guard calibrationEngine.start() else {
+            statusNote = t("校准未开始：系统正在限制充电")
+            log(t("校准"), statusNote)
+            return
+        }
         // A calibration owns the charge ceiling end to end; drop any pending
         // top-up so its restore value cannot fire in the middle of a session.
         topUpRestore = nil
@@ -808,7 +816,6 @@ final class AppState: ObservableObject {
         lastAppliedLimit = nil
         chargeVal = 100
         statusNote = t("校准已开始：正在充电至 100%")
-        calibrationEngine.start()
         log(t("校准"), t("校准模式已启动"))
     }
 
@@ -1255,6 +1262,11 @@ final class AppState: ObservableObject {
     /// actually on screen.
     private func refreshComponentPower() {
         guard dashboardBackgroundUpdates || NSApp.isActive else { return }
+        // A calibration integrates the pack's discharge. A second root
+        // powermetrics poll every 8 s would burn ~1.5 s of a core each time
+        // inside the very window being measured, so the engine owns the
+        // measurement for the duration of a session.
+        guard !calibrationEngine.isRunning else { return }
         let now = Date()
         if helperInstalled, !socRequestInFlight, now.timeIntervalSince(lastHelperSocPoll) > 8 {
             lastHelperSocPoll = now
