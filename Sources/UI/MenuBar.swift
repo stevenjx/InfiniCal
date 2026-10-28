@@ -88,18 +88,35 @@ final class MenuBarController: NSObject {
         if let last = lastButtonKey, last == key { return }
         lastButtonKey = key
         guard snapshot.isPresent else {
-            button.image = NSImage(systemSymbolName: "battery.0", accessibilityDescription: t("无电池"))
-            button.image?.isTemplate = true
+            button.image = batteryImage("battery.0", description: t("无电池"))
             button.title = " —"
             button.toolTip = t("未检测到电池")
             return
         }
         let percent = snapshot.percentage
-        button.image = NSImage(systemSymbolName: symbolName(percent: percent, charging: snapshot.isCharging),
-                               accessibilityDescription: tf("电池 {p}%", "\(percent)"))
-        button.image?.isTemplate = true
+        button.image = batteryImage(symbolName(percent: percent, charging: snapshot.isCharging),
+                                    description: tf("电池 {p}%", "\(percent)"))
         button.title = " \(percent)%"
         button.toolTip = tf("{p} · 限制 {p}%", state.chargeState.title, "\(state.chargeVal)")
+    }
+
+    /// A symbol sized for the status bar.
+    ///
+    /// `withSymbolConfiguration` leaves `size` at the symbol's natural value
+    /// (22×11 for `battery.*`), and the status item draws at `size` — which is
+    /// why the icon read as a speck next to the 11 pt title. The height is set
+    /// here instead, keeping the glyph's aspect ratio.
+    private func batteryImage(_ name: String, description: String) -> NSImage? {
+        guard let image = NSImage(systemSymbolName: name, accessibilityDescription: description) else {
+            return nil
+        }
+        image.isTemplate = true
+        let targetHeight: CGFloat = 15
+        if image.size.height > 0 {
+            let ratio = targetHeight / image.size.height
+            image.size = NSSize(width: (image.size.width * ratio).rounded(), height: targetHeight)
+        }
+        return image
     }
 
     private func symbolName(percent: Int, charging: Bool) -> String {

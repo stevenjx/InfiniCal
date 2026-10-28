@@ -78,15 +78,22 @@ struct RootView: View {
 
                 Spacer(minLength: 0)
 
-                circleButton("gearshape", highlighted: state.selectedPanel == .other) {
-                    state.selectedPanel = .other
-                }
+                // 「其他」 already has its own row in the list above; the gear
+                // here was a duplicate entry point, so the slot now shows the
+                // build version instead.
+                Text("v\(appVersion)")
+                    .font(.system(size: 9).monospacedDigit())
+                    .foregroundColor(theme.textTertiary)
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 14)
         }
         .frame(width: 240)
         .background(theme.sidebarBackground)
+    }
+
+    private var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
     }
 
     private func previousCategory(_ index: Int) -> String? {
