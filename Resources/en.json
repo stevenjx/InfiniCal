@@ -204,6 +204,7 @@
  "已取消": "cancelled",
  "已取消启动：系统正在限制充电，无法充至 100%。请先关闭「优化电池充电」或调高「充电上限」": "Start cancelled: the system is holding the charge, so the pack cannot reach 100%. Turn off Optimized Battery Charging or raise the charge limit first.",
  "已完成": "Completed",
+ "已将适配器电流上限设为 0，改为电池供电（原值已保存，结束后恢复）": "Adapter current limit set to zero, running on battery (previous value saved and restored afterwards)",
  "已开启": "On",
  "已恢复系统睡眠与息屏策略": "System sleep and display policies restored",
  "已执行的任务会记录在此处。": "Completed tasks are logged here.",

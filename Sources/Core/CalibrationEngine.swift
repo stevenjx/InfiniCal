@@ -666,6 +666,10 @@ final class CalibrationEngine: ObservableObject {
             if noDischargeTicks == 20, !needsUnplugForDischarge,
                ChargeController.shared.capabilities.strategy != .bclm {
                 needsUnplugForDischarge = true
+                // The limit was accepted but the pack still is not draining, so
+                // put the adapter back the way it was instead of leaving the
+                // machine on a zeroed limit.
+                ChargeController.shared.endForcedDischarge()
                 append(t("接电状态下电池没有放电：此机型的充电控制键只能阻断充电、不能强制放电。请拔掉电源适配器，放电会在电池供电下继续进行。"))
             }
             if percentage <= dischargeTarget { endDischargePhase() }
@@ -840,6 +844,12 @@ final class CalibrationEngine: ObservableObject {
             do { try controller.setChargingAllowed(false) } catch {
                 append(tf("SMC: 阻断充电失败 — {p}", error.localizedDescription))
             }
+            // Inhibiting charge is not enough on Intel: the Mac keeps drawing
+            // from the adapter at 0 A. Zeroing the adapter current limit is what
+            // actually drains the pack while still plugged in.
+            if controller.beginForcedDischarge() {
+                append(t("已将适配器电流上限设为 0，改为电池供电（原值已保存，结束后恢复）"))
+            }
         case .unavailable:
             append(t("SMC: 此机型未暴露充电控制键，无法在接电时强制放电"))
         }
@@ -852,6 +862,7 @@ final class CalibrationEngine: ObservableObject {
             try? controller.applyChargeLimit(limit)
         case .ch0bch0c, .chie:
             try? controller.setChargingAllowed(true)
+            controller.endForcedDischarge()
         case .unavailable:
             break
         }

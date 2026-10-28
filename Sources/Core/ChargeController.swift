@@ -462,8 +462,44 @@ final class ChargeController {
         }
     }
 
-    /// True when BCLM is holding a ceiling below full.
+    /// Raw ACLC value captured before a forced discharge, restored afterwards.
+    private var savedAdapterCurrentLimit: [UInt8]?
+
+    /// Makes the Mac run off the battery while the adapter stays connected.
     ///
+    /// Intel has no BCLM, and CH0B/CH0C only inhibit charging — the machine
+    /// keeps drawing from the adapter at 0 A, which is why a discharge phase
+    /// never progresses there. `ACLC` is the adapter current limit: with it at
+    /// zero the PMU has to source the load from the pack.
+    ///
+    /// The original bytes are captured first and written back verbatim on
+    /// release, so the exact type and value never have to be assumed. A crash
+    /// mid-session leaves the limit at zero until the next boot clears it, which
+    /// is the same trade-off every charge-limiter makes.
+    ///
+    /// Returns false when the key is absent or not writable, so the caller can
+    /// fall back to asking the user to unplug.
+    @discardableResult
+    func beginForcedDischarge() -> Bool {
+        guard savedAdapterCurrentLimit == nil else { return true }
+        guard let aclc = capabilities.aclc, aclc.isWritable else { return false }
+        guard let (_, raw) = try? SMC.shared.readBytes("ACLC"), !raw.isEmpty else { return false }
+        let zeroed = [UInt8](repeating: 0, count: raw.count)
+        guard (try? HelperClient.shared.smcWriteBytes("ACLC", zeroed)) != nil else { return false }
+        // Read back rather than trusting the write: a key can accept a write and
+        // silently ignore it.
+        guard let (_, check) = try? SMC.shared.readBytes("ACLC"), check == zeroed else { return false }
+        savedAdapterCurrentLimit = raw
+        return true
+    }
+
+    func endForcedDischarge() {
+        guard let raw = savedAdapterCurrentLimit else { return }
+        savedAdapterCurrentLimit = nil
+        _ = try? HelperClient.shared.smcWriteBytes("ACLC", raw)
+    }
+
+    /// True when BCLM is holding a ceiling below full.    ///
     /// That is InfiniCal's own normal state — the charge-limit feature — and
     /// `start()` lifts it, so the calibration gate must not report it as a
     /// system limit.
