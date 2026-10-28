@@ -974,7 +974,7 @@ final class CalibrationEngine: ObservableObject {
 
     private func refreshThermal() {
         // Apple Silicon: one unified die, read without privileges at 1 Hz.
-        if let cpu = hidCPUTemperature() {
+        if let cpu = HIDThermal.average(in: 15...110, where: { $0.lowercased().contains("tdie") }) {
             cpuTemperature = cpu
             return
         }
@@ -1065,52 +1065,6 @@ final class CalibrationEngine: ObservableObject {
         for process in processes { processTally[process.name, default: 0] += 1 }
     }
 
-    /// Apple Silicon die temperature from the HID sensor page.
-    ///
-    /// Only `PMU tdie*` is accepted. Intel exposes a different set whose names
-    /// also contain "die" — CPU Proximity, GPU Die, PCH Die — and averaging
-    /// them into a value labelled "CPU 温度" read 96 °C on a MacBookPro15,1
-    /// while `powermetrics` reported 43 °C for the same machine. Intel goes
-    /// through `HelperClient.cpuDieTemperature()` instead.
-    private func hidCPUTemperature() -> Double? {
-        typealias CreateFunc = @convention(c) (CFAllocator?) -> Unmanaged<AnyObject>?
-        typealias MatchFunc = @convention(c) (AnyObject, CFDictionary) -> Void
-        typealias ServicesFunc = @convention(c) (AnyObject) -> Unmanaged<CFArray>?
-        typealias PropertyFunc = @convention(c) (AnyObject, CFString) -> Unmanaged<CFTypeRef>?
-        typealias EventFunc = @convention(c) (AnyObject, Int64, Int32, Int64) -> Unmanaged<AnyObject>?
-        typealias FloatFunc = @convention(c) (AnyObject, UInt32) -> Double
-
-        guard let handle = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_NOW) else { return nil }
-        defer { dlclose(handle) }
-        guard let createSym = dlsym(handle, "IOHIDEventSystemClientCreate"),
-              let matchSym = dlsym(handle, "IOHIDEventSystemClientSetMatching"),
-              let servicesSym = dlsym(handle, "IOHIDEventSystemClientCopyServices"),
-              let propertySym = dlsym(handle, "IOHIDServiceClientCopyProperty"),
-              let eventSym = dlsym(handle, "IOHIDServiceClientCopyEvent"),
-              let floatSym = dlsym(handle, "IOHIDEventGetFloatValue") else { return nil }
-
-        let create = unsafeBitCast(createSym, to: CreateFunc.self)
-        let match = unsafeBitCast(matchSym, to: MatchFunc.self)
-        let copyServices = unsafeBitCast(servicesSym, to: ServicesFunc.self)
-        let copyProperty = unsafeBitCast(propertySym, to: PropertyFunc.self)
-        let copyEvent = unsafeBitCast(eventSym, to: EventFunc.self)
-        let floatValue = unsafeBitCast(floatSym, to: FloatFunc.self)
-
-        guard let client = create(kCFAllocatorDefault)?.takeRetainedValue() else { return nil }
-        match(client, ["PrimaryUsagePage": 0xff00, "PrimaryUsage": 5] as CFDictionary)
-        guard let services = copyServices(client)?.takeRetainedValue() as? [AnyObject] else { return nil }
-
-        var readings: [Double] = []
-        for service in services {
-            guard let name = copyProperty(service, "Product" as CFString)?.takeRetainedValue() as? String else { continue }
-            guard name.lowercased().contains("tdie") else { continue }
-            guard let event = copyEvent(service, 15, 0, 0)?.takeRetainedValue() else { continue }
-            let celsius = floatValue(event, 0x000F0000)
-            if celsius > 15, celsius < 110 { readings.append(celsius) }
-        }
-        guard !readings.isEmpty else { return nil }
-        return readings.reduce(0, +) / Double(readings.count)
-    }
 
     // MARK: - Sleep block
 

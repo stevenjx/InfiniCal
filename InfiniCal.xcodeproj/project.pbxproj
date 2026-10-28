@@ -20,6 +20,7 @@
 		05A817E4FAC9C671F83F8133 /* CalibrationEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC7E4FA2E504472DE1FD193F /* CalibrationEngine.swift */; };
 		9C8B7A6D5E4F3A2B1C0D9E8F /* GPUStress.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F7A1C9B2D4E6F8A0B1C2D3E /* GPUStress.swift */; };
 		5A1B3C5D7E9F0A2B4C6D8E0F /* ProcessSampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D2E4F6A8B0C1D3E5F7A9B0C /* ProcessSampler.swift */; };
+		4C9E1A3B5D7F2C4E6A8B0D1F /* HIDThermal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B8D2A4C9E1F3A5B7C9D0E2F /* HIDThermal.swift */; };
 		85D163081A208A1E836F56DA /* HistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C509D83CBC83A13CF4407D84 /* HistoryStore.swift */; };
 		4679ED6D469B3C728D05C8BC /* Notifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82BE2237B9BA6EC865EF74E4 /* Notifier.swift */; };
 		437B21A60C4A837BEB66E9BB /* SleepControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47148AED6335858B49C9DC9F /* SleepControl.swift */; };
@@ -87,6 +88,7 @@
 		FC7E4FA2E504472DE1FD193F /* CalibrationEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrationEngine.swift; sourceTree = "<group>"; };
 		3F7A1C9B2D4E6F8A0B1C2D3E /* GPUStress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPUStress.swift; sourceTree = "<group>"; };
 		7D2E4F6A8B0C1D3E5F7A9B0C /* ProcessSampler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessSampler.swift; sourceTree = "<group>"; };
+		6B8D2A4C9E1F3A5B7C9D0E2F /* HIDThermal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HIDThermal.swift; sourceTree = "<group>"; };
 		C509D83CBC83A13CF4407D84 /* HistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryStore.swift; sourceTree = "<group>"; };
 		82BE2237B9BA6EC865EF74E4 /* Notifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notifier.swift; sourceTree = "<group>"; };
 		47148AED6335858B49C9DC9F /* SleepControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepControl.swift; sourceTree = "<group>"; };
@@ -181,6 +183,7 @@
 				FC7E4FA2E504472DE1FD193F /* CalibrationEngine.swift */,
 				3F7A1C9B2D4E6F8A0B1C2D3E /* GPUStress.swift */,
 				7D2E4F6A8B0C1D3E5F7A9B0C /* ProcessSampler.swift */,
+				6B8D2A4C9E1F3A5B7C9D0E2F /* HIDThermal.swift */,
 				C509D83CBC83A13CF4407D84 /* HistoryStore.swift */,
 				82BE2237B9BA6EC865EF74E4 /* Notifier.swift */,
 				47148AED6335858B49C9DC9F /* SleepControl.swift */,
@@ -336,6 +339,7 @@
 				05A817E4FAC9C671F83F8133 /* CalibrationEngine.swift in Sources */,
 				9C8B7A6D5E4F3A2B1C0D9E8F /* GPUStress.swift in Sources */,
 				5A1B3C5D7E9F0A2B4C6D8E0F /* ProcessSampler.swift in Sources */,
+				4C9E1A3B5D7F2C4E6A8B0D1F /* HIDThermal.swift in Sources */,
 				85D163081A208A1E836F56DA /* HistoryStore.swift in Sources */,
 				4679ED6D469B3C728D05C8BC /* Notifier.swift in Sources */,
 				437B21A60C4A837BEB66E9BB /* SleepControl.swift in Sources */,

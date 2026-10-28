@@ -19,7 +19,6 @@
 //
 
 import Foundation
-import IOKit
 
 // MARK: - Models
 
@@ -299,7 +298,7 @@ final class FanController: ObservableObject {
                                          source: t("电池仪表"), celsius: battery))
         }
 
-        if let nand = hidAverage({ $0.lowercased().contains("nand") }) {
+        if let nand = HIDThermal.average(where: { $0.lowercased().contains("nand") }) {
             result.append(ThermalReading(key: "ssd", name: t("固态硬盘"), source: "HID · NAND", celsius: nand))
         }
 
@@ -317,7 +316,7 @@ final class FanController: ObservableObject {
     /// sensors. Without that branch this returned 0 on Intel machines, so the
     /// curve sensor had no value and fan control never engaged at all.
     private func cpuTemperature() -> (value: Double, source: String) {
-        if let hid = hidAverage({ $0.lowercased().contains("tdie") }) {
+        if let hid = HIDThermal.average(where: { $0.lowercased().contains("tdie") }) {
             usesHIDForCPU = true
             return (hid, t("HID · PMU tdie 平均"))
         }
@@ -362,7 +361,7 @@ final class FanController: ObservableObject {
     /// expandable "all sensors" list so nothing is hidden or invented.
     func allHIDSensors() -> [ThermalReading] {
         var buckets: [String: [Double]] = [:]
-        for reading in hidReadings() {
+        for reading in HIDThermal.readings() {
             buckets[reading.name, default: []].append(reading.celsius)
         }
         return buckets.keys.sorted().compactMap { name in
@@ -678,52 +677,4 @@ final class FanController: ObservableObject {
         fans.first { $0.index == index }
     }
 
-    // MARK: - HID sensors
-
-    private func hidAverage(_ matching: (String) -> Bool) -> Double? {
-        let values = hidReadings().filter { matching($0.name) }.map { $0.celsius }
-        guard !values.isEmpty else { return nil }
-        return values.reduce(0, +) / Double(values.count)
-    }
-
-    /// Raw IOHID temperature services. Names come straight from IOKit, so the UI
-    /// can show them verbatim instead of inventing labels.
-    private func hidReadings() -> [(name: String, celsius: Double)] {
-        typealias CreateFunc = @convention(c) (CFAllocator?) -> Unmanaged<AnyObject>?
-        typealias MatchFunc = @convention(c) (AnyObject, CFDictionary) -> Void
-        typealias ServicesFunc = @convention(c) (AnyObject) -> Unmanaged<CFArray>?
-        typealias PropertyFunc = @convention(c) (AnyObject, CFString) -> Unmanaged<CFTypeRef>?
-        typealias EventFunc = @convention(c) (AnyObject, Int64, Int32, Int64) -> Unmanaged<AnyObject>?
-        typealias FloatFunc = @convention(c) (AnyObject, UInt32) -> Double
-
-        guard let handle = dlopen("/System/Library/Frameworks/IOKit.framework/IOKit", RTLD_NOW) else { return [] }
-        defer { dlclose(handle) }
-        guard let createSym = dlsym(handle, "IOHIDEventSystemClientCreate"),
-              let matchSym = dlsym(handle, "IOHIDEventSystemClientSetMatching"),
-              let servicesSym = dlsym(handle, "IOHIDEventSystemClientCopyServices"),
-              let propertySym = dlsym(handle, "IOHIDServiceClientCopyProperty"),
-              let eventSym = dlsym(handle, "IOHIDServiceClientCopyEvent"),
-              let floatSym = dlsym(handle, "IOHIDEventGetFloatValue") else { return [] }
-
-        let create = unsafeBitCast(createSym, to: CreateFunc.self)
-        let match = unsafeBitCast(matchSym, to: MatchFunc.self)
-        let copyServices = unsafeBitCast(servicesSym, to: ServicesFunc.self)
-        let copyProperty = unsafeBitCast(propertySym, to: PropertyFunc.self)
-        let copyEvent = unsafeBitCast(eventSym, to: EventFunc.self)
-        let floatValue = unsafeBitCast(floatSym, to: FloatFunc.self)
-
-        guard let client = create(kCFAllocatorDefault)?.takeRetainedValue() else { return [] }
-        match(client, ["PrimaryUsagePage": 0xff00, "PrimaryUsage": 5] as CFDictionary)
-        guard let services = copyServices(client)?.takeRetainedValue() as? [AnyObject] else { return [] }
-
-        var rows: [(String, Double)] = []
-        for service in services {
-            guard let name = copyProperty(service, "Product" as CFString)?.takeRetainedValue() as? String else { continue }
-            guard let event = copyEvent(service, 15, 0, 0)?.takeRetainedValue() else { continue }
-            let celsius = floatValue(event, 0x000F0000)
-            guard celsius > 0, celsius < 130 else { continue }
-            rows.append((name, celsius))
-        }
-        return rows
-    }
 }
