@@ -309,6 +309,9 @@ final class CalibrationEngine: ObservableObject {
     /// Consecutive ticks spent plugged in without any pack current during the
     /// discharge phase.
     private var noDischargeTicks = 0
+    /// One diagnostic line per session is enough when the sampler's field names
+    /// do not match.
+    private var socPowerParseFailureLogged = false
 
     private var sessionStart: Date?
     private var dischargeStart: Date?
@@ -437,6 +440,7 @@ final class CalibrationEngine: ObservableObject {
         isThermalCutoffActive = false
         needsUnplugForDischarge = false
         noDischargeTicks = 0
+        socPowerParseFailureLogged = false
         sessionPoints.removeAll()
         dischargeCurve.removeAll()
         splitSamples = 0
@@ -1017,6 +1021,17 @@ final class CalibrationEngine: ObservableObject {
                 guard let self else { return }
                 self.socPowerFetchInFlight = false
                 guard let split else { return }
+                guard split.combined > 0 else {
+                    // The command ran but none of the known field names matched.
+                    // Record what powermetrics actually printed, once, so the
+                    // machine can be diagnosed without guessing at its format.
+                    if !self.socPowerParseFailureLogged, !split.rawLines.isEmpty {
+                        self.socPowerParseFailureLogged = true
+                        self.append(tf("SoC 功耗解析失败，powermetrics 输出：{p}",
+                                       split.rawLines.joined(separator: " ⋯ ")))
+                    }
+                    return
+                }
                 self.socPowerWatts = split.combined
                 self.socPowerQuality = .measured
                 self.socCPUWatts = split.cpu
@@ -1028,7 +1043,7 @@ final class CalibrationEngine: ObservableObject {
         }
     }
 
-    private func recordSplit(_ split: (cpu: Double, gpu: Double, ane: Double, combined: Double),
+    private func recordSplit(_ split: HelperClient.SocPowerSample,
                              processes: [ProcessLoad]) {
         splitSamples += 1
         splitCPUSum += split.cpu

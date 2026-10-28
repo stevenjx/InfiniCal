@@ -274,7 +274,18 @@ final class HelperClient {
     ///     GPU Power: 939 mW
     ///     ANE Power: 0 mW
     ///     Combined Power (CPU + GPU + ANE): 3443 mW
-    func socPowerSplit() -> (cpu: Double, gpu: Double, ane: Double, combined: Double)? {
+    struct SocPowerSample {
+        var cpu: Double
+        var gpu: Double
+        var ane: Double
+        var combined: Double
+        /// The power lines of the raw sampler output. Kept so a machine whose
+        /// field names differ can be diagnosed from the log instead of guessed
+        /// at, and so `combined == 0` is distinguishable from "no response".
+        var rawLines: [String]
+    }
+
+    func socPowerSplit() -> SocPowerSample? {
         guard lastKnownInstalled,
               let response = request(["cmd": "exec",
                                       "path": "/usr/bin/powermetrics",
@@ -284,15 +295,24 @@ final class HelperClient {
               let output = response["output"] as? String else { return nil }
 
         var cpu = 0.0, gpu = 0.0, ane = 0.0, combined = 0.0
+        var rawLines: [String] = []
         for rawLine in output.split(separator: "\n") {
             let line = rawLine.trimmingCharacters(in: .whitespaces)
+            guard line.lowercased().contains("power") else { continue }
+            if rawLines.count < 8 { rawLines.append(line) }
             if line.hasPrefix("CPU Power:") { cpu = Self.watts(line) }
             else if line.hasPrefix("GPU Power:") { gpu = Self.watts(line) }
             else if line.hasPrefix("ANE Power:") { ane = Self.watts(line) }
             else if line.contains("Combined Power") { combined = Self.watts(line) }
+            // Intel reports the package total rather than CPU + GPU + ANE.
+            else if line.hasPrefix("Package Power:") { combined = Self.watts(line) }
         }
-        guard combined > 0 || cpu > 0 else { return nil }
-        return (cpu, gpu, ane, combined > 0 ? combined : cpu + gpu + ane)
+        guard combined > 0 || cpu > 0 else {
+            return SocPowerSample(cpu: 0, gpu: 0, ane: 0, combined: 0, rawLines: rawLines)
+        }
+        return SocPowerSample(cpu: cpu, gpu: gpu, ane: ane,
+                              combined: combined > 0 ? combined : cpu + gpu + ane,
+                              rawLines: rawLines)
     }
 
     /// "CPU Power: 2504 mW" → 2.504
