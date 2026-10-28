@@ -101,23 +101,29 @@ struct PowerFlowModel {
                                        watts: watts, quality: usb.quality, detail: usb.note))
         }
 
-        let known = sinks.compactMap { $0.watts }.reduce(0, +)
-        // "其他" is by definition `total − known`. That subtraction is only honest
+        // "其他" is by definition `system total − known system sinks`. The pack
+        // is fed by the adapter, not by the logic board, so it must not be
+        // subtracted from the system budget: doing so made the residual collapse
+        // to zero and printed "其他 —" whenever the machine was charging.
+        let systemKnown = sinks.filter { $0.kind != .battery }.compactMap { $0.watts }.reduce(0, +)
+        // That subtraction is only honest
         // while the total comes from a live sample: before PSTR produces its first
         // sane value we fall back to the 60-second snapshot, which can be 20 W off,
         // and the residual would then be a fabricated number.
-        let other = (totalIsLive && totalPower >= 3) ? max(0, totalPower - known) : 0
+        let other = (totalIsLive && totalPower >= 3) ? max(0, totalPower - systemKnown) : 0
         let hasEstimate = sinks.contains { $0.quality == .estimated }
         sinks.append(PowerFlowSink(kind: .other, title: t("其他"), symbol: "ellipsis",
                                    color: Color(red: 0.30, green: 0.68, blue: 0.60),
                                    watts: other, quality: .measured,
                                    detail: hasEstimate ? t("总数 − 已知分项（含估算误差）") : t("总数 − 已知分项")))
 
-        // Adapter side carries the whole input; the MacBook only consumes what
-        // is left after the battery takes its charge.
+        // PSTR / SystemLoad measure what the logic board draws, not what the
+        // adapter delivers. While the pack is charging the adapter has to supply
+        // both, so the source node is their sum — otherwise it prints less than
+        // the sum of its own ribbons (17.7 W against 42 W of sinks).
         let chargeIntoBattery = max(0, batteryWatts)
-        let systemOnly = max(0, totalPower - chargeIntoBattery)
-        let sourcePower = totalPower
+        let sourcePower = totalPower + chargeIntoBattery
+        let systemOnly = totalPower
         let detail: String
         if plugged {
             detail = snapshot.adapter.isEmpty ? t("电源适配器") : snapshot.adapter.name

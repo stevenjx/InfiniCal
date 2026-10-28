@@ -96,8 +96,14 @@ enum BatteryReader {
         guard let props = registryProperties(for: "AppleSmartBattery") else { return snap }
         apply(props, pack: registryProperties(for: "AppleSmartBatteryPack"), to: &snap)
 
-        // SMC battery temperature is the value Apple's own UI agrees with.
-        if let t = try? SMC.shared.readDouble("TB0T"), t > -20, t < 120 {
+        // The pack's own gauge measures the cells it manages. On Apple Silicon it
+        // agrees with TB0T to within 0.1 °C (measured: 32.19 vs 32.30), so the
+        // choice is invisible there. On Intel it does not: the captured
+        // MacBookPro16,x reported 30.3 °C from the gauge while TB0T sat around
+        // 51 °C at the same charge rate, which dragged the daily average into the
+        // 60s. The gauge wins; TB0T is only a fallback for machines that do not
+        // report a pack temperature at all.
+        if snap.temperature == 0, let t = try? SMC.shared.readDouble("TB0T"), t > -20, t < 120 {
             snap.temperature = t
         }
         return snap
