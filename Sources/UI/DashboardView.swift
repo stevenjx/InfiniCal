@@ -253,7 +253,7 @@ struct DashboardView: View {
                         .foregroundColor(theme.textPrimary)
                 }
                 Button {
-                    if state.calibration == nil { state.startCalibration() } else { state.stopCalibration() }
+                    state.requestCalibrationStart()
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: state.calibration == nil ? "play.fill" : "stop.fill")

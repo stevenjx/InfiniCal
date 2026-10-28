@@ -13,7 +13,13 @@ struct RootView: View {
         HStack(spacing: 0) {
             sidebar
             Rectangle().fill(theme.divider).frame(width: 1)
+            // Attached to the child, not the HStack: two .sheet modifiers on the
+            // same view are unreliable before macOS 13.
             content
+                .sheet(isPresented: $state.showingCalibrationMode) {
+                    CalibrationModeSheet()
+                        .environmentObject(state)
+                }
         }
         .background(theme.windowBackground)
         .preferredColorScheme(theme.isDark ? .dark : .light)

@@ -31,6 +31,7 @@ struct CalibrationPanel: View {
         VStack(alignment: .leading, spacing: 10) {
             header
             chargeGateCard
+            dischargeHintCard
             statusCard
             pipelineCard
             HStack(alignment: .top, spacing: 10) {
@@ -119,7 +120,7 @@ struct CalibrationPanel: View {
             Spacer()
             if engine.phase != .idle { statusPill }
             Button {
-                if engine.isRunning { AppState.shared.stopCalibration() } else { AppState.shared.startCalibration() }
+                AppState.shared.requestCalibrationStart()
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: engine.isRunning ? "stop.fill" : "play.fill")
@@ -164,6 +165,28 @@ struct CalibrationPanel: View {
     }
 
     // MARK: - Charging precondition
+
+    /// Shown when the discharge phase is sitting on adapter power. Intel
+    /// machines expose only a charge inhibit (CH0B/CH0C), which stops charging
+    /// but leaves the Mac running from the adapter at 0.00 A, so the phase can
+    /// never finish until the cable comes out.
+    @ViewBuilder
+    private var dischargeHintCard: some View {
+        if engine.needsUnplugForDischarge, engine.isRunning {
+            Card(padding: 12) {
+                HStack(spacing: 9) {
+                    Image(systemName: "powerplug.fill")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(theme.chartOrange)
+                    Text(t("接电状态下电池没有放电，此机型无法强制放电。请拔掉电源适配器，拔掉后放电会自动继续。"))
+                        .font(.system(size: 11))
+                        .foregroundColor(theme.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+    }
 
     /// Shown only while the system is holding the pack below full and the user
     /// has not confirmed they cleared it. macOS exposes no flag for
@@ -1280,4 +1303,81 @@ private struct CalibrationHistorySheet: View {
         formatter.dateFormat = "yyyy/MM/dd HH:mm"
         return formatter
     }()
+}
+
+// MARK: - Mode picker
+
+/// Shown before a session starts. The stress mode decides how hard the pack is
+/// drained, so it is a choice the user should make deliberately rather than
+/// inherit from whatever was selected last time.
+struct CalibrationModeSheet: View {
+    @EnvironmentObject private var state: AppState
+    @Environment(\.dismiss) private var dismiss
+    private var theme: Theme { Theme.current }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(t("选择校准方式"))
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(theme.textPrimary)
+                Text(t("决定放电阶段施加多大的负载。负荷越高，放电越快，温度和噪声也越高。"))
+                    .font(.system(size: 11))
+                    .foregroundColor(theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            ForEach(DischargeStressMode.allCases) { mode in
+                Button {
+                    state.startCalibration(mode: mode)
+                    dismiss()
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: symbol(mode))
+                            .font(.system(size: 12, weight: .medium))
+                            .frame(width: 20)
+                            .foregroundColor(theme.accent)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(mode.title)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundColor(theme.textPrimary)
+                            Text(mode.detail)
+                                .font(.system(size: 10))
+                                .foregroundColor(theme.textTertiary)
+                        }
+                        Spacer(minLength: 6)
+                        if CalibrationEngine.shared.stressMode == mode {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(theme.accent)
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .background(RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                    .fill(theme.innerControl))
+                }
+                .buttonStyle(.plain)
+            }
+
+            HStack {
+                Spacer(minLength: 0)
+                Button(t("取消")) { dismiss() }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12))
+                    .foregroundColor(theme.textSecondary)
+            }
+        }
+        .padding(20)
+        .frame(width: 400)
+        .background(theme.windowBackground)
+    }
+
+    private func symbol(_ mode: DischargeStressMode) -> String {
+        switch mode {
+        case .silent: return "speaker.slash"
+        case .balanced: return "gauge.medium"
+        case .aggressive: return "flame"
+        }
+    }
 }

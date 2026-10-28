@@ -72,6 +72,9 @@ final class AppState: ObservableObject {
     @Published var capabilities = ChargeCapabilities()
     @Published var helperInstalled = false
     @Published var showFirstRunHelperPrompt = false
+    /// 「开始校准」asks which stress mode to use before the session starts,
+    /// instead of starting silently with whatever was last selected.
+    @Published var showingCalibrationMode = false
     @Published var highUsageApps: [HighUsageApp] = []
     @Published var calibration: CalibrationRun?
     @Published var tasks: [ScheduledTask] = []
@@ -795,6 +798,21 @@ final class AppState: ObservableObject {
     // charge limit when the session ends.
 
     private var calibrationEngine: CalibrationEngine { CalibrationEngine.shared }
+
+    /// Entry point for every 「开始校准」 button: stop a running session, or ask
+    /// which stress mode to use before starting one.
+    func requestCalibrationStart() {
+        if calibrationEngine.isRunning {
+            stopCalibration()
+        } else {
+            showingCalibrationMode = true
+        }
+    }
+
+    func startCalibration(mode: DischargeStressMode) {
+        calibrationEngine.stressMode = mode
+        startCalibration()
+    }
 
     func startCalibration() {
         guard !calibrationEngine.isRunning else { return }

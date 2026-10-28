@@ -175,6 +175,9 @@ final class CalibrationEngine: ObservableObject {
     @Published var estimatedRemainingMinutes: Int = 0
     @Published var totalDischargeRuntimeMinutes: Int = 0
     @Published var isThermalCutoffActive: Bool = false
+    /// Set when a discharge phase is sitting on adapter power because the
+    /// machine cannot be forced to drain while plugged in.
+    @Published var needsUnplugForDischarge: Bool = false
 
     // MARK: Preconditions
 
@@ -303,6 +306,9 @@ final class CalibrationEngine: ObservableObject {
     /// list is identical apart from live counters. The hold itself is the only
     /// observable symptom, so it is what the gate watches.
     private var chargeHoldTicks = 0
+    /// Consecutive ticks spent plugged in without any pack current during the
+    /// discharge phase.
+    private var noDischargeTicks = 0
 
     private var sessionStart: Date?
     private var dischargeStart: Date?
@@ -429,6 +435,8 @@ final class CalibrationEngine: ObservableObject {
         totalDischargeRuntimeMinutes = 0
         internalResistanceMilliohm = 0
         isThermalCutoffActive = false
+        needsUnplugForDischarge = false
+        noDischargeTicks = 0
         sessionPoints.removeAll()
         dischargeCurve.removeAll()
         splitSamples = 0
@@ -642,6 +650,20 @@ final class CalibrationEngine: ObservableObject {
             dischargeEnergyWh = totals.dischargeWh
             dischargeEnergyAh = totals.dischargeAh
             updateDischargeDerived(now: now)
+            // Intel has no lever that forces the pack to drain while the adapter
+            // is connected: CH0B/CH0C only inhibit charging, so the machine keeps
+            // running from the adapter at 0.00 A and the phase never ends. Say so
+            // instead of sitting there silently.
+            if isExternalConnected, abs(signedAmperage) < 0.05 {
+                noDischargeTicks += 1
+            } else {
+                noDischargeTicks = 0
+            }
+            if noDischargeTicks == 20, !needsUnplugForDischarge,
+               ChargeController.shared.capabilities.strategy != .bclm {
+                needsUnplugForDischarge = true
+                append(t("接电状态下电池没有放电：此机型的充电控制键只能阻断充电、不能强制放电。请拔掉电源适配器，放电会在电池供电下继续进行。"))
+            }
             if percentage <= dischargeTarget { endDischargePhase() }
 
         case .rechargingToFull:

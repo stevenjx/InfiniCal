@@ -158,10 +158,15 @@ enum BatteryReader {
             snap.currentCapacity = remaining
         }
         if snap.percentage <= 0 || snap.percentage > 100 {
-            if snap.hardwarePercentage > 0, snap.hardwarePercentage <= 100 {
-                snap.percentage = snap.hardwarePercentage
-            } else if snap.maxCapacity > 0, snap.currentCapacity > 0 {
+            // Intel reports mAh here. The ratio is what macOS itself displays;
+            // the gauge's StateOfCharge drifts a few percent at the top of
+            // charge — a captured MacBookPro15,1 sat at 93 % on the gauge while
+            // macOS already reported 100 %, which stalled the calibration's
+            // "charge to full" phase.
+            if snap.maxCapacity > 0, snap.currentCapacity > 0 {
                 snap.percentage = Int((Double(snap.currentCapacity) / Double(snap.maxCapacity) * 100).rounded())
+            } else if snap.hardwarePercentage > 0 {
+                snap.percentage = snap.hardwarePercentage
             }
         }
         snap.percentage = min(100, max(0, snap.percentage))
