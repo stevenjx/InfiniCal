@@ -94,7 +94,18 @@ enum BatteryReader {
         snap.lowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
 
         guard let props = registryProperties(for: "AppleSmartBattery") else { return snap }
+        apply(props, pack: registryProperties(for: "AppleSmartBatteryPack"), to: &snap)
 
+        // SMC battery temperature is the value Apple's own UI agrees with.
+        if let t = try? SMC.shared.readDouble("TB0T"), t > -20, t < 120 {
+            snap.temperature = t
+        }
+        return snap
+    }
+
+    /// IORegistry → model, split from `read()` so a captured dump from either
+    /// hardware layout can be replayed without the machine it came from.
+    static func apply(_ props: [String: Any], pack: [String: Any]?, to snap: inout BatterySnapshot) {
         snap.isPresent = (props["BatteryInstalled"] as? Bool) ?? true
         snap.percentage = intValue(props["CurrentCapacity"]) ?? 0
         snap.isPluggedIn = (props["ExternalConnected"] as? Bool) ?? false
@@ -116,10 +127,34 @@ enum BatteryReader {
             snap.maxCapacity = intValue(data["FullChargeCapacity"]) ?? 0
             snap.currentCapacity = intValue(data["RemainingCapacity"]) ?? 0
             if snap.percentage == 0 { snap.percentage = intValue(data["CurrentCapacity"]) ?? 0 }
+            if let soc = intValue(data["StateOfCharge"]), soc > 0, soc <= 100 {
+                snap.hardwarePercentage = soc
+            }
             if let cells = data["CellVoltage"] as? [NSNumber], !cells.isEmpty {
                 snap.cellVoltages = cells.map { $0.doubleValue / 1000.0 }
             }
         }
+
+        // The two hardware layouts disagree about units. Apple Silicon reports
+        // CurrentCapacity as a 0–100 percentage and MaxCapacity as 100; Intel
+        // reports both in mAh and omits the BatteryData capacity keys entirely.
+        // Verified against a captured MacBookPro16,x dump:
+        //     CurrentCapacity 3197 mAh · MaxCapacity 6846 mAh
+        //     DesignCapacity 7336 mAh · BatteryData.StateOfCharge 47 %
+        if snap.maxCapacity <= 100, let full = intValue(props["MaxCapacity"]), full > 100 {
+            snap.maxCapacity = full
+        }
+        if snap.currentCapacity == 0, let remaining = intValue(props["CurrentCapacity"]), remaining > 100 {
+            snap.currentCapacity = remaining
+        }
+        if snap.percentage <= 0 || snap.percentage > 100 {
+            if snap.hardwarePercentage > 0, snap.hardwarePercentage <= 100 {
+                snap.percentage = snap.hardwarePercentage
+            } else if snap.maxCapacity > 0, snap.currentCapacity > 0 {
+                snap.percentage = Int((Double(snap.currentCapacity) / Double(snap.maxCapacity) * 100).rounded())
+            }
+        }
+        snap.percentage = min(100, max(0, snap.percentage))
 
         if let remaining = intValue(props["TimeRemaining"]), remaining > 0, remaining != 65535 {
             snap.timeToEmpty = remaining
@@ -159,8 +194,8 @@ enum BatteryReader {
         }
 
         // Pack level data: raw capacity and the fuel gauge temperature.
-        if let pack = registryProperties(for: "AppleSmartBatteryPack"),
-           let data = pack["BatteryData"] as? [String: Any] {
+        // Absent on Intel, where the same numbers sit at the top level.
+        if let data = pack?["BatteryData"] as? [String: Any] {
             if let rawMax = intValue(data["AppleRawMaxCapacity"]), rawMax > 0 {
                 snap.maxCapacity = rawMax
             }
@@ -180,11 +215,11 @@ enum BatteryReader {
         }
         if snap.hardwarePercentage == 0 { snap.hardwarePercentage = snap.percentage }
 
-        // SMC battery temperature is the value Apple's own UI agrees with.
-        if let t = try? SMC.shared.readDouble("TB0T"), t > -20, t < 120 {
-            snap.temperature = t
+        // Intel exposes the pack temperature at the top level, in the same
+        // centi-degree unit the pack dictionary uses (3028 → 30.28 °C).
+        if snap.temperature == 0, let temp = intValue(props["Temperature"]), temp > 0, temp < 12000 {
+            snap.temperature = Double(temp) / 100.0
         }
-        return snap
     }
 
     // MARK: - IORegistry helpers

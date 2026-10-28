@@ -19,6 +19,9 @@ ref/
 # Charging-state captures taken while checking 「优化电池充电」
 优化充电/
 
+# Hardware dumps used to verify the Intel / Apple Silicon layout difference
+Fix/
+
 # WorkBuddy project metadata
 .workbuddy-ai/
 
