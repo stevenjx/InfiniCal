@@ -1047,6 +1047,11 @@ final class CalibrationEngine: ObservableObject {
         for service in services {
             guard let name = copyProperty(service, "Product" as CFString)?.takeRetainedValue() as? String else { continue }
             let lower = name.lowercased()
+            // Intel exposes separate GPU and PCH die sensors, and both names
+            // contain "die". Averaging them into a value labelled "CPU 温度"
+            // reads several degrees too high. Apple Silicon reports one unified
+            // SoC die (`PMU tdie*`), so nothing is lost there.
+            guard !lower.contains("gpu"), !lower.contains("pch") else { continue }
             let isCPU = lower.contains("cpu") || lower.contains("pcore") || lower.contains("ecore")
                 || lower.contains("die") || lower.contains("soc")
             guard isCPU else { continue }
