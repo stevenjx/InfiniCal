@@ -936,15 +936,8 @@ final class CalibrationEngine: ObservableObject {
     // MARK: - Host telemetry
 
     private func refreshThermal() {
-        if let cpu = hidCPUTemperature(), cpu > 10, cpu < 115 {
+        if let cpu = hidCPUTemperature() ?? smcCPUTemperature() {
             cpuTemperature = cpu
-        } else if cpuTemperature <= 0 {
-            for key in ["TC0P", "TC0D", "TC0E"] {
-                if let value = try? SMC.shared.readDouble(key), value > 10, value < 115 {
-                    cpuTemperature = value
-                    break
-                }
-            }
         }
     }
 
@@ -1013,8 +1006,13 @@ final class CalibrationEngine: ObservableObject {
         for process in processes { processTally[process.name, default: 0] += 1 }
     }
 
-    /// CPU die temperature from the HID sensor page — works on Intel and Apple
-    /// Silicon, and needs no privileges.
+    /// Apple Silicon die temperature from the HID sensor page.
+    ///
+    /// Only `PMU tdie*` is accepted. Intel exposes a different set whose names
+    /// also contain "die" — CPU Proximity, GPU Die, PCH Die — and averaging
+    /// them into a value labelled "CPU 温度" read 96 °C on a MacBookPro15,1
+    /// while `powermetrics` reported 43 °C for the same machine. Intel goes
+    /// through `smcCPUTemperature()` instead.
     private func hidCPUTemperature() -> Double? {
         typealias CreateFunc = @convention(c) (CFAllocator?) -> Unmanaged<AnyObject>?
         typealias MatchFunc = @convention(c) (AnyObject, CFDictionary) -> Void
@@ -1046,21 +1044,25 @@ final class CalibrationEngine: ObservableObject {
         var readings: [Double] = []
         for service in services {
             guard let name = copyProperty(service, "Product" as CFString)?.takeRetainedValue() as? String else { continue }
-            let lower = name.lowercased()
-            // Intel exposes separate GPU and PCH die sensors, and both names
-            // contain "die". Averaging them into a value labelled "CPU 温度"
-            // reads several degrees too high. Apple Silicon reports one unified
-            // SoC die (`PMU tdie*`), so nothing is lost there.
-            guard !lower.contains("gpu"), !lower.contains("pch") else { continue }
-            let isCPU = lower.contains("cpu") || lower.contains("pcore") || lower.contains("ecore")
-                || lower.contains("die") || lower.contains("soc")
-            guard isCPU else { continue }
+            guard name.lowercased().contains("tdie") else { continue }
             guard let event = copyEvent(service, 15, 0, 0)?.takeRetainedValue() else { continue }
             let celsius = floatValue(event, 0x000F0000)
             if celsius > 15, celsius < 110 { readings.append(celsius) }
         }
         guard !readings.isEmpty else { return nil }
         return readings.reduce(0, +) / Double(readings.count)
+    }
+
+    /// Intel CPU temperature straight from the SMC. `TC0D` is the die sensor —
+    /// the same quantity `powermetrics` prints as "CPU die temperature" — with
+    /// the proximity sensors as fallbacks on models that omit it.
+    private func smcCPUTemperature() -> Double? {
+        for key in ["TC0D", "TC0P", "TC0E", "TC0F"] {
+            if let value = try? SMC.shared.readDouble(key), value > 10, value < 115 {
+                return value
+            }
+        }
+        return nil
     }
 
     // MARK: - Sleep block
