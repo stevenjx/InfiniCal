@@ -140,6 +140,9 @@ final class FanController: ObservableObject {
     private var pageUsers = 0
     private var lastCurveWrite: [Int: Int] = [:]
     private var lastCurveTemperature: Double?
+    /// Intel die temperature, filled asynchronously by the privileged sampler.
+    private var powermetricsCPUTemp: Double?
+    private var usesHIDForCPU = true
     private var lastAppliedFixed: [Int: Int] = [:]
 
     private init() {
@@ -178,6 +181,7 @@ final class FanController: ObservableObject {
     private func tick() {
         refresh()
         applyCurveIfNeeded()
+        refreshPowermetricsCPUTemperature()
     }
 
     // MARK: - Reading
@@ -286,8 +290,13 @@ final class FanController: ObservableObject {
                                          source: cpu.source, celsius: cpu.value))
         }
 
-        if let battery = readFloat("TB0T"), battery > 5, battery < 110 {
-            result.append(ThermalReading(key: "battery", name: t("电池"), source: "SMC TB0T", celsius: battery))
+        // The pack's own gauge, the same reading the dashboard shows. SMC TB0T
+        // reads a different point on Intel — 102 °C against the gauge's 30 °C on
+        // a captured MacBookPro15,1 — so it is not used here.
+        let battery = BatteryReader.read().temperature
+        if battery > 5, battery < 110 {
+            result.append(ThermalReading(key: "battery", name: t("电池"),
+                                         source: t("电池仪表"), celsius: battery))
         }
 
         if let nand = hidAverage({ $0.lowercased().contains("nand") }) {
@@ -309,20 +318,34 @@ final class FanController: ObservableObject {
     /// curve sensor had no value and fan control never engaged at all.
     private func cpuTemperature() -> (value: Double, source: String) {
         if let hid = hidAverage({ $0.lowercased().contains("tdie") }) {
+            usesHIDForCPU = true
             return (hid, t("HID · PMU tdie 平均"))
         }
+        usesHIDForCPU = false
         let socKeys = ["Tp01", "Tp05", "Tp09", "Tp0D"]
         let socValues = socKeys.compactMap { readFloat($0) }.filter { $0 > 5 && $0 < 110 }
         if !socValues.isEmpty {
             return (socValues.reduce(0, +) / Double(socValues.count),
                     t("SMC Tp01/Tp05/Tp09/Tp0D 平均"))
         }
-        for key in ["TC0D", "TC0P", "TC0E", "TC0F"] {
-            if let value = readFloat(key), value > 10, value < 115 {
-                return (value, "SMC \(key)")
-            }
+        // Intel. Its SMC CPU keys are not trustworthy: TC0P reported 96 °C on a
+        // MacBookPro15,1 while powermetrics measured 43 °C for the same die. The
+        // privileged `smc` sampler is the source that agrees with the system, and
+        // tick() keeps it warm.
+        if let die = powermetricsCPUTemp {
+            return (die, t("powermetrics · smc 采样器"))
         }
         return (0, "")
+    }
+
+    /// Keeps the Intel die temperature warm. No-op on Apple Silicon, where the
+    /// HID reading is already available at 1 Hz.
+    private func refreshPowermetricsCPUTemperature() {
+        guard !usesHIDForCPU else { return }
+        HelperClient.shared.cpuDieTemperature { [weak self] value in
+            guard let value else { return }
+            self?.powermetricsCPUTemp = value
+        }
     }
 
     /// GPU cluster temperature, only when the SMC actually reports one.

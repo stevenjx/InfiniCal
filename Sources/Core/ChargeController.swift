@@ -302,6 +302,58 @@ final class HelperClient {
         return line.contains("mW") ? value / 1000 : value
     }
 
+    private var dieTempFetchInFlight = false
+    private var dieTempCache: Double?
+    private var lastDieTempFetch = Date.distantPast
+
+    /// CPU die temperature from the privileged `smc` sampler — the same
+    /// quantity `powermetrics` prints as "CPU die temperature".
+    ///
+    /// The sampler only exists on Intel: on Apple Silicon powermetrics rejects
+    /// it ("unrecognized sampler: smc"), so callers there keep their HID
+    /// reading. One call costs ~1.4 s of a core, so results are cached for
+    /// 20 s and the fetch runs off the main thread. Main thread only.
+    func cpuDieTemperature(_ completion: @escaping (Double?) -> Void) {
+        guard lastKnownInstalled else { completion(nil); return }
+        if let cached = dieTempCache, Date().timeIntervalSince(lastDieTempFetch) < 20 {
+            completion(cached)
+            return
+        }
+        guard !dieTempFetchInFlight else { return }
+        dieTempFetchInFlight = true
+        lastDieTempFetch = Date()
+        DispatchQueue.global(qos: .utility).async {
+            let value = self.fetchDieTemperature()
+            DispatchQueue.main.async {
+                self.dieTempFetchInFlight = false
+                if let value {
+                    self.dieTempCache = value
+                    self.lastDieTempFetch = Date()
+                }
+                completion(value)
+            }
+        }
+    }
+
+    private func fetchDieTemperature() -> Double? {
+        guard let response = request(["cmd": "exec",
+                                      "path": "/usr/bin/powermetrics",
+                                      "args": ["--samplers", "smc", "-n", "1", "-i", "500"]],
+                                     timeout: 8),
+              (response["ok"] as? Bool) == true,
+              let output = response["output"] as? String else { return nil }
+        for rawLine in output.split(separator: "\n") {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            guard line.hasPrefix("CPU die temperature:") else { continue }
+            let value = line.dropFirst("CPU die temperature:".count)
+                .trimmingCharacters(in: .whitespaces)
+                .split(separator: " ").first
+                .flatMap { Double($0) }
+            if let value, value > 0, value < 120 { return value }
+        }
+        return nil
+    }
+
     func runPrivileged(_ path: String, _ arguments: [String]) throws -> String {
         guard lastKnownInstalled else { throw HelperError.notInstalled }
         guard let response = request(["cmd": "exec", "path": path, "args": arguments], timeout: 6) else {

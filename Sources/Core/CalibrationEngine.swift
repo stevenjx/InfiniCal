@@ -936,8 +936,19 @@ final class CalibrationEngine: ObservableObject {
     // MARK: - Host telemetry
 
     private func refreshThermal() {
-        if let cpu = hidCPUTemperature() ?? smcCPUTemperature() {
+        // Apple Silicon: one unified die, read without privileges at 1 Hz.
+        if let cpu = hidCPUTemperature() {
             cpuTemperature = cpu
+            return
+        }
+        // Intel: the HID page mixes CPU / GPU / PCH sensors under similar names,
+        // and the SMC CPU keys proved unreliable there — TC0P read 96 °C on a
+        // MacBookPro15,1 while powermetrics reported 43 °C. The privileged `smc`
+        // sampler is the only source that agrees with the system, so it is used
+        // instead (cached 20 s inside the helper).
+        HelperClient.shared.cpuDieTemperature { [weak self] value in
+            guard let self, let value, value > 10, value < 115 else { return }
+            self.cpuTemperature = value
         }
     }
 
@@ -1012,7 +1023,7 @@ final class CalibrationEngine: ObservableObject {
     /// also contain "die" — CPU Proximity, GPU Die, PCH Die — and averaging
     /// them into a value labelled "CPU 温度" read 96 °C on a MacBookPro15,1
     /// while `powermetrics` reported 43 °C for the same machine. Intel goes
-    /// through `smcCPUTemperature()` instead.
+    /// through `HelperClient.cpuDieTemperature()` instead.
     private func hidCPUTemperature() -> Double? {
         typealias CreateFunc = @convention(c) (CFAllocator?) -> Unmanaged<AnyObject>?
         typealias MatchFunc = @convention(c) (AnyObject, CFDictionary) -> Void
@@ -1051,18 +1062,6 @@ final class CalibrationEngine: ObservableObject {
         }
         guard !readings.isEmpty else { return nil }
         return readings.reduce(0, +) / Double(readings.count)
-    }
-
-    /// Intel CPU temperature straight from the SMC. `TC0D` is the die sensor —
-    /// the same quantity `powermetrics` prints as "CPU die temperature" — with
-    /// the proximity sensors as fallbacks on models that omit it.
-    private func smcCPUTemperature() -> Double? {
-        for key in ["TC0D", "TC0P", "TC0E", "TC0F"] {
-            if let value = try? SMC.shared.readDouble(key), value > 10, value < 115 {
-                return value
-            }
-        }
-        return nil
     }
 
     // MARK: - Sleep block
