@@ -309,7 +309,13 @@ struct MenuBarPanel: View {
     private var adapterText: String {
         let snapshot = state.snapshot
         guard snapshot.isPluggedIn else { return t("未连接") }
-        let watts = snapshot.adapter.power > 0.05 ? snapshot.adapter.power : Double(snapshot.adapter.watts)
-        return watts > 0.05 ? String(format: "%.0f W", watts) : t("已连接")
+        if snapshot.adapter.hasMeasuredInput, snapshot.adapter.power > 0.05 {
+            return String(format: "%.0f W", snapshot.adapter.power)
+        }
+        // Intel exposes no measured input. The rated wattage is a spec, not a
+        // draw, so it is printed as an upper bound instead of being passed off
+        // as the current power.
+        return snapshot.adapter.watts > 0 ? String(format: "≤%.0f W", Double(snapshot.adapter.watts))
+                                          : t("已连接")
     }
 }

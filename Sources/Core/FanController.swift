@@ -280,12 +280,10 @@ final class FanController: ObservableObject {
     private func readSensors() -> [ThermalReading] {
         var result: [ThermalReading] = []
 
-        let hidCPU = hidAverage { $0.lowercased().contains("tdie") }
-        let cpu = hidCPU ?? smcCPUFallback()
-        if cpu > 0 {
+        let cpu = cpuTemperature()
+        if cpu.value > 0 {
             result.append(ThermalReading(key: "cpu-die", name: "CPU",
-                                         source: hidCPU != nil ? t("HID · PMU tdie 平均") : t("SMC Tp01/Tp05/Tp09/Tp0D 平均"),
-                                         celsius: cpu))
+                                         source: cpu.source, celsius: cpu.value))
         }
 
         if let battery = readFloat("TB0T"), battery > 5, battery < 110 {
@@ -302,10 +300,29 @@ final class FanController: ObservableObject {
         return result
     }
 
-    private func smcCPUFallback() -> Double {
-        let keys = ["Tp01", "Tp05", "Tp09", "Tp0D"]
-        let values = keys.compactMap { readFloat($0) }.filter { $0 > 5 && $0 < 110 }
-        return values.isEmpty ? 0 : values.reduce(0, +) / Double(values.count)
+    /// CPU die temperature, and where it came from.
+    ///
+    /// Apple Silicon exposes `PMU tdie*` through HID and four core clusters
+    /// through the SMC. Intel has neither: it reports `TC0D` (the die, the same
+    /// quantity `powermetrics` prints as "CPU die temperature") plus proximity
+    /// sensors. Without that branch this returned 0 on Intel machines, so the
+    /// curve sensor had no value and fan control never engaged at all.
+    private func cpuTemperature() -> (value: Double, source: String) {
+        if let hid = hidAverage({ $0.lowercased().contains("tdie") }) {
+            return (hid, t("HID · PMU tdie 平均"))
+        }
+        let socKeys = ["Tp01", "Tp05", "Tp09", "Tp0D"]
+        let socValues = socKeys.compactMap { readFloat($0) }.filter { $0 > 5 && $0 < 110 }
+        if !socValues.isEmpty {
+            return (socValues.reduce(0, +) / Double(socValues.count),
+                    t("SMC Tp01/Tp05/Tp09/Tp0D 平均"))
+        }
+        for key in ["TC0D", "TC0P", "TC0E", "TC0F"] {
+            if let value = readFloat(key), value > 10, value < 115 {
+                return (value, "SMC \(key)")
+            }
+        }
+        return (0, "")
     }
 
     /// GPU cluster temperature, only when the SMC actually reports one.

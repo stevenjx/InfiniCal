@@ -22,6 +22,10 @@ struct AdapterInfo: Equatable {
     var voltage: Double = 0       // measured input voltage, V
     var current: Double = 0       // measured input current, A
     var power: Double = 0         // measured input power, W
+    /// False on machines that expose no measured input at all — Intel Macs have
+    /// no `PowerTelemetryData`, so the three values above stay 0 and the UI
+    /// should print "—" rather than a 0.00 A that reads as "delivering nothing".
+    var hasMeasuredInput: Bool = false
 
     var isEmpty: Bool { name.isEmpty && watts == 0 }
 }
@@ -196,6 +200,7 @@ enum BatteryReader {
             info.voltage = snap.systemVoltageIn
             info.current = snap.systemCurrentIn
             info.power = snap.systemPowerIn
+            info.hasMeasuredInput = snap.systemPowerIn > 0 || snap.systemVoltageIn > 0
             snap.adapter = info
         }
 

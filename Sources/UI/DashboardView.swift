@@ -81,7 +81,9 @@ struct DashboardView: View {
                 spec(t("电压"), String(format: "%.2f V", state.snapshot.voltage))
                 spec(t("功率"), String(format: "%.1f W", abs(state.snapshot.power)))
                 spec(t("系统负载"), String(format: "%.1f W", state.totalPowerWatts),
-                     trailing: String(format: t("1 分钟均值 %.1f W"), state.snapshot.systemLoad))
+                     trailing: state.snapshot.systemLoad > 0.05
+                         ? String(format: t("1 分钟均值 %.1f W"), state.snapshot.systemLoad)
+                         : nil)
                 spec(t("低电量模式"), state.snapshot.lowPowerMode ? t("已开启") : t("已关闭"))
                 spec(t("电池充电"), "\(state.snapshot.currentCapacity) mAh")
                 Spacer(minLength: 0)
@@ -112,11 +114,11 @@ struct DashboardView: View {
                         .foregroundColor(theme.textSecondary)
                         .padding(.top, 8)
                 } else {
-                    spec(t("电流"), String(format: "%.2f A", state.snapshot.adapter.current),
+                    spec(t("电流"), adapterInput("A", state.snapshot.adapter.current, "%.2f"),
                          trailing: String(format: t("的 %.2f A"), state.snapshot.adapter.maxCurrent))
-                    spec(t("电压"), String(format: "%.2f V", state.snapshot.adapter.voltage),
+                    spec(t("电压"), adapterInput("V", state.snapshot.adapter.voltage, "%.2f"),
                          trailing: String(format: t("的 %.0f V"), state.snapshot.adapter.maxVoltage))
-                    spec(t("功率"), String(format: "%.1f W", state.snapshot.adapter.power),
+                    spec(t("功率"), adapterInput("W", state.snapshot.adapter.power, "%.1f"),
                          trailing: tf("的 {p} W", "\(state.snapshot.adapter.watts)"))
                     spec(t("名称"), state.snapshot.adapter.name)
                     spec(t("制造商"), state.snapshot.adapter.manufacturer)
@@ -125,6 +127,12 @@ struct DashboardView: View {
                 Spacer(minLength: 0)
             }
         }
+    }
+
+    /// A measured adapter value, or an em dash when the platform reports none.
+    private func adapterInput(_ unit: String, _ value: Double, _ format: String) -> String {
+        guard state.snapshot.adapter.hasMeasuredInput else { return "—" }
+        return String(format: "\(format) \(unit)", value)
     }
 
     private func cardHeader(_ symbol: String, _ title: String) -> some View {
