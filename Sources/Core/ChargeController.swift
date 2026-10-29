@@ -13,14 +13,14 @@ import Darwin
 enum ChargeStrategy: String {
     case bclm          // Apple Silicon: BCLM holds the maximum charge level
     case ch0bch0c      // Intel / T2: CH0B + CH0C inhibit charging
-    case chie          // Newer Apple Silicon: CHIE charging-inhibit flag
+    case chte          // Newer Apple Silicon: CHTE charging-inhibit flag
     case unavailable
 
     var title: String {
         switch self {
         case .bclm: return t("BCLM（充电上限）")
         case .ch0bch0c: return t("CH0B / CH0C（充电禁止）")
-        case .chie: return t("CHIE（充电禁止标志）")
+        case .chte: return t("CHTE（充电禁止标志）")
         case .unavailable: return t("不可用")
         }
     }
@@ -32,8 +32,9 @@ struct ChargeCapabilities {
     var ch0b: SMCKeyInfo?
     var ch0c: SMCKeyInfo?
     var ch0i: SMCKeyInfo?
+    var ch0j: SMCKeyInfo?
+    var chte: SMCKeyInfo?
     var chie: SMCKeyInfo?
-    var aclc: SMCKeyInfo?
     var hasHelper: Bool = false
     var rawKeys: [(String, String)] = []
 
@@ -42,7 +43,7 @@ struct ChargeCapabilities {
         switch strategy {
         case .bclm: return t("通过 BCLM 直接设置充电上限")
         case .ch0bch0c: return t("通过 CH0B/CH0C 禁止充电，由守护进程按阈值控制")
-        case .chie: return t("通过 CHIE 禁止充电，由守护进程按阈值控制")
+        case .chte: return t("通过 CHTE 禁止充电，由守护进程按阈值控制")
         case .unavailable: return t("此机型未暴露可写的充电控制键")
         }
     }
@@ -298,14 +299,15 @@ final class HelperClient {
         var rawLines: [String] = []
         for rawLine in output.split(separator: "\n") {
             let line = rawLine.trimmingCharacters(in: .whitespaces)
-            guard line.lowercased().contains("power") else { continue }
+            let lower = line.lowercased()
+            guard lower.contains("power") else { continue }
             if rawLines.count < 8 { rawLines.append(line) }
-            if line.hasPrefix("CPU Power:") { cpu = Self.watts(line) }
-            else if line.hasPrefix("GPU Power:") { gpu = Self.watts(line) }
-            else if line.hasPrefix("ANE Power:") { ane = Self.watts(line) }
-            else if line.contains("Combined Power") { combined = Self.watts(line) }
+            if lower.hasPrefix("cpu power") { cpu = Self.watts(line) }
+            else if lower.hasPrefix("gpu power") { gpu = Self.watts(line) }
+            else if lower.hasPrefix("ane power") { ane = Self.watts(line) }
+            else if lower.contains("combined power") { combined = Self.watts(line) }
             // Intel reports the package total rather than CPU + GPU + ANE.
-            else if line.hasPrefix("Package Power:") { combined = Self.watts(line) }
+            else if lower.contains("package power") { combined = Self.watts(line) }
         }
         guard combined > 0 || cpu > 0 else {
             return SocPowerSample(cpu: 0, gpu: 0, ane: 0, combined: 0, rawLines: rawLines)
@@ -315,11 +317,16 @@ final class HelperClient {
                               rawLines: rawLines)
     }
 
-    /// "CPU Power: 2504 mW" → 2.504
+    /// "CPU Power: 2504 mW" → 2.504, "Package Power: 12.5 W" → 12.5
+    ///
+    /// The number is read from the first digit onwards, so a decimal point is
+    /// kept instead of being stripped along with the unit — `2504` and `12.5`
+    /// both have to survive, and only the unit decides the scale.
     private static func watts(_ line: String) -> Double {
-        let digits = line.compactMap { $0.isNumber ? $0 : nil }
-        guard !digits.isEmpty, let value = Double(String(digits)) else { return 0 }
-        return line.contains("mW") ? value / 1000 : value
+        guard let start = line.firstIndex(where: { $0.isNumber }) else { return 0 }
+        let digits = line[start...].prefix { $0.isNumber || $0 == "." || $0 == "," }
+        guard let value = Double(digits.replacingOccurrences(of: ",", with: ".")) else { return 0 }
+        return line.lowercased().contains("mw") ? value / 1000 : value
     }
 
     private var dieTempFetchInFlight = false
@@ -392,34 +399,45 @@ final class ChargeController {
 
     private(set) var capabilities = ChargeCapabilities()
 
+    /// Every key any known charge tool has used for charge or adapter control.
+    /// The calibration log prints the ones this machine actually exposes, so the
+    /// mechanism is identified from the hardware instead of assumed.
+    static let controlKeyCandidates = [
+        "BCLM", "CH0B", "CH0C", "CH0I", "CH0J", "CHTE", "CHIE", "CHWA",
+        "ACLC", "ACEN", "AC-W", "ACIN", "BSIn", "BFCL", "MSLD", "MSDI",
+        "BATP", "BNum", "CHSC", "CHDB", "CHCC", "CHNC", "bfF0", "bfD0", "bfE0",
+        "TB0T", "B0AC", "B0AV", "B0FC", "B0CM", "B0UC", "PPBR", "PDTR", "PSTR", "PDBR"
+    ]
+
     func detectCapabilities() -> ChargeCapabilities {
         var caps = ChargeCapabilities()
         caps.hasHelper = HelperClient.shared.lastKnownInstalled
-        let table = HelperClient.shared.keyInfoList(["BCLM", "CH0B", "CH0C", "CH0I", "CHIE", "ACLC"])
+        let table = HelperClient.shared.keyInfoList(ChargeController.controlKeyCandidates)
         caps.bclm = table["BCLM"]
         caps.ch0b = table["CH0B"]
         caps.ch0c = table["CH0C"]
         caps.ch0i = table["CH0I"]
+        caps.ch0j = table["CH0J"]
+        caps.chte = table["CHTE"]
         caps.chie = table["CHIE"]
-        caps.aclc = table["ACLC"]
 
         if let bclm = caps.bclm, bclm.isWritable {
             caps.strategy = .bclm
-        } else if caps.ch0b != nil {
+        } else if caps.ch0b?.size == 1 && caps.ch0c?.size == 1,
+                  caps.ch0b?.isWritable == true && caps.ch0c?.isWritable == true {
             caps.strategy = .ch0bch0c
-        } else if let chie = caps.chie, chie.isWritable {
-            caps.strategy = .chie
+        } else if let chte = caps.chte, chte.size == 4, chte.isWritable {
+            caps.strategy = .chte
         } else {
             caps.strategy = .unavailable
         }
 
         var rows: [(String, String)] = []
-        for key in ["BCLM", "CH0B", "CH0C", "CH0I", "CHIE", "ACLC", "TB0T", "B0AC", "B0AV", "B0FC"] {
+        for key in ChargeController.controlKeyCandidates {
             if let info = table[key] ?? SMC.shared.keyInfo(key) {
                 let value = (try? SMC.shared.readDouble(key)) ?? 0
-                rows.append((key, "\(info.type) · \(String(format: "%.2f", value))"))
-            } else {
-                rows.append((key, t("不存在")))
+                let writable = info.isWritable ? "W" : "-"
+                rows.append((key, "\(info.type)·\(info.size)B·\(writable)·\(String(format: "%.2f", value))"))
             }
         }
         caps.rawKeys = rows
@@ -433,10 +451,17 @@ final class ChargeController {
         switch capabilities.strategy {
         case .bclm:
             try HelperClient.shared.smcWrite("BCLM", UInt8(clamped))
+            // Some SMCs accept a write and keep their old value (seen on ACLC).
+            // Report that instead of leaving a ceiling that never changed.
+            if let applied = try? SMC.shared.readDouble("BCLM"),
+               abs(applied - Double(clamped)) > 1 {
+                throw HelperError.smc(tf("BCLM 写入 {p} 后回读为 {p}，SMC 未接受该值",
+                                         "\(clamped)", String(format: "%.0f", applied)))
+            }
         case .ch0bch0c:
             // Handled by the software loop in AppState.
             break
-        case .chie:
+        case .chte:
             break
         case .unavailable:
             throw HelperError.smc(t("此机型未暴露充电限制键"))
@@ -455,48 +480,132 @@ final class ChargeController {
             let value: UInt8 = allowed ? 0x00 : 0x02
             if capabilities.ch0b != nil { try HelperClient.shared.smcWrite("CH0B", value) }
             if capabilities.ch0c != nil { try HelperClient.shared.smcWrite("CH0C", value) }
-        case .chie:
-            try HelperClient.shared.smcWrite("CHIE", allowed ? 0x00 : 0x01)
+        case .chte:
+            try HelperClient.shared.smcWriteBytes("CHTE", [allowed ? 0 : 1, 0, 0, 0])
         case .unavailable:
             throw HelperError.smc(t("此机型未暴露充电控制键"))
         }
     }
 
-    /// Raw ACLC value captured before a forced discharge, restored afterwards.
-    private var savedAdapterCurrentLimit: [UInt8]?
+    /// Calibration takes ownership of the ceiling and charge-inhibit flags.
+    /// BCLM and CH0B/CH0C can coexist: lifting only BCLM leaves charging blocked.
+    func prepareForFullCharge() throws {
+        endForcedDischarge()
+        if let error = adapterRestoreError {
+            // Already a full message; re-wrapping it through HelperError would
+            // print "SMC 操作失败" twice.
+            throw NSError(domain: "InfiniCal.SMC", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: error])
+        }
+        if capabilities.strategy == .bclm {
+            try applyChargeLimit(100)
+        }
+        if let info = capabilities.chte, info.size == 4, info.isWritable {
+            try HelperClient.shared.smcWriteBytes("CHTE", [0, 0, 0, 0])
+        }
+        // CHIE is adapter control, never a charge-inhibit key.
+        for key in ["CH0B", "CH0C"] {
+            let info: SMCKeyInfo?
+            switch key {
+            case "CH0B": info = capabilities.ch0b
+            default: info = capabilities.ch0c
+            }
+            guard let info, info.size == 1 else { continue }
+            try HelperClient.shared.smcWrite(key, 0)
+        }
+        // A machine that exposes no charge-control key at all has nothing
+        // blocking charging, so an empty list is not a failure. Only a write
+        // that throws is.
+    }
 
-    /// Makes the Mac run off the battery while the adapter stays connected.
+    private var savedAdapterState: (key: String, on: UInt8)?
+    private(set) var adapterRestoreError: String?
+    /// Marks an adapter-off state this app created, so a crash that skips the
+    /// quit path cannot leave the Mac running on battery indefinitely.
+    private let adapterOffFlag = "adapterDisabledByInfiniCal"
+
+    /// `off` disables the adapter, `on` restores it.
     ///
-    /// Intel has no BCLM, and CH0B/CH0C only inhibit charging — the machine
-    /// keeps drawing from the adapter at 0 A, which is why a discharge phase
-    /// never progresses there. `ACLC` is the adapter current limit: with it at
-    /// zero the PMU has to source the load from the pack.
+    /// Every candidate must be flagged writable. `ACEN` on a MacBookPro15,1 is
+    /// not: the SMC answers 0x7A to both `00` and `01`, and its attribute byte
+    /// carries no write bit. Its 1 → 0 change in an AlDente snapshot was the
+    /// adapter being unplugged, not a software switch — so it is read-only
+    /// status and must never be written.
     ///
-    /// The original bytes are captured first and written back verbatim on
-    /// release, so the exact type and value never have to be assumed. A crash
-    /// mid-session leaves the limit at zero until the next boot clears it, which
-    /// is the same trade-off every charge-limiter makes.
+    /// Apple Silicon uses the batt protocol: CH0I/CH0J = 1, CHIE = 8.
+    /// ACLC is excluded — it drives the MagSafe LED, not the power path.
+    private var adapterControl: (key: String, off: UInt8, on: UInt8)? {
+        #if arch(arm64)
+        for (key, info, off) in [("CH0I", capabilities.ch0i, UInt8(1)),
+                                 ("CH0J", capabilities.ch0j, UInt8(1)),
+                                 ("CHIE", capabilities.chie, UInt8(8))] {
+            if let info, info.size == 1, info.isWritable { return (key, off, 0) }
+        }
+        #endif
+        return nil
+    }
+
+    /// True when this machine exposes a key for switching off the adapter.
+    var canSwitchAdapter: Bool { adapterControl != nil }
+
+    /// The key currently holding the adapter off, for the calibration log.
+    private(set) var activeAdapterKey: String?
+
+    /// Asserts "adapter off" now.
     ///
-    /// Returns false when the key is absent or not writable, so the caller can
-    /// fall back to asking the user to unplug.
+    /// Called repeatedly while a discharge phase runs: the key can be reset by
+    /// the SMC, and a write can be refused while the charger is still
+    /// transitioning, which is why AlDente re-writes its discharge key about
+    /// every 500 ms instead of once. Nil means the write was accepted — not
+    /// that the power source actually changed.
     @discardableResult
-    func beginForcedDischarge() -> Bool {
-        guard savedAdapterCurrentLimit == nil else { return true }
-        guard let aclc = capabilities.aclc, aclc.isWritable else { return false }
-        guard let (_, raw) = try? SMC.shared.readBytes("ACLC"), !raw.isEmpty else { return false }
-        let zeroed = [UInt8](repeating: 0, count: raw.count)
-        guard (try? HelperClient.shared.smcWriteBytes("ACLC", zeroed)) != nil else { return false }
-        // Read back rather than trusting the write: a key can accept a write and
-        // silently ignore it.
-        guard let (_, check) = try? SMC.shared.readBytes("ACLC"), check == zeroed else { return false }
-        savedAdapterCurrentLimit = raw
-        return true
+    func beginForcedDischarge() -> String? {
+        guard let control = adapterControl else {
+            return t("本机没有可写的适配器切换键")
+        }
+        do {
+            if savedAdapterState == nil {
+                let (_, raw) = try SMC.shared.readBytes(control.key)
+                guard raw.count == 1 else { throw HelperError.smc(t("适配器控制数据长度错误")) }
+                // Remember how to put it back even if the write fails afterwards.
+                savedAdapterState = (control.key, control.on)
+            }
+            try HelperClient.shared.smcWriteBytes(control.key, [control.off])
+            if let (_, check) = try? SMC.shared.readBytes(control.key), check != [control.off] {
+                throw HelperError.smc(tf("{p} 写入后被 SMC 忽略", control.key))
+            }
+            activeAdapterKey = control.key
+            UserDefaults.standard.set(true, forKey: adapterOffFlag)
+            return nil
+        } catch {
+            return error.localizedDescription
+        }
     }
 
     func endForcedDischarge() {
-        guard let raw = savedAdapterCurrentLimit else { return }
-        savedAdapterCurrentLimit = nil
-        _ = try? HelperClient.shared.smcWriteBytes("ACLC", raw)
+        guard let saved = savedAdapterState else { return }
+        do {
+            // Always restore "adapter on": a stale saved 0 from a crashed
+            // session would otherwise leave the Mac on battery forever.
+            try HelperClient.shared.smcWriteBytes(saved.key, [saved.on])
+            savedAdapterState = nil
+            activeAdapterKey = nil
+            adapterRestoreError = nil
+            UserDefaults.standard.removeObject(forKey: adapterOffFlag)
+        } catch {
+            adapterRestoreError = error.localizedDescription
+        }
+    }
+
+    /// Launch-time repair: if a previous run turned the adapter off and never
+    /// came back through `endForcedDischarge` (crash, force quit), put it back.
+    /// Only runs when this app set the flag, so it never fights another tool.
+    func restoreAdapterLeftOff() {
+        guard UserDefaults.standard.bool(forKey: adapterOffFlag),
+              savedAdapterState == nil,
+              let control = adapterControl else { return }
+        try? HelperClient.shared.smcWriteBytes(control.key, [control.on])
+        UserDefaults.standard.removeObject(forKey: adapterOffFlag)
     }
 
     /// True when BCLM is holding a ceiling below full.    ///

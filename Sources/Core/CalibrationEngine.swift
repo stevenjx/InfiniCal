@@ -182,15 +182,9 @@ final class CalibrationEngine: ObservableObject {
     // MARK: Preconditions
 
     /// True when the pack is on AC, below full, and the system refuses to
-    /// charge it. Calibration cannot pass 预充 in that state.
+    /// charge it. Advisory only: `start()` lifts this app's own ceiling and then
+    /// reports whether charging actually began, so the run is not blocked here.
     @Published var isChargeHeld = false
-    /// Set once the user confirms they turned the system charging limit off.
-    /// Deliberately in-memory: a fresh launch re-checks, which is what
-    /// 「首次运行或启动校准前检查」 asks for.
-    @Published var obcAcknowledged = false
-
-    /// Whether the panel may unlock 开始校准.
-    var canStart: Bool { !isChargeHeld || obcAcknowledged }
 
     // MARK: Estimates
 
@@ -306,9 +300,21 @@ final class CalibrationEngine: ObservableObject {
     /// list is identical apart from live counters. The hold itself is the only
     /// observable symptom, so it is what the gate watches.
     private var chargeHoldTicks = 0
+    private var fullyCharged = false
+    private var noChargeTicks = 0
+    @Published private(set) var chargingIssue: String?
+    private(set) var startFailureReason: String?
     /// Consecutive ticks spent plugged in without any pack current during the
     /// discharge phase.
     private var noDischargeTicks = 0
+    /// Ticks spent inside a drain phase; drives the 2 s re-assert of the
+    /// adapter switch.
+    private var drainTicks = 0
+    private var adapterFailureLogged = false
+    /// Ceiling to restore if the drain never starts.
+    private var drainRestoreCeiling = 100
+    /// 400 ms re-write of the ceiling while draining.
+    private var drainPulse: DispatchSourceTimer?
     /// One diagnostic line per session is enough when the sampler's field names
     /// do not match.
     private var socPowerParseFailureLogged = false
@@ -401,17 +407,40 @@ final class CalibrationEngine: ObservableObject {
     @discardableResult
     func start() -> Bool {
         guard !isRunning else { return false }
+        startFailureReason = nil
 
-        // A fresh read, because the gate may be evaluated from the menu bar
-        // before the calibration page has ever ticked.
-        if !obcAcknowledged, Self.isHoldingCharge(BatteryReader.read()) {
-            chargeHoldTicks = 5
-            isChargeHeld = true
-            append(t("已取消启动：系统正在限制充电，无法充至 100%。请先关闭「优化电池充电」或调高「充电上限」"))
+        let snapshot = BatteryReader.read()
+        apply(snapshot)
+        guard snapshot.isPresent else {
+            let message = t("校准未开始：未检测到电池")
+            startFailureReason = message
+            append(message)
+            return false
+        }
+        // Every phase needs the adapter: pre-charge, recharge, and a discharge
+        // that has to switch away from it. Starting on battery produced a run
+        // that never charged and then stalled at the first phase change.
+        guard snapshot.isPluggedIn else {
+            let message = t("校准未开始：请先连接电源适配器。整个流程需要先充满、接电放电、再充满。")
+            startFailureReason = message
+            append(message)
+            return false
+        }
+        // Fresh key table: the log below is what identifies this machine's
+        // control mechanism, so it must not come from a stale launch-time scan.
+        _ = ChargeController.shared.detectCapabilities()
+        do {
+            try ChargeController.shared.prepareForFullCharge()
+        } catch {
+            let message = tf("校准未开始：恢复充电失败 — {p}", error.localizedDescription)
+            startFailureReason = message
+            append(message)
             return false
         }
 
         isRunning = true
+        noChargeTicks = 0
+        chargingIssue = nil
         ensureTelemetryTimer()
         sessionStart = Date()
         holdStart = nil
@@ -440,6 +469,8 @@ final class CalibrationEngine: ObservableObject {
         isThermalCutoffActive = false
         needsUnplugForDischarge = false
         noDischargeTicks = 0
+        drainTicks = 0
+        adapterFailureLogged = false
         socPowerParseFailureLogged = false
         sessionPoints.removeAll()
         dischargeCurve.removeAll()
@@ -452,26 +483,26 @@ final class CalibrationEngine: ObservableObject {
         sessionStressMode = stressMode
 
         enableSleepBlock()
+        // The run heats the SoC on purpose; the fans follow 风扇控制's curve for
+        // its duration and are handed back when it ends.
+        FanController.shared.beginSessionCooling()
         append(t(">>> 开始电池校准 <<<"))
-        if !isExternalConnected {
-            append(t("未连接电源适配器：请接入电源，否则无法完成预充与复充阶段"))
-        }
+        let caps = ChargeController.shared.capabilities
+        let present = Set(caps.rawKeys.map { $0.0 })
+        // Which adapter levers this machine has decides whether the discharge
+        // phase can run on AC, so it is logged before anything is written.
+        append("SMC 适配器键: " + ["ACEN", "CH0I", "CH0J", "CHIE", "CHWA"]
+            .map { "\($0)=\(present.contains($0) ? "有" : "无")" }
+            .joined(separator: " "))
+        append("SMC: " + caps.rawKeys.map { "\($0.0)=\($0.1)" }.joined(separator: "; "))
+        append(ChargeController.shared.canSwitchAdapter
+               ? t("放电方式：适配器切换键")
+               : t("放电方式：充电上限（把上限降到目标值，由系统切换供电）"))
 
-        if signedAmperage < -0.05 || isDischargingOnAC {
-            phase = .discharging
-            dischargeStartPercentage = percentage
-            dischargeStart = Date()
-            dischargeCurve.removeAll()
-            append(t("电池已在放电，直接进入受控放电阶段"))
-            startStressLoad()
-            holdDischarge(to: dischargeTarget)
-        } else {
-            phase = .chargingToFull
-            dischargeStart = nil
-            append(t("等待电池充满至 100%…"))
-            stopStressLoad()
-            releaseDischarge()
-        }
+        phase = .chargingToFull
+        dischargeStart = nil
+        append(t("已发送恢复充电指令，等待电池实际充电并达到满充"))
+        stopStressLoad()
         return true
     }
 
@@ -480,6 +511,7 @@ final class CalibrationEngine: ObservableObject {
         stopStressLoad()
         releaseDischarge(limit: storageLevel)
         disableSleepBlock()
+        FanController.shared.endSessionCooling()
         isRunning = false
         holdStart = nil
         phase = .idle
@@ -502,6 +534,7 @@ final class CalibrationEngine: ObservableObject {
         stopStressLoad()
         releaseDischarge(limit: storageLevel)
         disableSleepBlock()
+        FanController.shared.endSessionCooling()
         isRunning = false
         phase = .idle
     }
@@ -566,6 +599,7 @@ final class CalibrationEngine: ObservableObject {
         cycleCount = snapshot.cycleCount
         isExternalConnected = snapshot.isPluggedIn
         isCharging = snapshot.isCharging
+        fullyCharged = snapshot.fullyCharged
         isDischargingOnAC = snapshot.isPluggedIn && signedAmperage < -0.05
         cellVoltages = snapshot.cellVoltages
         if let low = snapshot.cellVoltages.min(), let high = snapshot.cellVoltages.max() {
@@ -616,12 +650,6 @@ final class CalibrationEngine: ObservableObject {
         updateChargeHold(snapshot, force: true)
     }
 
-    /// The user says the system limit is off. Trust it for this launch.
-    func acknowledgeChargeHold() {
-        obcAcknowledged = true
-        append(t("已确认关闭系统充电限制，允许开始校准"))
-    }
-
     private func updateEstimates(smoothedPower: Double) {
         let fallbackCap = rawMaxCapacityMAh > 500 ? rawMaxCapacityMAh : max(designCapacityMAh * 0.93, 1)
         let estimate = model.inferTrueHealth(records: records,
@@ -646,32 +674,14 @@ final class CalibrationEngine: ObservableObject {
     private func advance(totals: CoulombTotals, now: Date) {
         switch phase {
         case .chargingToFull:
-            let startedDischarging = signedAmperage < -0.05 || isDischargingOnAC
-            let fullAndIdle = percentage >= 100 && signedAmperage <= 0.05
-            if startedDischarging || fullAndIdle { beginDischargePhase() }
+            monitorCharging()
+            if isFullChargeConfirmed { beginDischargePhase() }
 
         case .discharging:
             dischargeEnergyWh = totals.dischargeWh
             dischargeEnergyAh = totals.dischargeAh
             updateDischargeDerived(now: now)
-            // Intel has no lever that forces the pack to drain while the adapter
-            // is connected: CH0B/CH0C only inhibit charging, so the machine keeps
-            // running from the adapter at 0.00 A and the phase never ends. Say so
-            // instead of sitting there silently.
-            if isExternalConnected, abs(signedAmperage) < 0.05 {
-                noDischargeTicks += 1
-            } else {
-                noDischargeTicks = 0
-            }
-            if noDischargeTicks == 20, !needsUnplugForDischarge,
-               ChargeController.shared.capabilities.strategy != .bclm {
-                needsUnplugForDischarge = true
-                // The limit was accepted but the pack still is not draining, so
-                // put the adapter back the way it was instead of leaving the
-                // machine on a zeroed limit.
-                ChargeController.shared.endForcedDischarge()
-                append(t("接电状态下电池没有放电：此机型的充电控制键只能阻断充电、不能强制放电。请拔掉电源适配器，放电会在电池供电下继续进行。"))
-            }
+            ensureDischargeOnAC()
             if percentage <= dischargeTarget { endDischargePhase() }
 
         case .rechargingToFull:
@@ -680,7 +690,8 @@ final class CalibrationEngine: ObservableObject {
             if dischargeEnergyAh > 0, rechargeEnergyAh > 0 {
                 coulombicEfficiency = dischargeEnergyAh / rechargeEnergyAh * 100
             }
-            if percentage >= 100 && signedAmperage < 0.15 { beginHoldPhase() }
+            monitorCharging()
+            if isFullChargeConfirmed { beginHoldPhase() }
 
         case .holdingAtFull:
             if let start = holdStart, now.timeIntervalSince(start) >= holdDurationSeconds {
@@ -688,10 +699,72 @@ final class CalibrationEngine: ObservableObject {
             }
 
         case .dischargingToBuffer:
+            ensureDischargeOnAC()
             if percentage <= storageLevel { finish() }
 
         case .idle, .completed:
             break
+        }
+    }
+
+    private var isFullChargeConfirmed: Bool {
+        isExternalConnected && (fullyCharged || (percentage >= 100 && abs(signedAmperage) <= 0.05))
+    }
+
+    private func monitorCharging() {
+        if isFullChargeConfirmed || (isCharging && signedAmperage > 0.05) {
+            noChargeTicks = 0
+            chargingIssue = nil
+            return
+        }
+        noChargeTicks += 1
+        guard noChargeTicks == 30 else { return }
+        let message = isExternalConnected
+            ? t("校准等待中：已接电但电池尚未实际充电。充电指令不等于充电成功，请检查系统充电限制、其他电池管理程序与适配器状态。")
+            : t("校准等待中：当前未检测到外接供电，请连接电源适配器。")
+        chargingIssue = message
+        append(message)
+    }
+
+    /// Both drain phases require actual negative pack current.
+    ///
+    /// The lever is re-asserted every 2 s while draining: AlDente pulses its
+    /// discharge key because the SMC/macOS resets it, and a single write can
+    /// also be refused while the charger is still transitioning.
+    private func ensureDischargeOnAC() {
+        drainTicks += 1
+        if drainTicks % 2 == 0 { reassertDrainLever() }
+        if signedAmperage < -0.05 {
+            noDischargeTicks = 0
+            if needsUnplugForDischarge {
+                needsUnplugForDischarge = false
+                append(t("已检测到电池供电，开始放电"))
+            }
+            // The load is started only once the pack is really supplying: on AC
+            // it would just heat the machine without moving any charge.
+            if phase == .discharging, stressTasks.isEmpty { startStressLoad() }
+            return
+        }
+        noDischargeTicks += 1
+        // 60 s: moving the pack onto the battery through the charge ceiling is
+        // not instant, and giving up early was the reason it looked broken.
+        if noDischargeTicks >= 60, !needsUnplugForDischarge {
+            needsUnplugForDischarge = true
+            stopStressLoad()
+            releaseDischarge(limit: drainRestoreCeiling)
+            append(t("60 秒内电池仍未放电：已停止加压并恢复充电上限。请拔掉电源适配器，检测到电池供电后会自动继续放电。"))
+        }
+    }
+
+    /// Re-writes the adapter key, if this machine has one. The ceiling lever is
+    /// pulsed separately (`startDrainPulse`) because it needs a much faster
+    /// cadence than the 1 s tick.
+    private func reassertDrainLever() {
+        let controller = ChargeController.shared
+        guard controller.canSwitchAdapter else { return }
+        if let reason = controller.beginForcedDischarge(), !adapterFailureLogged {
+            adapterFailureLogged = true
+            append(tf("适配器切换未生效：{p}", reason))
         }
     }
 
@@ -745,8 +818,56 @@ final class CalibrationEngine: ObservableObject {
                                                 displayPowerQuality: displayPowerQuality))
         append(tf("预充完成，转入受控放电阶段（{p}%）[{p}]", "\(percentage)", stressMode.title))
         notify(t("预充完成"), tf("电池已充至 {p}%，开始受控放电校准。", "\(percentage)"))
-        startStressLoad()
-        holdDischarge(to: dischargeTarget)
+        drainTicks = 0
+        adapterFailureLogged = false
+        holdDischarge()
+        startDrain(hold: dischargeTarget, restoreOnFail: 100)
+    }
+
+    /// Starts draining.
+    ///
+    /// Two levers exist in the world: an adapter key (Apple Silicon CH0I/CH0J/
+    /// CHIE) and the charge ceiling. A machine that only exposes BCLM — Intel
+    /// MacBookPro15,1 is one, its only writable keys are BCLM and MSLD — drains
+    /// once the ceiling sits below the charge, but only while it is re-written:
+    /// macOS puts the value back within a few hundred milliseconds.
+    private func startDrain(hold: Int, restoreOnFail: Int) {
+        drainRestoreCeiling = restoreOnFail
+        if ChargeController.shared.canSwitchAdapter {
+            startStressLoad()
+            return
+        }
+        // Ceiling lever: the load stays off until the pack actually starts
+        // draining, otherwise the machine is heated on AC for up to a minute
+        // with nothing to show for it.
+        append(tf("已把充电上限设为 {p}%，等待系统把供电切到电池（最多 60 秒）", "\(hold)"))
+        if ChargeController.shared.capabilities.strategy == .bclm {
+            startDrainPulse(limit: hold)
+        }
+    }
+
+    /// Holds the ceiling at the discharge target by rewriting it every 400 ms.
+    ///
+    /// A single write is not enough: macOS puts the ceiling back within a few
+    /// hundred milliseconds, so the write has to be re-asserted until the
+    /// system moves the pack onto the battery. Measured on a MacBookPro15,1:
+    /// one write → still AC; 400 ms re-writes → `pmset` flips to Battery Power
+    /// within the first second and stays there.
+    private func startDrainPulse(limit: Int) {
+        stopDrainPulse()
+        let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
+        timer.schedule(deadline: .now(), repeating: .milliseconds(400))
+        timer.setEventHandler {
+            // A rejected write here is expected while macOS owns the value.
+            try? ChargeController.shared.applyChargeLimit(limit)
+        }
+        timer.resume()
+        drainPulse = timer
+    }
+
+    private func stopDrainPulse() {
+        drainPulse?.cancel()
+        drainPulse = nil
     }
 
     private func endDischargePhase() {
@@ -756,7 +877,18 @@ final class CalibrationEngine: ObservableObject {
         append(tf("放电完成（{p}%），耗时 {p} 小时 {p} 分，平均放电功率 {p} W", "\(dischargeTarget)", "\(hours)", "\(minutes)", String(format: "%.2f", dischargeAveragePower)))
 
         stopStressLoad()
-        releaseDischarge(limit: 100)
+        // Must stop before the recharge asks for a full ceiling: a running
+        // pulse would keep writing the discharge target every 400 ms and the
+        // pack would never charge.
+        stopDrainPulse()
+        do {
+            try ChargeController.shared.prepareForFullCharge()
+        } catch {
+            stop(reason: tf("校准中止：恢复复充失败 — {p}", error.localizedDescription))
+            return
+        }
+        noChargeTicks = 0
+        chargingIssue = nil
         // Everything charged before this moment belongs to the pre-charge. Only
         // what follows is the recharge the discharge is compared against.
         integrator.resetRechargeBucket()
@@ -774,7 +906,13 @@ final class CalibrationEngine: ObservableObject {
     private func beginStorageDrop() {
         append(tf("静置完成，开始回落至 {p}% 存储电量", "\(storageLevel)"))
         phase = .dischargingToBuffer
-        holdDischarge(to: storageLevel)
+        // A fresh drain attempt: the counters belong to the phase that is
+        // starting, not to the discharge that already finished.
+        noDischargeTicks = 0
+        drainTicks = 0
+        adapterFailureLogged = false
+        holdDischarge()
+        startDrain(hold: storageLevel, restoreOnFail: storageLevel)
         notify(t("回落至存储电量"), tf("校准即将完成，正在缓慢放电至 {p}% 存储电量。", "\(storageLevel)"))
     }
 
@@ -782,6 +920,7 @@ final class CalibrationEngine: ObservableObject {
         stopStressLoad()
         releaseDischarge(limit: storageLevel)
         disableSleepBlock()
+        FanController.shared.endSessionCooling()
         isRunning = false
         holdStart = nil
         phase = .completed
@@ -831,40 +970,48 @@ final class CalibrationEngine: ObservableObject {
 
     // MARK: - Hardware control (own helper, no external app)
 
-    /// Discharge on AC: either drop the charge ceiling to the target (BCLM makes
-    /// the pack drain to it) or inhibit charging outright on Intel/T2.
-    private func holdDischarge(to target: Int) {
+    /// Charge inhibition and adapter disable are independent operations.
+    private func holdDischarge() {
         let controller = ChargeController.shared
-        switch controller.capabilities.strategy {
-        case .bclm:
-            do { try controller.applyChargeLimit(target) } catch {
-                append(tf("SMC: 写入放电上限失败 — {p}", error.localizedDescription))
-            }
-        case .ch0bch0c, .chie:
+        // `.bclm` is handled by the 400 ms pulse: writing once and verifying
+        // the read-back would report a failure every time macOS reverts the
+        // value before it acts on it.
+        if controller.capabilities.strategy != .bclm {
             do { try controller.setChargingAllowed(false) } catch {
                 append(tf("SMC: 阻断充电失败 — {p}", error.localizedDescription))
             }
-            // Inhibiting charge is not enough on Intel: the Mac keeps drawing
-            // from the adapter at 0 A. Zeroing the adapter current limit is what
-            // actually drains the pack while still plugged in.
-            if controller.beginForcedDischarge() {
-                append(t("已将适配器电流上限设为 0，改为电池供电（原值已保存，结束后恢复）"))
-            }
-        case .unavailable:
-            append(t("SMC: 此机型未暴露充电控制键，无法在接电时强制放电"))
+        }
+        guard controller.canSwitchAdapter else { return }
+        if let reason = controller.beginForcedDischarge() {
+            append(tf("适配器切换请求失败 — {p}", reason))
+        } else {
+            append(tf("已关闭适配器供电（{p}），等待实测电池放电电流", controller.activeAdapterKey ?? "SMC"))
         }
     }
-
+    /// Hands the hardware back: adapter on first, then the charge control that
+    /// this machine actually has. A machine with no charge key has nothing to
+    /// restore, so it must not report a failure.
     private func releaseDischarge(limit: Int = 100) {
         let controller = ChargeController.shared
-        switch controller.capabilities.strategy {
-        case .bclm:
-            try? controller.applyChargeLimit(limit)
-        case .ch0bch0c, .chie:
-            try? controller.setChargingAllowed(true)
-            controller.endForcedDischarge()
-        case .unavailable:
-            break
+        stopDrainPulse()
+        controller.endForcedDischarge()
+        if let error = controller.adapterRestoreError {
+            chargingIssue = tf("恢复适配器供电失败 — {p}", error)
+            append(chargingIssue ?? error)
+            return
+        }
+        do {
+            switch controller.capabilities.strategy {
+            case .bclm:
+                try controller.applyChargeLimit(limit)
+            case .ch0bch0c, .chte:
+                try controller.setChargingAllowed(true)
+            case .unavailable:
+                break
+            }
+        } catch {
+            chargingIssue = tf("恢复充电控制失败 — {p}", error.localizedDescription)
+            append(chargingIssue ?? error.localizedDescription)
         }
     }
 
@@ -872,6 +1019,7 @@ final class CalibrationEngine: ObservableObject {
 
     private func startStressLoad() {
         stopStressLoad()
+        guard !needsUnplugForDischarge else { return }
         guard !isThermalCutoffActive, stressMode != .silent else { return }
 
         let workers = stressMode.workerCount(cores: ProcessInfo.processInfo.activeProcessorCount)
@@ -903,6 +1051,7 @@ final class CalibrationEngine: ObservableObject {
     /// GPU load runs on its own axis so the thermal guard can drop it while the
     /// CPU workers keep going.
     private func startGPULoad() {
+        guard !needsUnplugForDischarge else { return }
         guard stressMode.gpuDutyCycle > 0 else { return }
         guard gpu.isAvailable else {
             if !gpuUnavailableLogged {
@@ -1007,8 +1156,13 @@ final class CalibrationEngine: ObservableObject {
         if let last = lastSocPowerSuccess, now.timeIntervalSince(last) <= socPowerStaleAfter {
             socPowerQuality = .measured
         } else {
-            socPowerQuality = .unavailable
-            socPowerWatts = 0
+            // No measurement yet, or the last one went stale. Keep a labelled
+            // estimate on the card instead of blanking it: "--" reads as "this
+            // machine cannot tell you", which is only true when the model cannot
+            // run either.
+            let estimate = estimator.estimateSoC()
+            socPowerWatts = estimate.watts ?? 0
+            socPowerQuality = estimate.watts == nil ? .unavailable : estimate.quality
         }
         fetchSocPowerIfDue(now: now)
     }
@@ -1031,7 +1185,16 @@ final class CalibrationEngine: ObservableObject {
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.socPowerFetchInFlight = false
-                guard let split else { return }
+                guard let split else {
+                    // The daemon never returned a result — usually an old helper
+                    // that predates the powermetrics whitelist. Say it once,
+                    // because the card itself now shows an estimate instead.
+                    if !self.socPowerParseFailureLogged {
+                        self.socPowerParseFailureLogged = true
+                        self.append(t("SoC 功耗读取失败：特权助手没有返回 powermetrics 结果。重新安装特权助手后即可恢复实测。"))
+                    }
+                    return
+                }
                 guard split.combined > 0 else {
                     // The command ran but none of the known field names matched.
                     // Record what powermetrics actually printed, once, so the

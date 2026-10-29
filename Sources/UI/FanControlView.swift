@@ -17,8 +17,13 @@ struct FanControlPage: View {
                 header
 
                 if controller.hasFans {
-                    ForEach(controller.fans) { fan in
-                        FanCard(fan: fan, controller: controller)
+                    // Side by side: a two-fan machine fits both in one row, and
+                    // a single fan simply fills the width.
+                    HStack(alignment: .top, spacing: 10) {
+                        ForEach(controller.fans) { fan in
+                            FanCard(fan: fan, controller: controller)
+                                .frame(maxWidth: .infinity)
+                        }
                     }
                 } else {
                     noFanCard
@@ -386,6 +391,8 @@ private struct FanCard: View {
                         Text("SMC F\(fan.index)Tg = \(fan.targetRPM) · F\(fan.index)Md = \(fan.isManual ? 1 : 0)")
                             .font(.system(size: 8.5, design: .monospaced))
                             .foregroundColor(theme.textTertiary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
                     }
 
                     Spacer(minLength: 8)
@@ -413,7 +420,7 @@ private struct FanCard: View {
                     }
                     .foregroundColor(theme.chartPurple)
                 } else {
-                    HStack(spacing: 8) {
+                    VStack(alignment: .leading, spacing: 6) {
                         Picker("", selection: Binding(get: { mode }, set: { controller.setMode($0, for: fan.index) })) {
                             Text(t("自动")).tag(FanMode.auto)
                             Text(t("自定义")).tag(FanMode.fixed)
@@ -421,27 +428,29 @@ private struct FanCard: View {
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()
-                        .frame(width: 196)
+                        .frame(maxWidth: 196)
                         .disabled(!fan.canControl)
 
                         if mode == .fixed {
-                            Slider(value: Binding(get: { Double(controller.fixedRPM[fan.index] ?? fan.currentRPM) },
-                                                  set: { controller.setFixedRPM(Int($0.rounded()), for: fan.index) }),
-                                   in: Double(fan.minRPM)...Double(max(fan.minRPM + 1, fan.maxRPM)),
-                                   step: 50)
-                            .tint(theme.accent)
-                            Text("\(controller.fixedRPM[fan.index] ?? fan.currentRPM)")
-                                .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
-                                .foregroundColor(theme.textPrimary)
-                                .frame(width: 46, alignment: .trailing)
-                            Text("RPM")
-                                .font(.system(size: 9))
-                                .foregroundColor(theme.textSecondary)
+                            HStack(spacing: 8) {
+                                Slider(value: Binding(get: { Double(controller.fixedRPM[fan.index] ?? fan.currentRPM) },
+                                                      set: { controller.setFixedRPM(Int($0.rounded()), for: fan.index) }),
+                                       in: Double(fan.minRPM)...Double(max(fan.minRPM + 1, fan.maxRPM)),
+                                       step: 50)
+                                .tint(theme.accent)
+                                Text("\(controller.fixedRPM[fan.index] ?? fan.currentRPM)")
+                                    .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+                                    .foregroundColor(theme.textPrimary)
+                                    .frame(width: 46, alignment: .trailing)
+                                Text("RPM")
+                                    .font(.system(size: 9))
+                                    .foregroundColor(theme.textSecondary)
+                            }
                         } else {
                             Text(mode == .auto ? t("由系统按温度自动调节") : t("保持最大转速"))
                                 .font(.system(size: 10))
                                 .foregroundColor(theme.textTertiary)
-                            Spacer(minLength: 0)
+                                .lineLimit(1)
                         }
                     }
                 }

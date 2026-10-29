@@ -255,7 +255,9 @@ enum BatteryReader {
         if let n = any as? Int64 { return Int(n) }
         if let n = any as? Int32 { return Int(n) }
         if let n = any as? UInt32 { return Int(n) }
-        if let n = any as? UInt64 { return Int(n) }
+        // IORegistry prints a negative current as a huge unsigned value; `Int(n)`
+        // would trap on that, so reinterpret the bits instead of converting.
+        if let n = any as? UInt64 { return Int(bitPattern: UInt(truncatingIfNeeded: n)) }
         if let n = any as? NSNumber { return n.intValue }
         return nil
     }

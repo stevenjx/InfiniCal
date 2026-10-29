@@ -31,6 +31,16 @@ struct CalibrationPanel: View {
         VStack(alignment: .leading, spacing: 10) {
             header
             chargeGateCard
+            // Kept visible after the session ends: a restore failure at the last
+            // phase is exactly the thing the user must not miss.
+            if let issue = engine.chargingIssue {
+                Card(padding: 12) {
+                    Text(issue)
+                        .font(.system(size: 11))
+                        .foregroundColor(theme.chartOrange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
             dischargeHintCard
             statusCard
             pipelineCard
@@ -38,6 +48,7 @@ struct CalibrationPanel: View {
                 enduranceCard
                 healthCard
             }
+            .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 10) {
                 hostCard(title: t("SoC 功耗"),
                          value: engine.socPowerQuality == .unavailable
@@ -130,13 +141,10 @@ struct CalibrationPanel: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 7)
-                .background(Capsule().fill(engine.isRunning ? Color.red.opacity(0.18)
-                                              : (engine.canStart ? theme.accent : theme.innerControl)))
-                .foregroundColor(engine.isRunning ? Color.red
-                                 : (engine.canStart ? Color.white : theme.textTertiary))
+                .background(Capsule().fill(engine.isRunning ? Color.red.opacity(0.18) : theme.accent))
+                .foregroundColor(engine.isRunning ? Color.red : Color.white)
             }
             .buttonStyle(.plain)
-            .disabled(!engine.isRunning && !engine.canStart)
         }
         .frame(height: 34)
     }
@@ -178,7 +186,7 @@ struct CalibrationPanel: View {
                     Image(systemName: "powerplug.fill")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundColor(theme.chartOrange)
-                    Text(t("接电状态下电池没有放电，此机型无法强制放电。请拔掉电源适配器，拔掉后放电会自动继续。"))
+                    Text(t("本机无法在接电时切换供电，已恢复充电上限。请拔掉电源适配器，检测到电池供电后会自动继续放电。"))
                         .font(.system(size: 11))
                         .foregroundColor(theme.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -194,14 +202,14 @@ struct CalibrationPanel: View {
     /// the likely causes second instead of asserting one.
     @ViewBuilder
     private var chargeGateCard: some View {
-        if engine.isChargeHeld, !engine.obcAcknowledged, !engine.isRunning {
+        if engine.isChargeHeld, !engine.isRunning {
             Card(padding: 14) {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 8) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundColor(theme.chartOrange)
-                        Text(tf("系统正在限制充电（当前 {p}%），校准无法充至 100%", "\(engine.percentage)"))
+                        Text(tf("系统正在限制充电（当前 {p}%），校准可能充不到满电", "\(engine.percentage)"))
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundColor(theme.textPrimary)
                         Spacer(minLength: 6)
@@ -224,9 +232,6 @@ struct CalibrationPanel: View {
                         }
                         SmallActionButton(title: t("刷新状态"), symbol: "arrow.clockwise") {
                             engine.refreshChargeHold()
-                        }
-                        SmallActionButton(title: t("已关闭，允许开始"), symbol: "checkmark") {
-                            engine.acknowledgeChargeHold()
                         }
                     }
                     .padding(.top, 2)
@@ -482,7 +487,9 @@ struct CalibrationPanel: View {
                     metric(t("全周期耗时"), Self.duration(engine.totalDischargeRuntimeMinutes), "", "hourglass", theme.textPrimary)
                     metric(t("平均放电功耗"), String(format: "%.1f", engine.dischargeAveragePower), "W", "bolt.slash", theme.textPrimary)
                 }
+                Spacer(minLength: 0)
             }
+            .frame(maxHeight: .infinity, alignment: .top)
         }
     }
 
@@ -531,7 +538,9 @@ struct CalibrationPanel: View {
                 }
 
                 trendLine
+                Spacer(minLength: 0)
             }
+            .frame(maxHeight: .infinity, alignment: .top)
         }
     }
 
@@ -1130,9 +1139,94 @@ private final class CalibrationPointerNSView: NSView {
 
 // MARK: - History sheet
 
+/// The session log, shown inside 历史记录 next to the saved records.
+private struct CalibrationLogView: View {
+    @ObservedObject var engine: CalibrationEngine
+    @StateObject private var follow = UIFlag(true)
+    @StateObject private var exportError = UIValue<String?>(nil)
+    private var theme: Theme { Theme.current }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text(t("保留本次运行最近 800 条记录"))
+                    .font(.system(size: 10))
+                    .foregroundColor(theme.textTertiary)
+                Spacer(minLength: 8)
+                Toggle(t("跟随最新"), isOn: $follow.value)
+                    .toggleStyle(.checkbox)
+                    .font(.system(size: 11))
+                    .foregroundColor(theme.textSecondary)
+                Button(t("复制")) {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(exportText, forType: .string)
+                }
+                Button(t("导出")) { export() }
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 10)
+
+            ScrollViewReader { reader in
+                ScrollView(.vertical) {
+                    Text(engine.log.isEmpty ? t("暂无日志，开始校准后将在此显示。") : engine.log.joined(separator: "\n"))
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundColor(theme.textSecondary)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+                        .id("log-end")
+                }
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(theme.innerControl.opacity(0.45))
+                )
+                .padding(.horizontal, 14)
+                .padding(.bottom, 14)
+                .onAppear { if follow.value { reader.scrollTo("log-end", anchor: .bottom) } }
+                .onChange(of: engine.log.last) { _ in
+                    if follow.value { reader.scrollTo("log-end", anchor: .bottom) }
+                }
+            }
+
+            if let error = exportError.value {
+                Text(error)
+                    .font(.system(size: 10.5))
+                    .foregroundColor(.red)
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 10)
+            }
+        }
+    }
+
+    private var exportText: String {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+        return "InfiniCal \(version)\n\(ProcessInfo.processInfo.operatingSystemVersionString)\n"
+            + "Phase: \(engine.phase.rawValue)\n"
+            + String(format: "Battery: %d%%, %+.3f A, %.3f V\n", engine.percentage, engine.signedAmperage, engine.voltage)
+            + engine.log.joined(separator: "\n") + "\n"
+    }
+
+    private func export() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "InfiniCal_Calibration_Log.txt"
+        panel.canCreateDirectories = true
+        let text = exportText
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            do {
+                try text.write(to: url, atomically: true, encoding: .utf8)
+                exportError.value = nil
+            } catch {
+                exportError.value = error.localizedDescription
+            }
+        }
+    }
+}
+
 private struct CalibrationHistorySheet: View {
     @ObservedObject var engine: CalibrationEngine
     @Binding var isPresented: Bool
+    @StateObject private var tab = UIValue<Int>(0)
     private var theme: Theme { Theme.current }
 
     var body: some View {
@@ -1144,7 +1238,7 @@ private struct CalibrationHistorySheet: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(theme.textPrimary)
                 Spacer()
-                if !engine.records.isEmpty {
+                if !engine.records.isEmpty, tab.value == 0 {
                     Button(t("清空")) { engine.clearHistory() }
                         .buttonStyle(.plain)
                         .foregroundColor(.red)
@@ -1157,40 +1251,58 @@ private struct CalibrationHistorySheet: View {
 
             Divider().background(theme.divider)
 
-            if engine.records.count >= 2 {
-                trendBlock
-                    .padding(.horizontal, 14)
-                    .padding(.top, 12)
+            Picker("", selection: $tab.value) {
+                Text(t("校准记录")).tag(0)
+                Text(t("运行日志")).tag(1)
             }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal, 14)
+            .padding(.top, 10)
 
-            if engine.records.isEmpty {
-                VStack(spacing: 10) {
-                    Spacer()
-                    Image(systemName: "archivebox")
-                        .font(.system(size: 32))
-                        .foregroundColor(theme.textTertiary)
-                    Text(t("还没有校准记录"))
-                        .font(.system(size: 12))
-                        .foregroundColor(theme.textSecondary)
-                    Text(t("完成一次校准后，结果会自动保存在这里"))
-                        .font(.system(size: 10.5))
-                        .foregroundColor(theme.textTertiary)
-                    Spacer()
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if tab.value == 1 {
+                CalibrationLogView(engine: engine)
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 8) {
-                        ForEach(engine.records) { record in
-                            recordRow(record)
-                        }
-                    }
-                    .padding(14)
-                }
+                recordsContent
             }
         }
         .frame(width: 620, height: 580)
         .background(theme.windowBackground)
+    }
+
+    @ViewBuilder
+    private var recordsContent: some View {
+        if engine.records.count >= 2 {
+            trendBlock
+                .padding(.horizontal, 14)
+                .padding(.top, 12)
+        }
+
+        if engine.records.isEmpty {
+            VStack(spacing: 10) {
+                Spacer()
+                Image(systemName: "archivebox")
+                    .font(.system(size: 32))
+                    .foregroundColor(theme.textTertiary)
+                Text(t("还没有校准记录"))
+                    .font(.system(size: 12))
+                    .foregroundColor(theme.textSecondary)
+                Text(t("完成一次校准后，结果会自动保存在这里"))
+                    .font(.system(size: 10.5))
+                    .foregroundColor(theme.textTertiary)
+                Spacer()
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ScrollView {
+                LazyVStack(spacing: 8) {
+                    ForEach(engine.records) { record in
+                        recordRow(record)
+                    }
+                }
+                .padding(14)
+            }
+        }
     }
 
     // MARK: - Trend

@@ -89,15 +89,24 @@ final class MenuBarController: NSObject {
         lastButtonKey = key
         guard snapshot.isPresent else {
             button.image = batteryImage("battery.0", description: t("无电池"))
-            button.title = " —"
+            button.attributedTitle = statusTitle(" —")
             button.toolTip = t("未检测到电池")
             return
         }
         let percent = snapshot.percentage
         button.image = batteryImage(symbolName(percent: percent, charging: snapshot.isCharging),
                                     description: tf("电池 {p}%", "\(percent)"))
-        button.title = " \(percent)%"
+        button.attributedTitle = statusTitle(" \(percent)%")
         button.toolTip = tf("{p} · 限制 {p}%", state.chargeState.title, "\(state.chargeVal)")
+    }
+
+    /// Status bar text, one notch larger than the system default so it matches
+    /// the enlarged icon.
+    private func statusTitle(_ text: String) -> NSAttributedString {
+        NSAttributedString(string: text, attributes: [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 13.5, weight: .regular),
+            .baselineOffset: 0.5
+        ])
     }
 
     /// A symbol sized for the status bar.
@@ -111,7 +120,7 @@ final class MenuBarController: NSObject {
             return nil
         }
         image.isTemplate = true
-        let targetHeight: CGFloat = 15
+        let targetHeight: CGFloat = 17
         if image.size.height > 0 {
             let ratio = targetHeight / image.size.height
             image.size = NSSize(width: (image.size.width * ratio).rounded(), height: targetHeight)

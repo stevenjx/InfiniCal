@@ -27,3 +27,6 @@ Fix/
 
 # Release artifacts
 dist/
+
+# SMC snapshots taken while investigating discharge (contain device serial numbers)
+logs/

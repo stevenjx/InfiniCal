@@ -53,6 +53,12 @@ func handle(_ request: [String: Any]) -> [String: Any] {
         }
         return ["ok": true, "keys": rows]
 
+    case "keys":
+        // `count` comes from #KEY so a failed enumeration is visible: if the
+        // returned list is shorter, the index-read offset is wrong.
+        let names = smc.allKeys()
+        return ["ok": true, "count": smc.keyCount() ?? -1, "found": names.count, "keys": names]
+
     case "read":
         guard let key = request["key"] as? String, key.count == 4 else {
             return ["ok": false, "error": "bad key"]
@@ -194,8 +200,14 @@ if ownerUID != 0 {
 }
 
 signal(SIGPIPE, SIG_IGN)
+// One connection per queue: `exec` runs powermetrics for up to a second, and a
+// daemon that serves connections in series makes every fan write and SMC read
+// behind it wait that long. SMC.shared serialises the IOKit calls itself.
+let clients = DispatchQueue(label: "com.infinitycomputer.infinical.helper.clients",
+                            qos: .userInitiated,
+                            attributes: .concurrent)
 while true {
     let client = accept(serverFD, nil, nil)
     if client < 0 { continue }
-    serve(connection: client)
+    clients.async { serve(connection: client) }
 }

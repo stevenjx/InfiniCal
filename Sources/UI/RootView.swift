@@ -69,10 +69,9 @@ struct RootView: View {
 
             Spacer(minLength: 0)
 
-            HStack(spacing: 12) {
-                circleButton("power") { NSApp.terminate(nil) }
-
-                VStack(alignment: .leading, spacing: 1) {
+            ZStack {
+                // Centred in the sidebar regardless of what sits at either end.
+                VStack(spacing: 1) {
                     Text("Infinity Computer")
                         .font(.system(size: 10, weight: .medium))
                         .foregroundColor(theme.textSecondary)
@@ -82,20 +81,30 @@ struct RootView: View {
                 }
                 .fixedSize()
 
-                Spacer(minLength: 0)
-
-                // 「其他」 already has its own row in the list above; the gear
-                // here was a duplicate entry point, so the slot now shows the
-                // build version instead.
-                Text("v\(appVersion)")
-                    .font(.system(size: 9).monospacedDigit())
-                    .foregroundColor(theme.textTertiary)
+                HStack(spacing: 12) {
+                    circleButton("power") { NSApp.terminate(nil) }
+                    Spacer(minLength: 0)
+                    Button {
+                        openReleasePage()
+                    } label: {
+                        Text("v\(appVersion)")
+                            .font(.system(size: 11).monospacedDigit())
+                            .foregroundColor(theme.textTertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help(t("在 GitHub 上查看发布说明"))
+                }
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 14)
         }
         .frame(width: 240)
         .background(theme.sidebarBackground)
+    }
+
+    private func openReleasePage() {
+        guard let url = URL(string: "https://github.com/stevenjx/InfiniCal/releases") else { return }
+        NSWorkspace.shared.open(url)
     }
 
     private var appVersion: String {

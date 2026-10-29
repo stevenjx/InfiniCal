@@ -127,6 +127,44 @@ final class SMC {
 
     func exists(_ key: String) -> Bool { keyInfo(key) != nil }
 
+    // MARK: - Enumeration
+
+    private static let cmdReadIndex: UInt8 = 8
+
+    /// Number of keys the SMC exposes, from `#KEY`.
+    func keyCount() -> Int? {
+        guard open() else { return nil }
+        guard let (_, bytes) = try? readBytes("#KEY"), bytes.count == 4 else { return nil }
+        return Int(bytes.reduce(UInt32(0)) { ($0 << 8) | UInt32($1) })
+    }
+
+    /// Key name at a given index (`SMC_CMD_READ_INDEX`).
+    func key(at index: Int) -> String? {
+        guard open() else { return nil }
+        lock.lock(); defer { lock.unlock() }
+        var payload = [UInt8](repeating: 0, count: SMC.payloadSize)
+        payload.withUnsafeMutableBytes { raw in
+            raw.storeBytes(of: SMC.cmdReadIndex, toByteOffset: 42, as: UInt8.self)
+            raw.storeBytes(of: UInt32(index), toByteOffset: 44, as: UInt32.self)
+        }
+        let (kr, output) = call(&payload)
+        guard kr == KERN_SUCCESS, Int8(bitPattern: output[40]) == 0 else { return nil }
+        let code = output.withUnsafeBytes { SMC.loadU32($0, 0) }
+        let name = SMC.typeString(code)
+        // Print ASCII only, including keys like "AC-W" and "FS! " that carry
+        // punctuation or a trailing space.
+        guard name.allSatisfy({ $0.isASCII && ($0.asciiValue ?? 0) >= 32 && ($0.asciiValue ?? 0) < 127 }),
+              !name.trimmingCharacters(in: .whitespaces).isEmpty else { return nil }
+        return name
+    }
+
+    /// Every key name the SMC exposes. Used to find a control key instead of
+    /// guessing at candidate names.
+    func allKeys(limit: Int = 8192) -> [String] {
+        guard let count = keyCount(), count > 0, count < limit else { return [] }
+        return (0..<count).compactMap { key(at: $0) }
+    }
+
     // MARK: - Read
 
     /// Returns the raw bytes of an SMC key.

@@ -137,6 +137,10 @@ final class FanController: ObservableObject {
     private let defaults = UserDefaults.standard
     private var timer: Timer?
     private var pageUsers = 0
+    /// A calibration owns the fans for the length of its session; it keeps the
+    /// sampler alive even with no page open, and drives the curve itself.
+    private var sessionCooling = false
+    private var modesBeforeSession: [Int: FanMode] = [:]
     private var lastCurveWrite: [Int: Int] = [:]
     private var lastCurveTemperature: Double?
     /// Intel die temperature, filled asynchronously by the privileged sampler.
@@ -183,6 +187,51 @@ final class FanController: ObservableObject {
         refreshPowermetricsCPUTemperature()
     }
 
+    // MARK: - Session cooling
+
+    /// A calibration run heats the SoC on purpose for tens of minutes. While it
+    /// runs the fans follow the same curve as 风扇控制 — even when the user has
+    /// never enabled it — because leaving the machine on the system's own ramp
+    /// let it sit at 90 °C+ with the fans barely moving.
+    ///
+    /// The user's own modes are captured first and put back by
+    /// `endSessionCooling`, so a session never changes a fan setting for good.
+    func beginSessionCooling() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !self.sessionCooling else { return }
+            self.sessionCooling = true
+            self.modesBeforeSession = self.modes
+            self.lastCurveTemperature = nil
+            self.lastCurveWrite.removeAll()
+            self.beginMonitoring()
+            self.applyCurveIfNeeded(force: true)
+        }
+    }
+
+    func endSessionCooling() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.sessionCooling else { return }
+            self.sessionCooling = false
+            self.lastCurveTemperature = nil
+            self.lastCurveWrite.removeAll()
+            let saved = self.modesBeforeSession
+            self.modesBeforeSession.removeAll()
+            // With the user's curve enabled it is already in charge and keeps
+            // driving the fans; only a session that took them over has to hand
+            // them back.
+            if !self.curveEnabled {
+                for fan in self.fans {
+                    switch saved[fan.index] ?? .auto {
+                    case .auto: self.applyAuto(index: fan.index)
+                    case .full: self.applyFixed(index: fan.index, rpm: fan.maxRPM)
+                    case .fixed: self.applyFixed(index: fan.index, rpm: self.fixedRPM[fan.index] ?? fan.currentRPM)
+                    }
+                }
+            }
+            self.endMonitoring()
+        }
+    }
+
     // MARK: - Reading
 
     func refresh() {
@@ -217,7 +266,8 @@ final class FanController: ObservableObject {
                                   maxRPM: maxRPM,
                                   targetRPM: target,
                                   isManual: readMode(index: index),
-                                  canControl: maxRPM > minRPM && writeKeyExists("F\(index)Md"),
+                                  canControl: maxRPM > minRPM
+                                      && (writeKeyExists("F\(index)Md") || fsFlagsWritable),
                                   hasOwnLabel: readString("F\(index)ID") != nil))
         }
         return result
@@ -264,6 +314,13 @@ final class FanController: ObservableObject {
 
     private func writeKeyExists(_ key: String) -> Bool {
         SMC.shared.keyInfo(key)?.isWritable ?? false
+    }
+
+    /// Intel models carry no `F{n}Md`; the mode bits live inside `FS!` instead.
+    /// Without this the fan was reported as uncontrollable there, so every write
+    /// was refused before `writeMode` ever reached its `FS!` branch.
+    private var fsFlagsWritable: Bool {
+        SMC.shared.keyInfo("FS! ")?.isWritable ?? false
     }
 
     private func readFloat(_ key: String) -> Double? {
@@ -527,7 +584,7 @@ final class FanController: ObservableObject {
     // MARK: - Curve
 
     private func applyCurveIfNeeded(force: Bool = false) {
-        guard curveEnabled else { return }
+        guard curveEnabled || sessionCooling else { return }
         guard let temperature = curveTemperature() else { return }
         // 1 °C deadband: without it a sensor sitting on a threshold rewrites the
         // same target every second and the fan audibly hunts.

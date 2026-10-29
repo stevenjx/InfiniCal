@@ -10,8 +10,8 @@ import ServiceManagement
 
 enum Panel: String, CaseIterable, Identifiable {
     case dashboard
-    case chargeControl
     case calibration
+    case chargeControl
     case fanControl
     case sleep
     case history
@@ -220,6 +220,7 @@ final class AppState: ObservableObject {
         showFirstRunHelperPrompt = !helperInstalled && !defaults.bool(forKey: "didShowFirstRunHelperPrompt")
         capabilities = ChargeController.shared.detectCapabilities()
         capabilities.hasHelper = helperInstalled
+        ChargeController.shared.restoreAdapterLeftOff()
         snapshot = BatteryReader.read()
         // Populate SoC / display before the first frame. Without this the initial
         // model had those branches missing, so the flow card rendered a single
@@ -506,6 +507,7 @@ final class AppState: ObservableObject {
             if snapshot.temperature <= Double(maxTemperature) - 2 {
                 heatPause = false
                 statusNote = ""
+                lastAppliedLimit = nil
                 lastChargingAllowed = nil
                 Notifier.shared.post(key: "heat-recovered",
                                      title: t("温度已恢复"),
@@ -518,9 +520,9 @@ final class AppState: ObservableObject {
 
         let limit = chargeVal
         if lastAppliedLimit != limit {
-            lastAppliedLimit = limit
             do {
                 try ChargeController.shared.applyChargeLimit(limit)
+                lastAppliedLimit = limit
             } catch {
                 // Software enforcement still applies; surface the error once.
                 if capabilities.strategy == .unavailable {
@@ -551,7 +553,8 @@ final class AppState: ObservableObject {
             try ChargeController.shared.setChargingAllowed(allowed)
             lastChargingAllowed = allowed
         } catch {
-            lastChargingAllowed = allowed
+            lastChargingAllowed = nil
+            statusNote = error.localizedDescription
         }
     }
 
@@ -820,7 +823,7 @@ final class AppState: ObservableObject {
         // charge below full, and this mirror must not claim a session that
         // never began.
         guard calibrationEngine.start() else {
-            statusNote = t("校准未开始：系统正在限制充电")
+            statusNote = calibrationEngine.startFailureReason ?? t("校准未能开始")
             log(t("校准"), statusNote)
             return
         }
