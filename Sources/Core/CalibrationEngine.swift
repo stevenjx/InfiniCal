@@ -313,8 +313,6 @@ final class CalibrationEngine: ObservableObject {
     private var adapterFailureLogged = false
     /// Ceiling to restore if the drain never starts.
     private var drainRestoreCeiling = 100
-    /// 400 ms re-write of the ceiling while draining.
-    private var drainPulse: DispatchSourceTimer?
     /// One diagnostic line per session is enough when the sampler's field names
     /// do not match.
     private var socPowerParseFailureLogged = false
@@ -429,6 +427,9 @@ final class CalibrationEngine: ObservableObject {
         // Fresh key table: the log below is what identifies this machine's
         // control mechanism, so it must not come from a stale launch-time scan.
         _ = ChargeController.shared.detectCapabilities()
+        // A running auto-discharge hold would keep writing the user's ceiling
+        // every 400 ms and the pre-charge would never reach full.
+        stopDrainPulse()
         do {
             try ChargeController.shared.prepareForFullCharge()
         } catch {
@@ -840,34 +841,23 @@ final class CalibrationEngine: ObservableObject {
         // Ceiling lever: the load stays off until the pack actually starts
         // draining, otherwise the machine is heated on AC for up to a minute
         // with nothing to show for it.
-        append(tf("已把充电上限设为 {p}%，等待系统把供电切到电池（最多 60 秒）", "\(hold)"))
-        if ChargeController.shared.capabilities.strategy == .bclm {
-            startDrainPulse(limit: hold)
+        append(tf("已把充电上限设为 {p}%，每 400ms 重写一次，等待系统把供电切到电池（最多 60 秒）", "\(hold)"))
+        guard ChargeController.shared.canHoldCeiling else {
+            append(t("本机没有可写的 BCLM，无法用上限方式触发放电"))
+            return
         }
+        startDrainPulse(limit: hold)
     }
 
-    /// Holds the ceiling at the discharge target by rewriting it every 400 ms.
-    ///
-    /// A single write is not enough: macOS puts the ceiling back within a few
-    /// hundred milliseconds, so the write has to be re-asserted until the
-    /// system moves the pack onto the battery. Measured on a MacBookPro15,1:
-    /// one write → still AC; 400 ms re-writes → `pmset` flips to Battery Power
-    /// within the first second and stays there.
+    /// Holds the ceiling at the discharge target. The 400 ms cadence lives in
+    /// `ChargeController.holdCeiling` so the normal auto-discharge path can use
+    /// exactly the same mechanism.
     private func startDrainPulse(limit: Int) {
-        stopDrainPulse()
-        let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
-        timer.schedule(deadline: .now(), repeating: .milliseconds(400))
-        timer.setEventHandler {
-            // A rejected write here is expected while macOS owns the value.
-            try? ChargeController.shared.applyChargeLimit(limit)
-        }
-        timer.resume()
-        drainPulse = timer
+        ChargeController.shared.holdCeiling(limit)
     }
 
     private func stopDrainPulse() {
-        drainPulse?.cancel()
-        drainPulse = nil
+        ChargeController.shared.stopHoldingCeiling()
     }
 
     private func endDischargePhase() {

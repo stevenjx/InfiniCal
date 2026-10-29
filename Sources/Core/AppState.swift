@@ -531,6 +531,21 @@ final class AppState: ObservableObject {
             }
         }
 
+        // 自动放电: hold the ceiling at the limit so macOS moves the pack onto
+        // the battery and drains down to it. Stopping charging is not enough —
+        // on a BCLM-only Mac the adapter keeps supplying the whole system.
+        if automaticDischarge, snapshot.percentage > limit + 1,
+           ChargeController.shared.canHoldCeiling {
+            ChargeController.shared.holdCeiling(limit)
+            lastChargingAllowed = nil
+            return
+        }
+        if ChargeController.shared.heldCeiling != nil {
+            ChargeController.shared.stopHoldingCeiling()
+            // Force a normal ceiling write on the next tick.
+            lastAppliedLimit = nil
+        }
+
         var desired: Bool
         if snapshot.percentage >= limit {
             desired = false

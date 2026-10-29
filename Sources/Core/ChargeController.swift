@@ -468,6 +468,52 @@ final class ChargeController {
         }
     }
 
+    // MARK: - Held ceiling
+
+    private var ceilingTimer: DispatchSourceTimer?
+    /// The ceiling currently being held, nil when nothing is held.
+    private(set) var heldCeiling: Int?
+
+    /// Holds BCLM at `percent` by rewriting it every 400 ms.
+    ///
+    /// This is the only way to make a BCLM-only Mac drain while the adapter is
+    /// connected: macOS puts the ceiling back within a few hundred
+    /// milliseconds, so a single write is undone before it can act. Measured on
+    /// a MacBookPro15,1 — one write left the machine on AC for a minute, 400 ms
+    /// re-writes moved it to battery within the first second.
+    ///
+    /// Deliberately does not consult `capabilities.strategy`: the strategy is a
+    /// cached detection result, and gating the discharge on it meant a failed
+    /// early detection silently disabled the whole phase.
+    func holdCeiling(_ percent: Int) {
+        let clamped = max(0, min(100, percent))
+        if heldCeiling == clamped, ceilingTimer != nil { return }
+        stopHoldingCeiling()
+        heldCeiling = clamped
+        let timer = DispatchSource.makeTimerSource(queue: .global(qos: .utility))
+        timer.schedule(deadline: .now(), repeating: .milliseconds(400))
+        timer.setEventHandler {
+            // No read-back check: being reverted is the expected behaviour.
+            try? HelperClient.shared.smcWrite("BCLM", UInt8(clamped))
+        }
+        timer.resume()
+        ceilingTimer = timer
+    }
+
+    func stopHoldingCeiling() {
+        ceilingTimer?.cancel()
+        ceilingTimer = nil
+        heldCeiling = nil
+    }
+
+    /// True when BCLM exists and accepts writes on this machine. Falls back to a
+    /// one-key probe when the cached capability table has not been filled yet,
+    /// so a stale detection cannot silently disable the hold.
+    var canHoldCeiling: Bool {
+        if let info = capabilities.bclm { return info.size == 1 }
+        return HelperClient.shared.keyInfoList(["BCLM"])["BCLM"]?.size == 1
+    }
+
     func setChargingAllowed(_ allowed: Bool) throws {
         switch capabilities.strategy {
         case .bclm:

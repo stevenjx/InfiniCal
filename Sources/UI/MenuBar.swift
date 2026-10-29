@@ -100,11 +100,11 @@ final class MenuBarController: NSObject {
         button.toolTip = tf("{p} · 限制 {p}%", state.chargeState.title, "\(state.chargeVal)")
     }
 
-    /// Status bar text, one notch larger than the system default so it matches
-    /// the enlarged icon.
+    /// Status bar text, slightly larger than the system default so it reads at
+    /// a glance without outweighing the icon.
     private func statusTitle(_ text: String) -> NSAttributedString {
         NSAttributedString(string: text, attributes: [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: 13.5, weight: .regular),
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 12.5, weight: .regular),
             .baselineOffset: 0.5
         ])
     }
@@ -120,7 +120,7 @@ final class MenuBarController: NSObject {
             return nil
         }
         image.isTemplate = true
-        let targetHeight: CGFloat = 17
+        let targetHeight: CGFloat = 16
         if image.size.height > 0 {
             let ratio = targetHeight / image.size.height
             image.size = NSSize(width: (image.size.width * ratio).rounded(), height: targetHeight)
