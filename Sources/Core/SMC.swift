@@ -26,6 +26,7 @@ enum SMCError: Error, CustomStringConvertible {
     case readFailed(String, Int32)
     case writeFailed(String, Int32)
     case unsupportedType(String)
+    case invalidWriteSize(String, Int, UInt32)
 
     var description: String {
         switch self {
@@ -35,6 +36,8 @@ enum SMCError: Error, CustomStringConvertible {
         case .readFailed(let k, let r): return tf("读取 {p} 失败 (0x{p})", k, String(r, radix: 16))
         case .writeFailed(let k, let r): return tf("写入 {p} 失败 (0x{p})", k, String(r, radix: 16))
         case .unsupportedType(let t): return tf("不支持的数据类型 {p}", t)
+        case .invalidWriteSize(let key, let actual, let expected):
+            return "SMC \(key): invalid write size \(actual), expected \(expected) (1...32 bytes)"
         }
     }
 }
@@ -193,6 +196,11 @@ final class SMC {
     func writeBytes(_ key: String, _ bytes: [UInt8]) throws {
         guard open() else { throw SMCError.serviceNotFound }
         guard let info = keyInfo(key) else { throw SMCError.keyNotFound(key) }
+        // Do not silently zero-pad a short value or truncate a long one: either
+        // can change unrelated bits in a multi-byte hardware control register.
+        guard info.size > 0, info.size <= 32, bytes.count == Int(info.size) else {
+            throw SMCError.invalidWriteSize(key, bytes.count, info.size)
+        }
         var payload = [UInt8](repeating: 0, count: SMC.payloadSize)
         payload.withUnsafeMutableBytes { raw in
             raw.storeBytes(of: SMC.keyCode(key), toByteOffset: 0, as: UInt32.self)

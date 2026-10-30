@@ -301,6 +301,7 @@ final class CalibrationEngine: ObservableObject {
     /// observable symptom, so it is what the gate watches.
     private var chargeHoldTicks = 0
     private var fullyCharged = false
+    private var fullChargeTicks = 0
     private var noChargeTicks = 0
     @Published private(set) var chargingIssue: String?
     private(set) var startFailureReason: String?
@@ -311,8 +312,6 @@ final class CalibrationEngine: ObservableObject {
     /// adapter switch.
     private var drainTicks = 0
     private var adapterFailureLogged = false
-    /// Ceiling to restore if the drain never starts.
-    private var drainRestoreCeiling = 100
     /// One diagnostic line per session is enough when the sampler's field names
     /// do not match.
     private var socPowerParseFailureLogged = false
@@ -496,9 +495,7 @@ final class CalibrationEngine: ObservableObject {
             .map { "\($0)=\(present.contains($0) ? "有" : "无")" }
             .joined(separator: " "))
         append("SMC: " + caps.rawKeys.map { "\($0.0)=\($0.1)" }.joined(separator: "; "))
-        append(ChargeController.shared.canSwitchAdapter
-               ? t("放电方式：适配器切换键")
-               : t("放电方式：充电上限（把上限降到目标值，由系统切换供电）"))
+        append(tf("放电方式：{p}", drainLeverDescription))
 
         phase = .chargingToFull
         dischargeStart = nil
@@ -601,6 +598,11 @@ final class CalibrationEngine: ObservableObject {
         isExternalConnected = snapshot.isPluggedIn
         isCharging = snapshot.isCharging
         fullyCharged = snapshot.fullyCharged
+        if snapshot.percentage >= 100 && snapshot.isPluggedIn {
+            fullChargeTicks += 1
+        } else {
+            fullChargeTicks = 0
+        }
         isDischargingOnAC = snapshot.isPluggedIn && signedAmperage < -0.05
         cellVoltages = snapshot.cellVoltages
         if let low = snapshot.cellVoltages.min(), let high = snapshot.cellVoltages.max() {
@@ -709,7 +711,12 @@ final class CalibrationEngine: ObservableObject {
     }
 
     private var isFullChargeConfirmed: Bool {
-        isExternalConnected && (fullyCharged || (percentage >= 100 && abs(signedAmperage) <= 0.05))
+        guard isExternalConnected else { return false }
+        if fullyCharged { return true }
+        if percentage >= 100 {
+            return abs(signedAmperage) <= 0.15 || fullChargeTicks >= 15
+        }
+        return false
     }
 
     private func monitorCharging() {
@@ -747,14 +754,25 @@ final class CalibrationEngine: ObservableObject {
             return
         }
         noDischargeTicks += 1
-        // 60 s: moving the pack onto the battery through the charge ceiling is
-        // not instant, and giving up early was the reason it looked broken.
-        if noDischargeTicks >= 60, !needsUnplugForDischarge {
-            needsUnplugForDischarge = true
-            stopStressLoad()
-            releaseDischarge(limit: drainRestoreCeiling)
-            append(t("60 秒内电池仍未放电：已停止加压并恢复充电上限。请拔掉电源适配器，检测到电池供电后会自动继续放电。"))
-        }
+        // Do not release the lever and do not stop the phase: a charge ceiling
+        // and an adapter cut both take effect asynchronously, and the old
+        // "give up after 60 s and restore the ceiling" path left the phase
+        // running with nothing armed, so unplugging the cable — the thing this
+        // feature exists to avoid — became the only way forward.
+        guard noDischargeTicks == 60, !needsUnplugForDischarge else { return }
+        needsUnplugForDischarge = true
+        stopStressLoad()
+        append(tf("接电状态下 60 秒仍未测到放电电流（已尝试：{p}）。放电指令保持生效，若拔掉电源适配器会立即继续。",
+                  drainLeverDescription))
+    }
+
+    /// What the current phase actually armed, for the log and the UI hint.
+    private var drainLeverDescription: String {
+        let controller = ChargeController.shared
+        if controller.canSwitchAdapter { return t("适配器断电（接电时也能放电）") }
+        if controller.hasPersistentCeiling { return t("系统充电上限（80% 起）") }
+        if controller.canHoldCeiling { return t("BCLM 上限（需要持续重写）") }
+        return t("无可用放电杠杆")
     }
 
     /// Re-writes the adapter key, if this machine has one. The ceiling lever is
@@ -822,20 +840,37 @@ final class CalibrationEngine: ObservableObject {
         drainTicks = 0
         adapterFailureLogged = false
         holdDischarge()
-        startDrain(hold: dischargeTarget, restoreOnFail: 100)
+        startDrain(hold: dischargeTarget)
     }
 
     /// Starts draining.
     ///
-    /// Two levers exist in the world: an adapter key (Apple Silicon CH0I/CH0J/
-    /// CHIE) and the charge ceiling. A machine that only exposes BCLM — Intel
-    /// MacBookPro15,1 is one, its only writable keys are BCLM and MSLD — drains
-    /// once the ceiling sits below the charge, but only while it is re-written:
-    /// macOS puts the value back within a few hundred milliseconds.
-    private func startDrain(hold: Int, restoreOnFail: Int) {
-        drainRestoreCeiling = restoreOnFail
+    /// Three levers exist in the world: an adapter key (Apple Silicon CH0I/CH0J/
+    /// CHIE), the OS charge limit (macOS 26+), and a raw BCLM ceiling. The
+    /// adapter key is preferred because it works for any target and needs no
+    /// re-write; MCL is next because powerd keeps it without a pulse but cannot
+    /// go below 80 %; BCLM has to be re-written every 400 ms because macOS keeps
+    /// putting the value back.
+    private func startDrain(hold: Int) {
         if ChargeController.shared.canSwitchAdapter {
             startStressLoad()
+            return
+        }
+        if ChargeController.shared.hasPersistentCeiling {
+            // MCL cannot go below 80 %, so this lever alone reaches the floor and
+            // no further. Say so instead of letting the phase look stalled.
+            let floor = SystemChargeLimit.minimumSupported
+            do {
+                try ChargeController.shared.applyChargeLimit(max(floor, hold))
+                if hold < floor {
+                    append(tf("系统充电上限只能降到 {p}%，本机没有适配器断电键：{p}% 以下需要用电池自行放电",
+                              "\(floor)", "\(floor)"))
+                } else {
+                    append(tf("已通过系统充电上限把目标设为 {p}%，由 powerd 切换到电池供电", "\(hold)"))
+                }
+            } catch {
+                append(tf("系统充电上限写入失败 — {p}", error.localizedDescription))
+            }
             return
         }
         // Ceiling lever: the load stays off until the pack actually starts
@@ -843,7 +878,7 @@ final class CalibrationEngine: ObservableObject {
         // with nothing to show for it.
         append(tf("已把充电上限设为 {p}%，每 400ms 重写一次，等待系统把供电切到电池（最多 60 秒）", "\(hold)"))
         guard ChargeController.shared.canHoldCeiling else {
-            append(t("本机没有可写的 BCLM，无法用上限方式触发放电"))
+            append(t("本机没有可写的 BCLM，也没有适配器断电键，无法用上限方式触发放电"))
             return
         }
         startDrainPulse(limit: hold)
@@ -879,6 +914,7 @@ final class CalibrationEngine: ObservableObject {
         }
         noChargeTicks = 0
         chargingIssue = nil
+        fullChargeTicks = 0
         // Everything charged before this moment belongs to the pre-charge. Only
         // what follows is the recharge the discharge is compared against.
         integrator.resetRechargeBucket()
@@ -902,7 +938,7 @@ final class CalibrationEngine: ObservableObject {
         drainTicks = 0
         adapterFailureLogged = false
         holdDischarge()
-        startDrain(hold: storageLevel, restoreOnFail: storageLevel)
+        startDrain(hold: storageLevel)
         notify(t("回落至存储电量"), tf("校准即将完成，正在缓慢放电至 {p}% 存储电量。", "\(storageLevel)"))
     }
 
@@ -963,13 +999,17 @@ final class CalibrationEngine: ObservableObject {
     /// Charge inhibition and adapter disable are independent operations.
     private func holdDischarge() {
         let controller = ChargeController.shared
-        // `.bclm` is handled by the 400 ms pulse: writing once and verifying
-        // the read-back would report a failure every time macOS reverts the
-        // value before it acts on it.
-        if controller.capabilities.strategy != .bclm {
+        // The ceiling levers (`.bclm` pulse, and `.systemLimit` which
+        // `startDrain` owns) are set by the drain phase itself; writing once and
+        // verifying the read-back here would report a failure every time macOS
+        // reverts or re-applies the value before the power path acts on it.
+        switch controller.capabilities.strategy {
+        case .ch0bch0c, .chte:
             do { try controller.setChargingAllowed(false) } catch {
                 append(tf("SMC: 阻断充电失败 — {p}", error.localizedDescription))
             }
+        case .systemLimit, .bclm, .unavailable:
+            break
         }
         guard controller.canSwitchAdapter else { return }
         if let reason = controller.beginForcedDischarge() {
@@ -992,6 +1032,11 @@ final class CalibrationEngine: ObservableObject {
         }
         do {
             switch controller.capabilities.strategy {
+            case .systemLimit:
+                // Hand the pack back to the OS at the user's storage level: MCL
+                // is what macOS itself would be holding, so nothing is left in
+                // a state the system does not own.
+                try controller.applyChargeLimit(limit)
             case .bclm:
                 try controller.applyChargeLimit(limit)
             case .ch0bch0c, .chte:

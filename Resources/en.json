@@ -508,5 +508,20 @@
  "高使用量": "High usage",
  "高功耗的应用程序": "High-usage apps",
  "（估算）": "(estimated)",
- "（按总量约束缩放 ×%.2f）": "(scaled to total ×%.2f)"
+ "（按总量约束缩放 ×%.2f）": "(scaled to total ×%.2f)",
+ "系统充电上限（MCL）": "System charge limit (MCL)",
+ "通过系统自带的充电上限控制，由 powerd 持久执行": "Uses the OS charge limit, held by powerd",
+ "系统充电上限写入未生效": "The system charge limit did not take effect",
+ "系统充电上限最低 {p}%，无法放电到 {p}%": "The system charge limit bottoms out at {p}%, so it cannot drain to {p}%",
+ "本机既没有适配器断电键，也没有可写的充电上限": "This Mac exposes neither an adapter-cut key nor a writable charge limit",
+ "适配器断电（接电时也能放电）": "Adapter cut (drains even while plugged in)",
+ "系统充电上限（80% 起）": "System charge limit (80% and up)",
+ "BCLM 上限（需要持续重写）": "BCLM ceiling (needs continuous rewrite)",
+ "无可用放电杠杆": "no usable discharge lever",
+ "系统充电上限只能降到 {p}%，本机没有适配器断电键：{p}% 以下需要用电池自行放电": "The system charge limit only reaches {p}% and this Mac has no adapter-cut key: below {p}% the pack has to drain on its own",
+ "已通过系统充电上限把目标设为 {p}%，由 powerd 切换到电池供电": "System charge limit set to {p}%; powerd switches the supply to the battery",
+ "放电方式：{p}": "Discharge method: {p}",
+ "放电指令已下发，但 60 秒内仍未测到放电电流。放电指令保持生效，也可以拔掉电源适配器让它立即开始。": "The discharge command was sent but no discharge current appeared within 60 s. It stays armed; unplugging the adapter makes it start immediately.",
+ "接电状态下 60 秒仍未测到放电电流（已尝试：{p}）。放电指令保持生效，若拔掉电源适配器会立即继续。": "No discharge current within 60 s while on AC (tried: {p}). The command stays armed and resumes immediately if the adapter is unplugged.",
+ "电池温度 %.1f°C 超过上限 %d°C；此机型最低只能把充电上限设到 %d%%，无法立即暂停充电": "Battery at %.1f°C is above the %d°C limit; this Mac's charge limit cannot go below %d%%, so charging cannot be paused"
 }

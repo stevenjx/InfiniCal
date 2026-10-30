@@ -186,7 +186,7 @@ struct CalibrationPanel: View {
                     Image(systemName: "powerplug.fill")
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundColor(theme.chartOrange)
-                    Text(t("本机无法在接电时切换供电，已恢复充电上限。请拔掉电源适配器，检测到电池供电后会自动继续放电。"))
+                    Text(t("放电指令已下发，但 60 秒内仍未测到放电电流。放电指令保持生效，也可以拔掉电源适配器让它立即开始。"))
                         .font(.system(size: 11))
                         .foregroundColor(theme.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)

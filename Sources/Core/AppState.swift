@@ -178,6 +178,7 @@ final class AppState: ObservableObject {
     private var lastChargingAllowed: Bool?
     private var heatPause = false
     private var userPaused = false
+    private var manualDischargeTarget: Int?
     private var tickCount = 0
 
     /// One-shot top-up: raise the ceiling to 100 %, then put the user's limit
@@ -487,6 +488,59 @@ final class AppState: ObservableObject {
 
     private func evaluateChargeControl() {
         guard snapshot.isPresent else { chargeState = .noBattery; return }
+
+        // An uncertain adapter write must be rolled back before a new policy
+        // can request another discharge. Retry even when ExternalConnected is
+        // false and the original off-write never set activeAdapterKey.
+        if ChargeController.shared.adapterRestoreError != nil {
+            ChargeController.shared.endForcedDischarge()
+            if let error = ChargeController.shared.adapterRestoreError {
+                statusNote = error
+                return
+            }
+        }
+
+        if let target = manualDischargeTarget {
+            if snapshot.percentage <= target {
+                manualDischargeTarget = nil
+                ChargeController.shared.stopHoldingCeiling()
+                ChargeController.shared.endForcedDischarge()
+                lastAppliedLimit = nil
+                lastChargingAllowed = nil
+            } else {
+                if let failure = ChargeController.shared.beginDischarge(to: target) {
+                    statusNote = failure
+                    manualDischargeTarget = nil
+                    ChargeController.shared.stopHoldingCeiling()
+                    ChargeController.shared.endForcedDischarge()
+                } else {
+                    chargeState = .discharging
+                }
+                return
+            }
+        }
+
+        // 自动放电期间适配器是被本应用主动切断的，`isPluggedIn` 因此为 false。
+        // 这段必须在下面的 guard 之前：一旦断电成功，后面所有分支都会被
+        // `.noAdapter` 挡掉，于是既不会重下放电指令，也不会在到点时恢复供电。
+        if ChargeController.shared.activeAdapterKey != nil {
+            let finished = !automaticDischarge || snapshot.percentage <= chargeVal
+            if finished {
+                ChargeController.shared.endForcedDischarge()
+                lastAppliedLimit = nil
+                lastChargingAllowed = nil
+            } else {
+                // Re-assert every tick: the SMC can put the adapter back on its
+                // own, and a silent re-connect mid-discharge looks like a stall.
+                if let failure = ChargeController.shared.beginForcedDischarge() {
+                    statusNote = failure
+                    return
+                }
+                chargeState = .discharging
+                return
+            }
+        }
+
         guard snapshot.isPluggedIn else {
             chargeState = .noAdapter
             if lastChargingAllowed != true { lastChargingAllowed = nil }
@@ -495,11 +549,20 @@ final class AppState: ObservableObject {
 
         if heatProtectMode, snapshot.temperature >= Double(maxTemperature) {
             heatPause = true
-            statusNote = String(format: t("电池温度 %.1f°C 超过上限 %d°C，充电已暂停"), snapshot.temperature, maxTemperature)
             setCharging(false)
+            // Say what actually happened. On a machine whose only lever is the
+            // OS charge limit (floor 80 %), "paused" is only true when the pack
+            // is at or above that floor; below it nothing can stop the charge.
+            let canHold = ChargeController.shared.hasPersistentCeiling
+                ? snapshot.percentage >= SystemChargeLimit.minimumSupported
+                : true
+            statusNote = canHold
+                ? String(format: t("电池温度 %.1f°C 超过上限 %d°C，充电已暂停"), snapshot.temperature, maxTemperature)
+                : String(format: t("电池温度 %.1f°C 超过上限 %d°C；此机型最低只能把充电上限设到 %d%%，无法立即暂停充电"),
+                         snapshot.temperature, maxTemperature, SystemChargeLimit.minimumSupported)
             Notifier.shared.post(key: "heat-protect",
                                  title: t("过热保护已触发"),
-                                 body: String(format: t("电池温度 %.1f°C 超过上限 %d°C，充电已暂停。"), snapshot.temperature, maxTemperature),
+                                 body: statusNote,
                                  cooldown: 900)
             return
         }
@@ -531,31 +594,57 @@ final class AppState: ObservableObject {
             }
         }
 
-        // 自动放电: hold the ceiling at the limit so macOS moves the pack onto
-        // the battery and drains down to it. Stopping charging is not enough —
-        // on a BCLM-only Mac the adapter keeps supplying the whole system.
-        if automaticDischarge, snapshot.percentage > limit + 1,
-           ChargeController.shared.canHoldCeiling {
-            ChargeController.shared.holdCeiling(limit)
+        // 自动放电（Automatic Discharge）:
+        // 当电池电量高于充电限制（如限制80%，当前100%）时，自动切换到电池供电，
+        // 放电至设定限制值后自动恢复适配器供电。
+        //
+        // 三条路径按可靠性排序：适配器断电（任何目标都能放）、系统充电上限
+        // （macOS 26+，由 powerd 持有，80…100）、BCLM 上限脉冲（老机型）。
+        if automaticDischarge, snapshot.percentage > limit {
+            if let failure = ChargeController.shared.beginDischarge(to: limit) {
+                // Nothing could be armed. Report it and leave the charging state
+                // untouched — falling through would park the ceiling on the
+                // current charge and silently change the user's limit.
+                if statusNote != failure { statusNote = failure }
+                return
+            }
             lastChargingAllowed = nil
             return
-        }
-        if ChargeController.shared.heldCeiling != nil {
-            ChargeController.shared.stopHoldingCeiling()
-            // Force a normal ceiling write on the next tick.
-            lastAppliedLimit = nil
+        } else {
+            if ChargeController.shared.activeAdapterKey != nil {
+                ChargeController.shared.endForcedDischarge()
+            }
+            if ChargeController.shared.heldCeiling != nil {
+                ChargeController.shared.stopHoldingCeiling()
+                lastAppliedLimit = nil
+            }
+            if ChargeController.shared.hasPersistentCeiling,
+               SystemChargeLimit.shared.limit.map({ $0 < chargeVal }) == true {
+                // A persisted MCL below the limit would otherwise keep the pack
+                // pinned where the last discharge left it.
+                try? ChargeController.shared.applyChargeLimit(limit)
+                lastAppliedLimit = limit
+            }
         }
 
+        // 航海模式（Sailing）：充到限制值后放开，等电量自行掉到
+        // 「限制 − 差异」再补电。不开启时，只要低于限制就立刻补回
+        // ——这正是与「反复充到上限」的区别所在。
         var desired: Bool
         if snapshot.percentage >= limit {
             desired = false
-        } else if sailingMode && snapshot.percentage <= limit - sailingLevel {
-            desired = true
-        } else if snapshot.percentage <= limit - 1 {
-            desired = lastChargingAllowed ?? true
+        } else if sailingMode {
+            // Re-arm only below the sailing floor; between the floor and the
+            // limit the previous state is kept, so the pack can drift down
+            // instead of being topped up on every 1 % step.
+            desired = snapshot.percentage <= limit - sailingLevel
+                ? true : (lastChargingAllowed ?? false)
         } else {
-            desired = lastChargingAllowed ?? false
+            desired = true
         }
+        // No adapter-side discharge means the pack must simply not charge while
+        // it is still above the limit; the discharge phase above handles the
+        // other case.
         if !automaticDischarge, snapshot.percentage > limit {
             desired = false
         }
@@ -565,7 +654,7 @@ final class AppState: ObservableObject {
     private func setCharging(_ allowed: Bool) {
         guard lastChargingAllowed != allowed else { return }
         do {
-            try ChargeController.shared.setChargingAllowed(allowed)
+            try ChargeController.shared.setChargingAllowed(allowed, targetLimit: chargeVal)
             lastChargingAllowed = allowed
         } catch {
             lastChargingAllowed = nil
@@ -581,6 +670,14 @@ final class AppState: ObservableObject {
     private func updateChargeState() {
         if calibration != nil { chargeState = .calibrating; return }
         if !snapshot.isPresent { chargeState = .noBattery; return }
+        // Checked before `isPluggedIn`: a forced discharge clears that flag, and
+        // the state would otherwise read 「未连接电源」 while it is ours doing.
+        if ChargeController.shared.activeAdapterKey != nil || snapshot.instantAmperage < -0.05 {
+            if automaticDischarge, snapshot.percentage > chargeVal {
+                chargeState = .discharging
+                return
+            }
+        }
         if !snapshot.isPluggedIn { chargeState = .noAdapter; return }
         if heatPause { chargeState = .paused; return }
         if snapshot.fullyCharged || snapshot.percentage >= 100 { chargeState = .full; return }
@@ -893,21 +990,24 @@ final class AppState: ObservableObject {
         return stamp > 0 ? Date(timeIntervalSince1970: stamp) : nil
     }
 
-    private func startDischargeInternal(to target: Int) {
-        do {
-            if capabilities.strategy == .bclm {
-                try HelperClient.shared.smcWrite("BCLM", UInt8(max(0, min(100, target))))
-            }
-            try ChargeController.shared.setChargingAllowed(false)
-        } catch { }
-    }
-
+    /// 「开始放电」— one shot, to `target`.
+    ///
+    /// Uses the same lever ladder as automatic discharge. The old version wrote
+    /// BCLM and then called `setChargingAllowed(false)`, which on a BCLM Mac
+    /// immediately re-pinned the ceiling to the current charge and cancelled the
+    /// discharge it had just started.
     func startDischarge(to target: Int) {
+        guard target >= 1, target < snapshot.percentage else { return }
         guard snapshot.isPluggedIn else {
             statusNote = t("仅连接充电器时才能设置放电")
             return
         }
-        startDischargeInternal(to: target)
+        if let failure = ChargeController.shared.beginDischarge(to: target) {
+            statusNote = failure
+            log(t("放电"), failure)
+            return
+        }
+        manualDischargeTarget = target
         statusNote = tf("放电至 {p}%", "\(target)")
         log(t("放电"), tf("开始放电至 {p}%", "\(target)"))
     }

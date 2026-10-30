@@ -11,6 +11,7 @@ import Foundation
 import Darwin
 
 enum ChargeStrategy: String {
+    case systemLimit   // macOS 26+: the OS's own manual charge limit (PowerUI MCL)
     case bclm          // Apple Silicon: BCLM holds the maximum charge level
     case ch0bch0c      // Intel / T2: CH0B + CH0C inhibit charging
     case chte          // Newer Apple Silicon: CHTE charging-inhibit flag
@@ -18,6 +19,7 @@ enum ChargeStrategy: String {
 
     var title: String {
         switch self {
+        case .systemLimit: return t("系统充电上限（MCL）")
         case .bclm: return t("BCLM（充电上限）")
         case .ch0bch0c: return t("CH0B / CH0C（充电禁止）")
         case .chte: return t("CHTE（充电禁止标志）")
@@ -41,6 +43,7 @@ struct ChargeCapabilities {
 
     var summary: String {
         switch strategy {
+        case .systemLimit: return t("通过系统自带的充电上限控制，由 powerd 持久执行")
         case .bclm: return t("通过 BCLM 直接设置充电上限")
         case .ch0bch0c: return t("通过 CH0B/CH0C 禁止充电，由守护进程按阈值控制")
         case .chte: return t("通过 CHTE 禁止充电，由守护进程按阈值控制")
@@ -411,6 +414,9 @@ final class ChargeController {
 
     func detectCapabilities() -> ChargeCapabilities {
         var caps = ChargeCapabilities()
+        // The adapter probe is cached; a fresh scan must redo it (the helper may
+        // have been installed after the first attempt).
+        cachedAdapterCandidates = nil
         caps.hasHelper = HelperClient.shared.lastKnownInstalled
         let table = HelperClient.shared.keyInfoList(ChargeController.controlKeyCandidates)
         caps.bclm = table["BCLM"]
@@ -421,7 +427,13 @@ final class ChargeController {
         caps.chte = table["CHTE"]
         caps.chie = table["CHIE"]
 
-        if let bclm = caps.bclm, bclm.isWritable {
+        if SystemChargeLimit.shared.isAvailable {
+            // Prefer the OS's own limit where it exists: it is the only thing
+            // that survives macOS rewriting BCLM, and on macOS 26+ machines the
+            // SMC keys are usually gone entirely (verified on Mac14,9 /
+            // macOS 27: BCLM, CH0B, CH0C, CHTE all return keyNotFound).
+            caps.strategy = .systemLimit
+        } else if let bclm = caps.bclm, bclm.isWritable {
             caps.strategy = .bclm
         } else if caps.ch0b?.size == 1 && caps.ch0c?.size == 1,
                   caps.ch0b?.isWritable == true && caps.ch0c?.isWritable == true {
@@ -449,6 +461,17 @@ final class ChargeController {
     func applyChargeLimit(_ percent: Int) throws {
         let clamped = max(0, min(100, percent))
         switch capabilities.strategy {
+        case .systemLimit:
+            // MCL only spans 80…100. A lower target is enforced by stopping
+            // charging there instead (see `setChargingAllowed`), so the ceiling
+            // is parked at the floor rather than silently rejected.
+            let target = max(SystemChargeLimit.minimumSupported, clamped)
+            guard SystemChargeLimit.shared.setLimit(target) else {
+                throw HelperError.smc(t("系统充电上限写入未生效"))
+            }
+            if clamped < SystemChargeLimit.minimumSupported {
+                // Not an error: the pack simply charges past this value.
+            }
         case .bclm:
             try HelperClient.shared.smcWrite("BCLM", UInt8(clamped))
             // Some SMCs accept a write and keep their old value (seen on ACLC).
@@ -506,6 +529,37 @@ final class ChargeController {
         heldCeiling = nil
     }
 
+    /// Pins the charge limit at `percent` for the current power path.
+    ///
+    /// Which mechanism is used depends on the machine: an adapter cut forces a
+    /// real drain and works for any target; the OS MCL only spans 80…100 but is
+    /// owned by powerd and needs no re-write; the BCLM ceiling has to be pulsed
+    /// because macOS keeps putting it back.
+    @discardableResult
+    func beginDischarge(to target: Int) -> String? {
+        if canSwitchAdapter {
+            return beginForcedDischarge()
+        }
+        if hasPersistentCeiling {
+            // MCL cannot go below 80 %. A lower target would have to be written
+            // as 80, which is *above* the pack and would charge it instead of
+            // draining it — so refuse rather than do the opposite of the request.
+            guard target >= SystemChargeLimit.minimumSupported else {
+                return tf("系统充电上限最低 {p}%，无法放电到 {p}%",
+                          "\(SystemChargeLimit.minimumSupported)", "\(target)")
+            }
+            guard SystemChargeLimit.shared.setLimit(target) else {
+                return t("系统充电上限写入未生效")
+            }
+            return nil
+        }
+        guard canHoldCeiling else {
+            return t("本机既没有适配器断电键，也没有可写的充电上限")
+        }
+        holdCeiling(target)
+        return nil
+    }
+
     /// True when BCLM exists and accepts writes on this machine. Falls back to a
     /// one-key probe when the cached capability table has not been filled yet,
     /// so a stale detection cannot silently disable the hold.
@@ -514,11 +568,37 @@ final class ChargeController {
         return HelperClient.shared.keyInfoList(["BCLM"])["BCLM"]?.size == 1
     }
 
-    func setChargingAllowed(_ allowed: Bool) throws {
+    /// True when the charge limit can be pinned without the 400 ms pulse.
+    /// MCL is owned by powerd and stays put, so it needs no timer.
+    var hasPersistentCeiling: Bool {
+        capabilities.strategy == .systemLimit && SystemChargeLimit.shared.isAvailable
+    }
+
+    func setChargingAllowed(_ allowed: Bool, targetLimit: Int? = nil) throws {
         switch capabilities.strategy {
+        case .systemLimit:
+            // MCL is a ceiling, not a switch: "stop charging" is expressed by
+            // the ceiling sitting at the pack's level. Below the MCL floor
+            // (80 %) it cannot follow the pack at all, so a pause request there
+            // is simply not representable — the ceiling stays on the requested
+            // limit and macOS charges up to it.
+            let requested = targetLimit ?? 100
+            let current = BatteryReader.read().percentage
+            let ceiling = allowed ? requested : min(requested, current)
+            if !allowed, SystemChargeLimit.shared.clamped(ceiling) > current {
+                // Nothing to write: the ceiling is already the best this
+                // hardware can do. Reporting an error every 2 s would bury the
+                // real status line.
+                return
+            }
+            guard SystemChargeLimit.shared.setLimit(ceiling) else {
+                throw HelperError.smc(t("系统充电上限写入未生效"))
+            }
         case .bclm:
-            // BCLM is authoritative on Apple Silicon; 100 restores full charging.
-            if !allowed {
+            if allowed {
+                let limit = targetLimit ?? 100
+                try HelperClient.shared.smcWrite("BCLM", UInt8(max(0, min(100, limit))))
+            } else {
                 let current = BatteryReader.read().percentage
                 try HelperClient.shared.smcWrite("BCLM", UInt8(max(0, min(100, current))))
             }
@@ -542,6 +622,11 @@ final class ChargeController {
             // print "SMC 操作失败" twice.
             throw NSError(domain: "InfiniCal.SMC", code: 1,
                           userInfo: [NSLocalizedDescriptionKey: error])
+        }
+        if capabilities.strategy == .systemLimit {
+            // MCL is persisted by powerd, so an un-lifted limit would keep the
+            // pack below full for the whole pre-charge phase.
+            try applyChargeLimit(100)
         }
         if capabilities.strategy == .bclm {
             try applyChargeLimit(100)
@@ -569,75 +654,79 @@ final class ChargeController {
     /// Marks an adapter-off state this app created, so a crash that skips the
     /// quit path cannot leave the Mac running on battery indefinitely.
     private let adapterOffFlag = "adapterDisabledByInfiniCal"
+    private let adapterOffKey = "adapterDisabledKeyByInfiniCal"
 
-    /// `off` disables the adapter, `on` restores it.
+    /// Candidates for switching off the AC power adapter:
+    /// On Apple Silicon (macOS 13/14/15/26+), CHIE is the authoritative key (0x08 = cut adapter, 0x00 = restore).
+    /// CH0I/CH0J are older Apple Silicon alternatives (0x01 = cut, 0x00 = restore).
     ///
-    /// Every candidate must be flagged writable. `ACEN` on a MacBookPro15,1 is
-    /// not: the SMC answers 0x7A to both `00` and `01`, and its attribute byte
-    /// carries no write bit. Its 1 → 0 change in an AlDente snapshot was the
-    /// adapter being unplugged, not a software switch — so it is read-only
-    /// status and must never be written.
-    ///
-    /// Apple Silicon uses the batt protocol: CH0I/CH0J = 1, CHIE = 8.
-    /// ACLC is excluded — it drives the MagSafe LED, not the power path.
-    private var adapterControl: (key: String, off: UInt8, on: UInt8)? {
+    /// The probe costs a helper round trip, and `canSwitchAdapter` is read on
+    /// every tick, so the result is cached until the next capability scan.
+    private var cachedAdapterCandidates: [(key: String, off: UInt8, on: UInt8)]?
+
+    private var adapterCandidates: [(key: String, off: UInt8, on: UInt8)] {
+        if let cached = cachedAdapterCandidates { return cached }
+        var found: [(key: String, off: UInt8, on: UInt8)] = []
         #if arch(arm64)
-        for (key, info, off) in [("CH0I", capabilities.ch0i, UInt8(1)),
-                                 ("CH0J", capabilities.ch0j, UInt8(1)),
-                                 ("CHIE", capabilities.chie, UInt8(8))] {
-            if let info, info.size == 1, info.isWritable { return (key, off, 0) }
-        }
+        let table = HelperClient.shared.keyInfoList(["CHIE", "CH0I", "CH0J"])
+        if let chie = table["CHIE"], chie.size == 1, chie.isWritable { found.append(("CHIE", 0x08, 0x00)) }
+        if let ch0i = table["CH0I"], ch0i.size == 1, ch0i.isWritable { found.append(("CH0I", 0x01, 0x00)) }
+        if let ch0j = table["CH0J"], ch0j.size == 1, ch0j.isWritable { found.append(("CH0J", 0x01, 0x00)) }
         #endif
-        return nil
+        cachedAdapterCandidates = found
+        return found
     }
 
     /// True when this machine exposes a key for switching off the adapter.
-    var canSwitchAdapter: Bool { adapterControl != nil }
+    var canSwitchAdapter: Bool { !adapterCandidates.isEmpty }
 
     /// The key currently holding the adapter off, for the calibration log.
     private(set) var activeAdapterKey: String?
 
-    /// Asserts "adapter off" now.
-    ///
-    /// Called repeatedly while a discharge phase runs: the key can be reset by
-    /// the SMC, and a write can be refused while the charger is still
-    /// transitioning, which is why AlDente re-writes its discharge key about
-    /// every 500 ms instead of once. Nil means the write was accepted — not
-    /// that the power source actually changed.
+    /// Asserts "adapter off" now. Disconnects the power adapter via SMC, forcing the Mac to run on battery power.
     @discardableResult
     func beginForcedDischarge() -> String? {
-        guard let control = adapterControl else {
-            return t("本机没有可写的适配器切换键")
+        let candidates = adapterCandidates
+        guard !candidates.isEmpty else {
+            return t("本机没有可用的适配器切换键")
         }
+
+        // Keep one recovery target until it has been restored. A timeout can
+        // occur after a successful hardware write, so falling through to another
+        // key would make it impossible to know which adapter path to restore.
+        guard let candidate = candidates.first(where: { $0.key == savedAdapterState?.key })
+                ?? (savedAdapterState == nil ? candidates.first : nil) else {
+            return t("适配器切换失败")
+        }
+        savedAdapterState = (candidate.key, candidate.on)
+        UserDefaults.standard.set(candidate.key, forKey: adapterOffKey)
+        UserDefaults.standard.set(true, forKey: adapterOffFlag)
         do {
-            if savedAdapterState == nil {
-                let (_, raw) = try SMC.shared.readBytes(control.key)
-                guard raw.count == 1 else { throw HelperError.smc(t("适配器控制数据长度错误")) }
-                // Remember how to put it back even if the write fails afterwards.
-                savedAdapterState = (control.key, control.on)
-            }
-            try HelperClient.shared.smcWriteBytes(control.key, [control.off])
-            if let (_, check) = try? SMC.shared.readBytes(control.key), check != [control.off] {
-                throw HelperError.smc(tf("{p} 写入后被 SMC 忽略", control.key))
-            }
-            activeAdapterKey = control.key
-            UserDefaults.standard.set(true, forKey: adapterOffFlag)
+            try HelperClient.shared.smcWriteBytes(candidate.key, [candidate.off])
+            activeAdapterKey = candidate.key
+            adapterRestoreError = nil
             return nil
         } catch {
-            return error.localizedDescription
+            // The outcome may be uncertain; attempt rollback and keep the
+            // recovery record if that fails too.
+            let failure = error.localizedDescription
+            endForcedDischarge()
+            return failure
         }
     }
 
     func endForcedDischarge() {
+        // Only write when this app actually cut the adapter. Restoring "on"
+        // unconditionally would poke CHIE on every calibration start.
         guard let saved = savedAdapterState else { return }
         do {
-            // Always restore "adapter on": a stale saved 0 from a crashed
-            // session would otherwise leave the Mac on battery forever.
             try HelperClient.shared.smcWriteBytes(saved.key, [saved.on])
+            // Never discard recovery information before the restore succeeds.
             savedAdapterState = nil
             activeAdapterKey = nil
-            adapterRestoreError = nil
             UserDefaults.standard.removeObject(forKey: adapterOffFlag)
+            UserDefaults.standard.removeObject(forKey: adapterOffKey)
+            adapterRestoreError = nil
         } catch {
             adapterRestoreError = error.localizedDescription
         }
@@ -648,10 +737,15 @@ final class ChargeController {
     /// Only runs when this app set the flag, so it never fights another tool.
     func restoreAdapterLeftOff() {
         guard UserDefaults.standard.bool(forKey: adapterOffFlag),
-              savedAdapterState == nil,
-              let control = adapterControl else { return }
-        try? HelperClient.shared.smcWriteBytes(control.key, [control.on])
-        UserDefaults.standard.removeObject(forKey: adapterOffFlag)
+              savedAdapterState == nil else { return }
+        let recordedKey = UserDefaults.standard.string(forKey: adapterOffKey)
+        // Older versions saved only a flag; retain that migration path. New
+        // versions must restore the actual key, never an unrelated first match.
+        let control = recordedKey == nil ? adapterCandidates.first
+            : adapterCandidates.first(where: { $0.key == recordedKey })
+        guard let control else { return }
+        savedAdapterState = (control.key, control.on)
+        endForcedDischarge()
     }
 
     /// True when BCLM is holding a ceiling below full.    ///
@@ -664,6 +758,11 @@ final class ChargeController {
     /// inhibit that is set belongs to something else (another charge-limiter
     /// tool, for instance) and does block a run.
     static func hasChargeCeiling() -> Bool {
+        // On macOS 26+ the ceiling lives in powerd, not in BCLM, so reading only
+        // the SMC key reports "no ceiling" on exactly the machines that have one.
+        if SystemChargeLimit.shared.isAvailable {
+            return SystemChargeLimit.shared.holdsBelowFull
+        }
         guard let limit = try? SMC.shared.readDouble("BCLM") else { return false }
         return limit < 99.5
     }

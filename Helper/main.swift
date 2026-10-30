@@ -152,7 +152,8 @@ func serve(connection fd: Int32) {
     // Validate the peer is the user that installed the helper.
     var uid: uid_t = 0
     var gid: gid_t = 0
-    if getpeereid(fd, &uid, &gid) == 0, ownerUID != 0, uid != 0, uid != ownerUID {
+    guard getpeereid(fd, &uid, &gid) == 0 else { return }
+    if ownerUID != 0, uid != 0, uid != ownerUID {
         return
     }
     var buffer = Data()

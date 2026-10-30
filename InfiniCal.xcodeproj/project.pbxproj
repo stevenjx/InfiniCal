@@ -14,13 +14,11 @@
 		73B3FAA0F01FF2318C3BCF82 /* PowerMeter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2284B3756D13B4E160B65DA6 /* PowerMeter.swift */; };
 		807190014BCA5BFEBC509EFB /* PowerFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E0624F576F0BBB118F18061 /* PowerFormat.swift */; };
 		15F27AE38801C8E4E5166CCD /* ChargeController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1911408CF8F9FDBD1AF4BD3 /* ChargeController.swift */; };
+		24CFF6E0AC9321A769F51167 /* SystemChargeLimit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E1359679B8FB4D3D2618027 /* SystemChargeLimit.swift */; };
 		2BD97035A7F83D7602368768 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 711B2575568107B5737BD937 /* Models.swift */; };
 		38FD3062915C1F55405180DF /* CalibrationModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE2F23A422588E9B0DD52018 /* CalibrationModel.swift */; };
 		1B04BD6ABD3CAA993927E3C9 /* CalibrationMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35D5B5FCA5541756C6343B09 /* CalibrationMath.swift */; };
 		05A817E4FAC9C671F83F8133 /* CalibrationEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC7E4FA2E504472DE1FD193F /* CalibrationEngine.swift */; };
-		9C8B7A6D5E4F3A2B1C0D9E8F /* GPUStress.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F7A1C9B2D4E6F8A0B1C2D3E /* GPUStress.swift */; };
-		5A1B3C5D7E9F0A2B4C6D8E0F /* ProcessSampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D2E4F6A8B0C1D3E5F7A9B0C /* ProcessSampler.swift */; };
-		4C9E1A3B5D7F2C4E6A8B0D1F /* HIDThermal.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B8D2A4C9E1F3A5B7C9D0E2F /* HIDThermal.swift */; };
 		85D163081A208A1E836F56DA /* HistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C509D83CBC83A13CF4407D84 /* HistoryStore.swift */; };
 		4679ED6D469B3C728D05C8BC /* Notifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82BE2237B9BA6EC865EF74E4 /* Notifier.swift */; };
 		437B21A60C4A837BEB66E9BB /* SleepControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47148AED6335858B49C9DC9F /* SleepControl.swift */; };
@@ -82,13 +80,11 @@
 		2284B3756D13B4E160B65DA6 /* PowerMeter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerMeter.swift; sourceTree = "<group>"; };
 		2E0624F576F0BBB118F18061 /* PowerFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerFormat.swift; sourceTree = "<group>"; };
 		E1911408CF8F9FDBD1AF4BD3 /* ChargeController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChargeController.swift; sourceTree = "<group>"; };
+		8E1359679B8FB4D3D2618027 /* SystemChargeLimit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemChargeLimit.swift; sourceTree = "<group>"; };
 		711B2575568107B5737BD937 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		EE2F23A422588E9B0DD52018 /* CalibrationModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrationModel.swift; sourceTree = "<group>"; };
 		35D5B5FCA5541756C6343B09 /* CalibrationMath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrationMath.swift; sourceTree = "<group>"; };
 		FC7E4FA2E504472DE1FD193F /* CalibrationEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrationEngine.swift; sourceTree = "<group>"; };
-		3F7A1C9B2D4E6F8A0B1C2D3E /* GPUStress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPUStress.swift; sourceTree = "<group>"; };
-		7D2E4F6A8B0C1D3E5F7A9B0C /* ProcessSampler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessSampler.swift; sourceTree = "<group>"; };
-		6B8D2A4C9E1F3A5B7C9D0E2F /* HIDThermal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HIDThermal.swift; sourceTree = "<group>"; };
 		C509D83CBC83A13CF4407D84 /* HistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryStore.swift; sourceTree = "<group>"; };
 		82BE2237B9BA6EC865EF74E4 /* Notifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notifier.swift; sourceTree = "<group>"; };
 		47148AED6335858B49C9DC9F /* SleepControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepControl.swift; sourceTree = "<group>"; };
@@ -177,13 +173,11 @@
 				2284B3756D13B4E160B65DA6 /* PowerMeter.swift */,
 				2E0624F576F0BBB118F18061 /* PowerFormat.swift */,
 				E1911408CF8F9FDBD1AF4BD3 /* ChargeController.swift */,
+				8E1359679B8FB4D3D2618027 /* SystemChargeLimit.swift */,
 				711B2575568107B5737BD937 /* Models.swift */,
 				EE2F23A422588E9B0DD52018 /* CalibrationModel.swift */,
 				35D5B5FCA5541756C6343B09 /* CalibrationMath.swift */,
 				FC7E4FA2E504472DE1FD193F /* CalibrationEngine.swift */,
-				3F7A1C9B2D4E6F8A0B1C2D3E /* GPUStress.swift */,
-				7D2E4F6A8B0C1D3E5F7A9B0C /* ProcessSampler.swift */,
-				6B8D2A4C9E1F3A5B7C9D0E2F /* HIDThermal.swift */,
 				C509D83CBC83A13CF4407D84 /* HistoryStore.swift */,
 				82BE2237B9BA6EC865EF74E4 /* Notifier.swift */,
 				47148AED6335858B49C9DC9F /* SleepControl.swift */,
@@ -333,13 +327,11 @@
 				73B3FAA0F01FF2318C3BCF82 /* PowerMeter.swift in Sources */,
 				807190014BCA5BFEBC509EFB /* PowerFormat.swift in Sources */,
 				15F27AE38801C8E4E5166CCD /* ChargeController.swift in Sources */,
+				24CFF6E0AC9321A769F51167 /* SystemChargeLimit.swift in Sources */,
 				2BD97035A7F83D7602368768 /* Models.swift in Sources */,
 				38FD3062915C1F55405180DF /* CalibrationModel.swift in Sources */,
 				1B04BD6ABD3CAA993927E3C9 /* CalibrationMath.swift in Sources */,
 				05A817E4FAC9C671F83F8133 /* CalibrationEngine.swift in Sources */,
-				9C8B7A6D5E4F3A2B1C0D9E8F /* GPUStress.swift in Sources */,
-				5A1B3C5D7E9F0A2B4C6D8E0F /* ProcessSampler.swift in Sources */,
-				4C9E1A3B5D7F2C4E6A8B0D1F /* HIDThermal.swift in Sources */,
 				85D163081A208A1E836F56DA /* HistoryStore.swift in Sources */,
 				4679ED6D469B3C728D05C8BC /* Notifier.swift in Sources */,
 				437B21A60C4A837BEB66E9BB /* SleepControl.swift in Sources */,
@@ -454,7 +446,7 @@
 				);
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 14;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Resources/Info.plist;
@@ -462,7 +454,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.1;
+				MARKETING_VERSION = 1.0.9;
 				PRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -479,7 +471,7 @@
 				);
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 14;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Resources/Info.plist;
@@ -487,7 +479,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.1;
+				MARKETING_VERSION = 1.0.9;
 				PRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -502,9 +494,9 @@
 					arm64,
 					x86_64,
 				);
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 14;
 				GENERATE_INFOPLIST_FILE = NO;
-				MARKETING_VERSION = 1.0.1;
+				MARKETING_VERSION = 1.0.9;
 				PRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical.helper;
 				PRODUCT_NAME = com.infinitycomputer.infinical.helper;
 				SKIP_INSTALL = YES;
@@ -519,9 +511,9 @@
 					arm64,
 					x86_64,
 				);
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 14;
 				GENERATE_INFOPLIST_FILE = NO;
-				MARKETING_VERSION = 1.0.1;
+				MARKETING_VERSION = 1.0.9;
 				PRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical.helper;
 				PRODUCT_NAME = com.infinitycomputer.infinical.helper;
 				SKIP_INSTALL = YES;
