@@ -86,8 +86,13 @@ final class AppState: ObservableObject {
 
     @Published var chargeVal: Int = 80 {
         didSet {
+            if chargeVal < 1 || chargeVal > 100 {
+                chargeVal = max(1, min(100, chargeVal))
+            }
             store(chargeVal, "chargeVal")
-            invalidateAppliedLimit()
+            lastAppliedLimit = nil
+            lastChargingAllowed = nil
+            userPaused = false
             // A limit the user typed in means they took over; stop tracking the
             // one-shot top-up instead of overwriting their choice later.
             if !suppressTopUpCancel, topUpRestore != nil, chargeVal != 100 {
@@ -102,11 +107,14 @@ final class AppState: ObservableObject {
         didSet {
             store(allowBelow80, "allowChargeLimitsBelow80")
             if !allowBelow80, chargeVal < 80 { chargeVal = 80 }
+            if allowBelow80 && !ChargeController.shared.canSetBelow80 {
+                statusNote = t("当前系统充电上限后端最低只能设置为 80%，低于 80% 的限制不可用")
+            }
         }
     }
     @Published var automaticDischarge: Bool = true { didSet { store(automaticDischarge, "automaticDischarge") } }
-    @Published var sailingMode: Bool = true { didSet { store(sailingMode, "sailingMode") } }
-    @Published var sailingLevel: Int = 5 { didSet { store(sailingLevel, "sailingLevel") } }
+    @Published var sailingMode: Bool = true { didSet { store(sailingMode, "sailingMode"); lastChargingAllowed = nil } }
+    @Published var sailingLevel: Int = 5 { didSet { store(sailingLevel, "sailingLevel"); lastChargingAllowed = nil } }
     @Published var heatProtectMode: Bool = false { didSet { store(heatProtectMode, "heatProtectMode") } }
     @Published var maxTemperature: Int = 35 { didSet { store(maxTemperature, "maxTemperature") } }
     @Published var calibrationBackup: Int = 80 { didSet { store(calibrationBackup, "calibrationBackupPercentage") } }
@@ -500,6 +508,14 @@ final class AppState: ObservableObject {
             }
         }
 
+        if userPaused {
+            manualDischargeTarget = nil
+            ChargeController.shared.stopHoldingCeiling()
+            ChargeController.shared.endForcedDischarge()
+            setCharging(false)
+            return
+        }
+
         if let target = manualDischargeTarget {
             if snapshot.percentage <= target {
                 manualDischargeTarget = nil
@@ -549,7 +565,7 @@ final class AppState: ObservableObject {
 
         if heatProtectMode, snapshot.temperature >= Double(maxTemperature) {
             heatPause = true
-            setCharging(false)
+            guard setCharging(false) else { return }
             // Say what actually happened. On a machine whose only lever is the
             // OS charge limit (floor 80 %), "paused" is only true when the pack
             // is at or above that floor; below it nothing can stop the charge.
@@ -581,16 +597,23 @@ final class AppState: ObservableObject {
             }
         }
 
+        if capabilities.strategy == .systemLimit, chargeVal < 80 {
+            // Migrate a stored/custom value that this backend cannot express.
+            // Make the effective setting visible instead of silently clamping a
+            // write or abandoning the entire control loop on every tick.
+            chargeVal = 80
+            statusNote = t("当前系统充电上限后端最低只能设置为 80%，低于 80% 的限制不可用")
+        }
         let limit = chargeVal
         if lastAppliedLimit != limit {
             do {
                 try ChargeController.shared.applyChargeLimit(limit)
                 lastAppliedLimit = limit
             } catch {
-                // Software enforcement still applies; surface the error once.
-                if capabilities.strategy == .unavailable {
-                    statusNote = error.localizedDescription
-                }
+                // A failed write must stop this tick from making decisions based
+                // on a limit the hardware never accepted.
+                statusNote = error.localizedDescription
+                return
             }
         }
 
@@ -618,55 +641,33 @@ final class AppState: ObservableObject {
                 ChargeController.shared.stopHoldingCeiling()
                 lastAppliedLimit = nil
             }
-            if ChargeController.shared.hasPersistentCeiling,
-               SystemChargeLimit.shared.limit.map({ $0 < chargeVal }) == true {
-                // A persisted MCL below the limit would otherwise keep the pack
-                // pinned where the last discharge left it.
-                try? ChargeController.shared.applyChargeLimit(limit)
-                lastAppliedLimit = limit
-            }
         }
 
         // 航海模式（Sailing）：充到限制值后放开，等电量自行掉到
         // 「限制 − 差异」再补电。不开启时，只要低于限制就立刻补回
         // ——这正是与「反复充到上限」的区别所在。
-        var desired: Bool
-        if snapshot.percentage >= limit {
-            desired = false
-        } else if sailingMode {
-            // Re-arm only below the sailing floor; between the floor and the
-            // limit the previous state is kept, so the pack can drift down
-            // instead of being topped up on every 1 % step.
-            desired = snapshot.percentage <= limit - sailingLevel
-                ? true : (lastChargingAllowed ?? false)
-        } else {
-            desired = true
-        }
-        // No adapter-side discharge means the pack must simply not charge while
-        // it is still above the limit; the discharge phase above handles the
-        // other case.
-        if !automaticDischarge, snapshot.percentage > limit {
-            desired = false
-        }
+        let desired = ChargePolicy.allowsCharging(
+            percentage: snapshot.percentage, limit: limit, sailing: sailingMode,
+            difference: sailingLevel, previous: lastChargingAllowed,
+            isCharging: snapshot.isCharging)
         setCharging(desired)
     }
 
-    private func setCharging(_ allowed: Bool) {
-        guard lastChargingAllowed != allowed else { return }
+    @discardableResult
+    private func setCharging(_ allowed: Bool) -> Bool {
+        guard lastChargingAllowed != allowed else { return true }
         do {
             try ChargeController.shared.setChargingAllowed(allowed, targetLimit: chargeVal)
             lastChargingAllowed = allowed
+            return true
         } catch {
             lastChargingAllowed = nil
             statusNote = error.localizedDescription
+            return false
         }
     }
 
-    /// Forces the next tick to write the ceiling again.
-    private func invalidateAppliedLimit() {
-        lastAppliedLimit = nil
-    }
-
+    // MARK: - Charge-state presentation
     private func updateChargeState() {
         if calibration != nil { chargeState = .calibrating; return }
         if !snapshot.isPresent { chargeState = .noBattery; return }
@@ -900,8 +901,7 @@ final class AppState: ObservableObject {
         clearTopUpPersistence()
         smartChargeStartedFor = nil
         lastChargingAllowed = nil
-        setCharging(false)
-        statusNote = t("充电已暂停")
+        if setCharging(false) { statusNote = t("充电已暂停") }
     }
 
 
@@ -998,6 +998,7 @@ final class AppState: ObservableObject {
     /// discharge it had just started.
     func startDischarge(to target: Int) {
         guard target >= 1, target < snapshot.percentage else { return }
+        userPaused = false
         guard snapshot.isPluggedIn else {
             statusNote = t("仅连接充电器时才能设置放电")
             return

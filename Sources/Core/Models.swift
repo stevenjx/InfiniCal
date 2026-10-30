@@ -58,6 +58,18 @@ enum CalibrationStage: Int, CaseIterable {
     }
 }
 
+/// Pure hysteresis decision, independent of hardware writes and UI state.
+enum ChargePolicy {
+    static func allowsCharging(percentage: Int, limit: Int, sailing: Bool,
+                               difference: Int, previous: Bool?, isCharging: Bool) -> Bool {
+        if percentage >= limit { return false }
+        if !sailing { return true }
+        let floor = max(1, limit - max(1, min(30, difference)))
+        if percentage <= floor { return true }
+        return previous ?? isCharging
+    }
+}
+
 struct CalibrationRun {
     var stage: CalibrationStage = .chargeToFull
     var startedAt = Date()

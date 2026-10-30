@@ -84,6 +84,9 @@ final class HelperClient {
     static let legacySocketPath = "/var/run/com.aibattery.helper.sock"
 
     private(set) var lastKnownInstalled = false
+    private(set) var helperProtocolVersion = 0
+
+    var supportsInflowCommand: Bool { helperProtocolVersion >= 2 }
 
     var bundledHelperPath: String {
         Bundle.main.bundlePath + "/Contents/Library/Helper/com.infinitycomputer.infinical.helper"
@@ -96,7 +99,14 @@ final class HelperClient {
 
     func refreshInstallState() -> Bool {
         let exists = FileManager.default.fileExists(atPath: HelperClient.helperPath)
-        lastKnownInstalled = exists && ping()
+        if exists, let response = request(["cmd": "ping"], timeout: 1.0),
+           response["ok"] as? Bool == true {
+            helperProtocolVersion = response["version"] as? Int ?? 1
+            lastKnownInstalled = true
+        } else {
+            helperProtocolVersion = 0
+            lastKnownInstalled = false
+        }
         return lastKnownInstalled
     }
 
@@ -462,15 +472,11 @@ final class ChargeController {
         let clamped = max(0, min(100, percent))
         switch capabilities.strategy {
         case .systemLimit:
-            // MCL only spans 80…100. A lower target is enforced by stopping
-            // charging there instead (see `setChargingAllowed`), so the ceiling
-            // is parked at the floor rather than silently rejected.
-            let target = max(SystemChargeLimit.minimumSupported, clamped)
-            guard SystemChargeLimit.shared.setLimit(target) else {
-                throw HelperError.smc(t("系统充电上限写入未生效"))
+            guard clamped >= SystemChargeLimit.minimumSupported else {
+                throw HelperError.smc(t("当前系统充电上限后端最低只能设置为 80%，低于 80% 的限制不可用"))
             }
-            if clamped < SystemChargeLimit.minimumSupported {
-                // Not an error: the pack simply charges past this value.
+            guard SystemChargeLimit.shared.setLimit(clamped) else {
+                throw HelperError.smc(t("系统充电上限写入未生效"))
             }
         case .bclm:
             try HelperClient.shared.smcWrite("BCLM", UInt8(clamped))
@@ -497,17 +503,9 @@ final class ChargeController {
     /// The ceiling currently being held, nil when nothing is held.
     private(set) var heldCeiling: Int?
 
-    /// Holds BCLM at `percent` by rewriting it every 400 ms.
-    ///
-    /// This is the only way to make a BCLM-only Mac drain while the adapter is
-    /// connected: macOS puts the ceiling back within a few hundred
-    /// milliseconds, so a single write is undone before it can act. Measured on
-    /// a MacBookPro15,1 — one write left the machine on AC for a minute, 400 ms
-    /// re-writes moved it to battery within the first second.
-    ///
-    /// Deliberately does not consult `capabilities.strategy`: the strategy is a
-    /// cached detection result, and gating the discharge on it meant a failed
-    /// early detection silently disabled the whole phase.
+    /// Legacy BCLM ceiling hold. This is a charge-ceiling request, not proof
+    /// that the adapter was disconnected. Intel discharge uses DisableInflow;
+    /// actual discharge must always be verified with negative pack current.
     func holdCeiling(_ percent: Int) {
         let clamped = max(0, min(100, percent))
         if heldCeiling == clamped, ceilingTimer != nil { return }
@@ -568,6 +566,15 @@ final class ChargeController {
         return HelperClient.shared.keyInfoList(["BCLM"])["BCLM"]?.size == 1
     }
 
+    /// True when this backend can represent a ceiling below 80%.
+    var canSetBelow80: Bool {
+        switch capabilities.strategy {
+        case .systemLimit: return false
+        case .bclm, .ch0bch0c, .chte: return true
+        case .unavailable: return false
+        }
+    }
+
     /// True when the charge limit can be pinned without the 400 ms pulse.
     /// MCL is owned by powerd and stays put, so it needs no timer.
     var hasPersistentCeiling: Bool {
@@ -586,10 +593,7 @@ final class ChargeController {
             let current = BatteryReader.read().percentage
             let ceiling = allowed ? requested : min(requested, current)
             if !allowed, SystemChargeLimit.shared.clamped(ceiling) > current {
-                // Nothing to write: the ceiling is already the best this
-                // hardware can do. Reporting an error every 2 s would bury the
-                // real status line.
-                return
+                throw HelperError.smc(t("当前电量低于系统上限下限 80%，无法通过 MCL 暂停充电"))
             }
             guard SystemChargeLimit.shared.setLimit(ceiling) else {
                 throw HelperError.smc(t("系统充电上限写入未生效"))
@@ -678,15 +682,49 @@ final class ChargeController {
     }
 
     /// True when this machine exposes a key for switching off the adapter.
-    var canSwitchAdapter: Bool { !adapterCandidates.isEmpty }
+    var canSwitchAdapter: Bool { !adapterCandidates.isEmpty || usesIntelInflow }
 
     /// The key currently holding the adapter off, for the calibration log.
     private(set) var activeAdapterKey: String?
+    private var inflowLeaseActive = false
+
+    /// This is a candidate backend, not a claim that the driver supports it.
+    var usesIntelInflow: Bool {
+        #if arch(x86_64)
+        return true
+        #else
+        return false
+        #endif
+    }
+
+    private func requestInflow(_ disabled: Bool) -> String? {
+        guard HelperClient.shared.lastKnownInstalled else {
+            return HelperError.notInstalled.localizedDescription
+        }
+        guard HelperClient.shared.supportsInflowCommand else {
+            return t("特权助手版本过旧，请重新安装或更新助手后再校准")
+        }
+        guard let response = HelperClient.shared.request(["cmd": "inflow", "disabled": disabled]) else {
+            return t("DisableInflow 助手无响应；租约将在 15 秒内自动到期")
+        }
+        guard response["ok"] as? Bool == true else {
+            return (response["error"] as? String) ?? t("DisableInflow 不可用，请更新特权助手")
+        }
+        return nil
+    }
 
     /// Asserts "adapter off" now. Disconnects the power adapter via SMC, forcing the Mac to run on battery power.
     @discardableResult
     func beginForcedDischarge() -> String? {
         let candidates = adapterCandidates
+        if candidates.isEmpty, usesIntelInflow {
+            if let error = requestInflow(true) { return error }
+            inflowLeaseActive = true
+            activeAdapterKey = "DisableInflow"
+            UserDefaults.standard.set(true, forKey: adapterOffFlag)
+            UserDefaults.standard.set("DisableInflow", forKey: adapterOffKey)
+            return nil
+        }
         guard !candidates.isEmpty else {
             return t("本机没有可用的适配器切换键")
         }
@@ -716,6 +754,18 @@ final class ChargeController {
     }
 
     func endForcedDischarge() {
+        if inflowLeaseActive {
+            if let error = requestInflow(false) {
+                adapterRestoreError = error
+                return
+            }
+            inflowLeaseActive = false
+            activeAdapterKey = nil
+            UserDefaults.standard.removeObject(forKey: adapterOffFlag)
+            UserDefaults.standard.removeObject(forKey: adapterOffKey)
+            adapterRestoreError = nil
+            return
+        }
         // Only write when this app actually cut the adapter. Restoring "on"
         // unconditionally would poke CHIE on every calibration start.
         guard let saved = savedAdapterState else { return }
@@ -738,6 +788,12 @@ final class ChargeController {
     func restoreAdapterLeftOff() {
         guard UserDefaults.standard.bool(forKey: adapterOffFlag),
               savedAdapterState == nil else { return }
+        if UserDefaults.standard.string(forKey: adapterOffKey) == "DisableInflow", usesIntelInflow {
+            inflowLeaseActive = true
+            activeAdapterKey = "DisableInflow"
+            endForcedDischarge()
+            return
+        }
         let recordedKey = UserDefaults.standard.string(forKey: adapterOffKey)
         // Older versions saved only a flag; retain that migration path. New
         // versions must restore the actual key, never an unrelated first match.

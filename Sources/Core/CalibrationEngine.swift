@@ -495,6 +495,7 @@ final class CalibrationEngine: ObservableObject {
             .map { "\($0)=\(present.contains($0) ? "有" : "无")" }
             .joined(separator: " "))
         append("SMC: " + caps.rawKeys.map { "\($0.0)=\($0.1)" }.joined(separator: "; "))
+        append(tf("特权助手协议版本：{p}", "\(HelperClient.shared.helperProtocolVersion)"))
         append(tf("放电方式：{p}", drainLeverDescription))
 
         phase = .chargingToFull
@@ -769,7 +770,7 @@ final class CalibrationEngine: ObservableObject {
     /// What the current phase actually armed, for the log and the UI hint.
     private var drainLeverDescription: String {
         let controller = ChargeController.shared
-        if controller.canSwitchAdapter { return t("适配器断电（接电时也能放电）") }
+        if controller.canSwitchAdapter { return t("适配器断电/DisableInflow（接电时也能放电）") }
         if controller.hasPersistentCeiling { return t("系统充电上限（80% 起）") }
         if controller.canHoldCeiling { return t("BCLM 上限（需要持续重写）") }
         return t("无可用放电杠杆")
@@ -853,6 +854,11 @@ final class CalibrationEngine: ObservableObject {
     /// putting the value back.
     private func startDrain(hold: Int) {
         if ChargeController.shared.canSwitchAdapter {
+            if let failure = ChargeController.shared.beginForcedDischarge() {
+                append(tf("适配器切换请求失败 — {p}", failure))
+                needsUnplugForDischarge = true
+                return
+            }
             startStressLoad()
             return
         }

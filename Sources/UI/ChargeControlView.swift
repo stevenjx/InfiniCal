@@ -19,7 +19,7 @@ struct ChargeControlView: View {
                     HelpDot(text: t("设置电池允许充到的最高电量。达到该数值后 InfiniCal 会暂停充电，让 MacBook 直接使用电源适配器供电。"))
                     Spacer()
                     ValueStepper(value: $state.chargeVal,
-                                 range: state.allowBelow80 ? 0...100 : 80...100,
+                                 range: state.allowBelow80 && ChargeController.shared.canSetBelow80 ? 1...100 : 80...100,
                                  step: 5)
                         .frame(width: 108)
                 }
@@ -45,7 +45,7 @@ struct ChargeControlView: View {
                 }
 
                 ToggleRow(symbol: "exclamationmark.triangle",
-                          title: tf("允许充电至低于 {p}% 的电量", "\(state.chargeVal)"),
+                          title: t("允许充电上限低于 80%"),
                           help: t("关闭后，充电限制最低只能设置为 80%。"),
                           isOn: Binding(get: { state.allowBelow80 },
                                         set: { state.allowBelow80 = $0 }))
@@ -67,9 +67,9 @@ struct ChargeControlView: View {
                             Text(t("差异:"))
                                 .font(.system(size: 12))
                                 .foregroundColor(theme.textSecondary)
-                            ValueStepper(value: $state.sailingLevel, range: 1...30, step: 1)
+                            ValueStepper(value: $state.sailingLevel, range: 1...max(1, min(30, state.chargeVal - 1)), step: 1)
                                 .frame(width: 92)
-                            Text(tf("→ 将航海至 {p}%.", "\(max(0, state.chargeVal - state.sailingLevel))"))
+                            Text(tf("→ 将航海至 {p}%.", "\(max(1, state.chargeVal - state.sailingLevel))"))
                                 .font(.system(size: 12))
                                 .foregroundColor(theme.textPrimary)
                             Spacer()

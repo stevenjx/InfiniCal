@@ -10,6 +10,44 @@
 
 import Foundation
 import Darwin
+import IOKit.pwr_mgt
+
+// Intel-only inflow request. Each renewal replaces a 15-second assertion;
+// powerd releases it even if the UI disappears or stops renewing the lease.
+// A successful API return is not proof of negative battery current.
+let inflowLock = NSLock()
+var inflowAssertion: IOPMAssertionID?
+
+func setInflowDisabled(_ disabled: Bool) -> [String: Any] {
+    inflowLock.lock(); defer { inflowLock.unlock() }
+    if !disabled {
+        if let id = inflowAssertion {
+            let result = IOPMAssertionRelease(id)
+            // A lease can already have expired and released itself.
+            if result != kIOReturnSuccess && result != kIOReturnNotFound {
+                return ["ok": false, "error": "DisableInflow release: \(result)"]
+            }
+            inflowAssertion = nil
+        }
+        return ["ok": true]
+    }
+    #if arch(x86_64)
+    var created: IOPMAssertionID = 0
+    let result = IOPMAssertionCreateWithDescription(
+        "DisableInflow" as CFString,
+        "InfiniCal: Intel discharge lease" as CFString,
+        nil, nil, nil, 15,
+        kIOPMAssertionTimeoutActionRelease as CFString, &created)
+    guard result == kIOReturnSuccess else {
+        return ["ok": false, "error": "DisableInflow create: \(result)"]
+    }
+    if let old = inflowAssertion { IOPMAssertionRelease(old) }
+    inflowAssertion = created
+    return ["ok": true, "leaseSeconds": 15]
+    #else
+    return ["ok": false, "error": "DisableInflow backend is Intel-only"]
+    #endif
+}
 
 var socketPath = "/var/run/com.infinitycomputer.infinical.helper.sock"
 
@@ -35,7 +73,13 @@ func handle(_ request: [String: Any]) -> [String: Any] {
     let command = (request["cmd"] as? String) ?? ""
     switch command {
     case "ping":
-        return ["ok": true, "version": 1, "pid": ProcessInfo.processInfo.processIdentifier]
+        return ["ok": true, "version": 2, "pid": ProcessInfo.processInfo.processIdentifier]
+
+    case "inflow":
+        guard let disabled = request["disabled"] as? Bool else {
+            return ["ok": false, "error": "bad inflow request"]
+        }
+        return setInflowDisabled(disabled)
 
     case "info":
         guard let keys = request["keys"] as? [String] else {
