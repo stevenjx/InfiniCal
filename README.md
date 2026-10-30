@@ -4,7 +4,7 @@
 
 macOS 电池工具：测量真实电池健康，并控制充电、放电与散热。
 
-![InfiniCal 中文界面](docs/assets/infiniCal-zh.png)
+![InfiniCal 中文界面](Screenshots/Dashboard_CH.png)
 
 ## 功能
 

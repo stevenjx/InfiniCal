@@ -4,7 +4,7 @@ English · [简体中文](README.md)
 
 A macOS battery tool for measuring real battery health and controlling charging, discharge and cooling.
 
-![InfiniCal English interface](docs/assets/infiniCal-en.png)
+![InfiniCal English interface](Screenshots/Dashboard_EN.png)
 
 ## Features
 
