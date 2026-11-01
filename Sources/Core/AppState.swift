@@ -186,7 +186,11 @@ final class AppState: ObservableObject {
     private var lastChargingAllowed: Bool?
     private var heatPause = false
     private var userPaused = false
+    private var previousPluggedIn: Bool?
     private var manualDischargeTarget: Int?
+    private var dischargeRequestedAt: Date?
+    private var dischargeConfirmed = false
+    private var lastDischargeRequestAt = Date.distantPast
     private var tickCount = 0
 
     /// One-shot top-up: raise the ceiling to 100 %, then put the user's limit
@@ -433,7 +437,12 @@ final class AppState: ObservableObject {
             refreshEnergyApps()
         }
         if tickCount % 30 == 0 {
+            let previousHelper = HelperClient.shared.helperProtocolVersion
             helperInstalled = HelperClient.shared.refreshInstallState()
+            if helperInstalled && HelperClient.shared.helperProtocolVersion != previousHelper {
+                capabilities = ChargeController.shared.detectCapabilities()
+                capabilities.hasHelper = helperInstalled
+            }
             DailyHistory.shared.save()
         }
         // ~150 KB of JSON per write. Five minutes is plenty for a rolling
@@ -508,29 +517,52 @@ final class AppState: ObservableObject {
             }
         }
 
+        if snapshot.isPluggedIn != previousPluggedIn {
+            lastAppliedLimit = nil
+            lastChargingAllowed = nil
+            dischargeRequestedAt = nil
+            dischargeConfirmed = false
+        }
+        previousPluggedIn = snapshot.isPluggedIn
+
         if userPaused {
             manualDischargeTarget = nil
+            dischargeRequestedAt = nil
+            dischargeConfirmed = false
             ChargeController.shared.stopHoldingCeiling()
             ChargeController.shared.endForcedDischarge()
-            setCharging(false)
+            guard setCharging(false) else { return }
+            chargeState = .paused
             return
         }
 
         if let target = manualDischargeTarget {
             if snapshot.percentage <= target {
                 manualDischargeTarget = nil
+                dischargeRequestedAt = nil
+                dischargeConfirmed = false
                 ChargeController.shared.stopHoldingCeiling()
                 ChargeController.shared.endForcedDischarge()
                 lastAppliedLimit = nil
                 lastChargingAllowed = nil
             } else {
+                let now = Date()
                 if let failure = ChargeController.shared.beginDischarge(to: target) {
                     statusNote = failure
                     manualDischargeTarget = nil
+                    dischargeRequestedAt = nil
+                    dischargeConfirmed = false
                     ChargeController.shared.stopHoldingCeiling()
                     ChargeController.shared.endForcedDischarge()
-                } else {
+                } else if snapshot.instantAmperage < -0.05 || snapshot.amperage < -0.05 {
+                    dischargeConfirmed = true
                     chargeState = .discharging
+                } else {
+                    dischargeRequestedAt = dischargeRequestedAt ?? now
+                    if now.timeIntervalSince(lastDischargeRequestAt) >= 5 {
+                        lastDischargeRequestAt = now
+                        statusNote = t("放电请求已发送，等待检测到实际电池放电电流")
+                    }
                 }
                 return
             }
@@ -552,7 +584,16 @@ final class AppState: ObservableObject {
                     statusNote = failure
                     return
                 }
-                chargeState = .discharging
+                if snapshot.instantAmperage < -0.05 || snapshot.amperage < -0.05 {
+                    dischargeConfirmed = true
+                    chargeState = .discharging
+                    return
+                }
+                dischargeRequestedAt = dischargeRequestedAt ?? Date()
+                if Date().timeIntervalSince(lastDischargeRequestAt) >= 5 {
+                    lastDischargeRequestAt = Date()
+                    statusNote = t("放电请求已发送，等待检测到实际电池放电电流")
+                }
                 return
             }
         }
@@ -632,6 +673,14 @@ final class AppState: ObservableObject {
                 return
             }
             lastChargingAllowed = nil
+            dischargeRequestedAt = dischargeRequestedAt ?? Date()
+            if snapshot.instantAmperage < -0.05 || snapshot.amperage < -0.05 {
+                dischargeConfirmed = true
+                chargeState = .discharging
+            } else {
+                chargeState = .paused
+                statusNote = t("放电请求已发送，等待检测到实际电池放电电流")
+            }
             return
         } else {
             if ChargeController.shared.activeAdapterKey != nil {
@@ -675,7 +724,7 @@ final class AppState: ObservableObject {
         // the state would otherwise read 「未连接电源」 while it is ours doing.
         if ChargeController.shared.activeAdapterKey != nil || snapshot.instantAmperage < -0.05 {
             if automaticDischarge, snapshot.percentage > chargeVal {
-                chargeState = .discharging
+                chargeState = dischargeConfirmed ? .discharging : .paused
                 return
             }
         }

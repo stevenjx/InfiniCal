@@ -65,7 +65,42 @@ if let index = args.firstIndex(of: "--socket"), index + 1 < args.count {
     socketPath = args[index + 1]
 }
 
-let allowedExecutables: Set<String> = ["/usr/bin/pmset", "/usr/bin/killall", "/usr/bin/caffeinate", "/usr/bin/powermetrics"]
+let helperProtocolVersion = 3
+let helperCapabilities: [String] = ["ping", "info", "keys", "read", "write", "inflow", "socpower", "exec"]
+let maxRequestBytes = 64 * 1024
+let maxResponseBytes = 256 * 1024
+
+// Only these SMC families are written by the app. Unknown keys remain readable
+// for diagnostics but cannot become an arbitrary root write primitive.
+func isAllowedWriteKey(_ key: String) -> Bool {
+    guard key.count == 4, key.unicodeScalars.allSatisfy({ $0.value < 128 }) else { return false }
+    if ["BCLM", "CH0B", "CH0C", "CHIE", "CH0I", "CH0J", "CHTE", "FS! "].contains(key) { return true }
+    if key.hasPrefix("F"), key.count == 4, key[key.index(after: key.startIndex)].isNumber {
+        return key.hasSuffix("Md") || key.hasSuffix("Tg")
+    }
+    return false
+}
+
+func isSafeExec(_ path: String, _ arguments: [String]) -> Bool {
+    switch path {
+    case "/usr/bin/powermetrics":
+        let allowed = [
+            ["--samplers", "cpu_power", "-n", "1", "-i", "400"],
+            ["--samplers", "smc", "-n", "1", "-i", "500"]
+        ]
+        return allowed.contains(arguments)
+    case "/usr/bin/pmset":
+        guard arguments.count == 4,
+              arguments[0] == "-a" || arguments[0] == "-b" || arguments[0] == "-c",
+              arguments[1] == "lowpowermode",
+              arguments[2] == "0" || arguments[2] == "1" else { return false }
+        return arguments[0] == "-a" || arguments.count == 4
+    default:
+        return false
+    }
+}
+
+let allowedExecutables: Set<String> = ["/usr/bin/pmset", "/usr/bin/powermetrics"]
 
 let smc = SMC.shared
 
@@ -73,7 +108,9 @@ func handle(_ request: [String: Any]) -> [String: Any] {
     let command = (request["cmd"] as? String) ?? ""
     switch command {
     case "ping":
-        return ["ok": true, "version": 2, "pid": ProcessInfo.processInfo.processIdentifier]
+        return ["ok": true, "version": helperProtocolVersion,
+                "capabilities": helperCapabilities,
+                "pid": ProcessInfo.processInfo.processIdentifier]
 
     case "inflow":
         guard let disabled = request["disabled"] as? Bool else {
@@ -82,11 +119,11 @@ func handle(_ request: [String: Any]) -> [String: Any] {
         return setInflowDisabled(disabled)
 
     case "info":
-        guard let keys = request["keys"] as? [String] else {
+        guard let keys = request["keys"] as? [String], keys.count <= 64 else {
             return ["ok": false, "error": "bad keys"]
         }
         var rows: [[String: Any]] = []
-        for key in keys where key.count == 4 {
+        for key in keys where key.count == 4 && key.unicodeScalars.allSatisfy({ $0.value < 128 }) {
             if let info = smc.keyInfo(key) {
                 let value = (try? smc.readDouble(key)) ?? 0
                 rows.append(["key": key, "exists": true, "type": info.type,
@@ -104,7 +141,8 @@ func handle(_ request: [String: Any]) -> [String: Any] {
         return ["ok": true, "count": smc.keyCount() ?? -1, "found": names.count, "keys": names]
 
     case "read":
-        guard let key = request["key"] as? String, key.count == 4 else {
+        guard let key = request["key"] as? String, key.count == 4,
+              key.unicodeScalars.allSatisfy({ $0.value < 128 }) else {
             return ["ok": false, "error": "bad key"]
         }
         do {
@@ -119,8 +157,11 @@ func handle(_ request: [String: Any]) -> [String: Any] {
 
     case "write":
         guard let key = request["key"] as? String, key.count == 4,
-              let hex = request["bytes"] as? String else {
-            return ["ok": false, "error": "bad request"]
+              isAllowedWriteKey(key),
+              let hex = request["bytes"] as? String,
+              hex.count <= 64,
+              hex.count % 2 == 0 else {
+            return ["ok": false, "error": "write key or payload not allowed"]
         }
         var bytes: [UInt8] = []
         var index = hex.startIndex
@@ -131,6 +172,10 @@ func handle(_ request: [String: Any]) -> [String: Any] {
             }
             bytes.append(byte)
             index = next
+        }
+        guard let info = smc.keyInfo(key), info.isWritable,
+              bytes.count == Int(info.size) else {
+            return ["ok": false, "error": "key is missing, read-only, or wrong width"]
         }
         do {
             try smc.writeBytes(key, bytes)
@@ -166,8 +211,12 @@ func handle(_ request: [String: Any]) -> [String: Any] {
         }
 
     case "exec":
-        guard let path = request["path"] as? String, allowedExecutables.contains(path),
-              let arguments = request["args"] as? [String] else {
+        guard let path = request["path"] as? String,
+              allowedExecutables.contains(path),
+              let arguments = request["args"] as? [String],
+              arguments.count <= 8,
+              arguments.allSatisfy({ $0.utf8.count <= 64 }),
+              isSafeExec(path, arguments) else {
             return ["ok": false, "error": "not allowed"]
         }
         let process = Process()
@@ -206,13 +255,20 @@ func serve(connection fd: Int32) {
         let count = read(fd, &chunk, chunk.count)
         if count <= 0 { return }
         buffer.append(contentsOf: chunk[0..<count])
-        while let newline = buffer.firstIndex(of: 0x0A) {
+        guard buffer.count <= maxRequestBytes + 1 else { return }
+        if let newline = buffer.firstIndex(of: 0x0A) {
             let line = buffer[buffer.startIndex..<newline]
             buffer.removeSubrange(buffer.startIndex...newline)
-            guard !line.isEmpty,
+            guard line.count <= maxRequestBytes, !line.isEmpty,
                   let object = try? JSONSerialization.jsonObject(with: Data(line)) as? [String: Any] else { continue }
             let response = handle(object)
-            guard let data = try? JSONSerialization.data(withJSONObject: response) else { continue }
+            guard let data = try? JSONSerialization.data(withJSONObject: response),
+                  data.count <= maxResponseBytes else {
+                var error = (try? JSONSerialization.data(withJSONObject: ["ok": false, "error": "response too large"])) ?? Data()
+                error.append(0x0A)
+                _ = error.withUnsafeBytes { write(fd, $0.baseAddress, $0.count) }
+                return
+            }
             var payload = data
             payload.append(0x0A)
             _ = payload.withUnsafeBytes { write(fd, $0.baseAddress, $0.count) }

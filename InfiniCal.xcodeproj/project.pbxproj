@@ -14,6 +14,7 @@
 		73B3FAA0F01FF2318C3BCF82 /* PowerMeter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2284B3756D13B4E160B65DA6 /* PowerMeter.swift */; };
 		807190014BCA5BFEBC509EFB /* PowerFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E0624F576F0BBB118F18061 /* PowerFormat.swift */; };
 		15F27AE38801C8E4E5166CCD /* ChargeController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1911408CF8F9FDBD1AF4BD3 /* ChargeController.swift */; };
+		E0E5C4D525F0FF86CF69EF5E /* ControlResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12B8C7AFB6BDB6AD122908AA /* ControlResult.swift */; };
 		24CFF6E0AC9321A769F51167 /* SystemChargeLimit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E1359679B8FB4D3D2618027 /* SystemChargeLimit.swift */; };
 		2BD97035A7F83D7602368768 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = 711B2575568107B5737BD937 /* Models.swift */; };
 		38FD3062915C1F55405180DF /* CalibrationModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE2F23A422588E9B0DD52018 /* CalibrationModel.swift */; };
@@ -80,6 +81,7 @@
 		2284B3756D13B4E160B65DA6 /* PowerMeter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerMeter.swift; sourceTree = "<group>"; };
 		2E0624F576F0BBB118F18061 /* PowerFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerFormat.swift; sourceTree = "<group>"; };
 		E1911408CF8F9FDBD1AF4BD3 /* ChargeController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChargeController.swift; sourceTree = "<group>"; };
+		12B8C7AFB6BDB6AD122908AA /* ControlResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlResult.swift; sourceTree = "<group>"; };
 		8E1359679B8FB4D3D2618027 /* SystemChargeLimit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemChargeLimit.swift; sourceTree = "<group>"; };
 		711B2575568107B5737BD937 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		EE2F23A422588E9B0DD52018 /* CalibrationModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrationModel.swift; sourceTree = "<group>"; };
@@ -173,6 +175,7 @@
 				2284B3756D13B4E160B65DA6 /* PowerMeter.swift */,
 				2E0624F576F0BBB118F18061 /* PowerFormat.swift */,
 				E1911408CF8F9FDBD1AF4BD3 /* ChargeController.swift */,
+				12B8C7AFB6BDB6AD122908AA /* ControlResult.swift */,
 				8E1359679B8FB4D3D2618027 /* SystemChargeLimit.swift */,
 				711B2575568107B5737BD937 /* Models.swift */,
 				EE2F23A422588E9B0DD52018 /* CalibrationModel.swift */,
@@ -327,6 +330,7 @@
 				73B3FAA0F01FF2318C3BCF82 /* PowerMeter.swift in Sources */,
 				807190014BCA5BFEBC509EFB /* PowerFormat.swift in Sources */,
 				15F27AE38801C8E4E5166CCD /* ChargeController.swift in Sources */,
+				E0E5C4D525F0FF86CF69EF5E /* ControlResult.swift in Sources */,
 				24CFF6E0AC9321A769F51167 /* SystemChargeLimit.swift in Sources */,
 				2BD97035A7F83D7602368768 /* Models.swift in Sources */,
 				38FD3062915C1F55405180DF /* CalibrationModel.swift in Sources */,

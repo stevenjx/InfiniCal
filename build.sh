@@ -28,6 +28,7 @@ SOURCES=(
   "$ROOT/Sources/Core/PowerEstimate.swift"
   "$ROOT/Sources/Core/PowerFormat.swift"
   "$ROOT/Sources/Core/ChargeController.swift"
+  "$ROOT/Sources/Core/ControlResult.swift"
   "$ROOT/Sources/Core/SystemChargeLimit.swift"
   "$ROOT/Sources/Core/Models.swift"
   "$ROOT/Sources/Core/CalibrationModel.swift"

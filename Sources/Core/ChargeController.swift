@@ -85,8 +85,10 @@ final class HelperClient {
 
     private(set) var lastKnownInstalled = false
     private(set) var helperProtocolVersion = 0
+    private(set) var helperCapabilities: Set<String> = []
+    private var lastHelperState: (Int, Set<String>)?
 
-    var supportsInflowCommand: Bool { helperProtocolVersion >= 2 }
+    var supportsInflowCommand: Bool { helperProtocolVersion >= 2 && helperCapabilities.contains("inflow") }
 
     var bundledHelperPath: String {
         Bundle.main.bundlePath + "/Contents/Library/Helper/com.infinitycomputer.infinical.helper"
@@ -102,9 +104,13 @@ final class HelperClient {
         if exists, let response = request(["cmd": "ping"], timeout: 1.0),
            response["ok"] as? Bool == true {
             helperProtocolVersion = response["version"] as? Int ?? 1
+            helperCapabilities = Set(response["capabilities"] as? [String] ?? [])
+            lastHelperState = (helperProtocolVersion, helperCapabilities)
             lastKnownInstalled = true
         } else {
             helperProtocolVersion = 0
+            helperCapabilities = []
+            lastHelperState = nil
             lastKnownInstalled = false
         }
         return lastKnownInstalled
@@ -207,7 +213,7 @@ final class HelperClient {
         }
         // Give launchd a moment to start the daemon.
         for _ in 0..<20 {
-            if ping() { lastKnownInstalled = true; return }
+            if refreshInstallState() { return }
             Thread.sleep(forTimeInterval: 0.25)
         }
         throw HelperError.noResponse(t("助手已安装但未能启动"))
@@ -219,7 +225,7 @@ final class HelperClient {
     /// Key table queried through the root daemon (falls back to local reads).
     func keyInfoList(_ keys: [String]) -> [String: SMCKeyInfo] {
         var result: [String: SMCKeyInfo] = [:]
-        if lastKnownInstalled,
+        if lastKnownInstalled, helperCapabilities.contains("info"),
            let response = request(["cmd": "info", "keys": keys]),
            (response["ok"] as? Bool) == true,
            let rows = response["keys"] as? [[String: Any]] {
@@ -242,7 +248,7 @@ final class HelperClient {
             try SMC.shared.writeUInt8(key, value)
             return
         }
-        guard lastKnownInstalled else { throw HelperError.notInstalled }
+        guard lastKnownInstalled, helperCapabilities.contains("write") else { throw HelperError.notInstalled }
         let hex = String(format: "%02x", value)
         guard let response = request(["cmd": "write", "key": key, "bytes": hex]) else {
             throw HelperError.noResponse(tf("写入 {p} 超时", key))
@@ -259,7 +265,7 @@ final class HelperClient {
             try SMC.shared.writeBytes(key, bytes)
             return
         }
-        guard lastKnownInstalled else { throw HelperError.notInstalled }
+        guard lastKnownInstalled, helperCapabilities.contains("write") else { throw HelperError.notInstalled }
         let hex = bytes.map { String(format: "%02x", $0) }.joined()
         guard let response = request(["cmd": "write", "key": key, "bytes": hex]) else {
             throw HelperError.noResponse(tf("写入 {p} 超时", key))
@@ -395,7 +401,7 @@ final class HelperClient {
     }
 
     func runPrivileged(_ path: String, _ arguments: [String]) throws -> String {
-        guard lastKnownInstalled else { throw HelperError.notInstalled }
+        guard lastKnownInstalled, helperCapabilities.contains("exec") else { throw HelperError.notInstalled }
         guard let response = request(["cmd": "exec", "path": path, "args": arguments], timeout: 6) else {
             throw HelperError.noResponse(tf("执行 {p} 超时", path))
         }
@@ -411,6 +417,13 @@ final class ChargeController {
     static let shared = ChargeController()
 
     private(set) var capabilities = ChargeCapabilities()
+    private(set) var lastControlEvidence: ControlEvidence?
+
+    private func recordControl(_ evidence: ControlEvidence) {
+        lastControlEvidence = evidence
+    }
+
+    private func backendName() -> String { capabilities.strategy.rawValue }
 
     /// Every key any known charge tool has used for charge or adapter control.
     /// The calibration log prints the ones this machine actually exposes, so the
@@ -470,6 +483,17 @@ final class ChargeController {
     /// Sets the charge limit. `100` means "no limit".
     func applyChargeLimit(_ percent: Int) throws {
         let clamped = max(0, min(100, percent))
+        recordControl(ControlEvidence(operation: "chargeLimit", backend: backendName(), phase: .requested, target: "\(clamped)%"))
+        do {
+            try applyChargeLimitUnchecked(clamped)
+            recordControl(ControlEvidence(operation: "chargeLimit", backend: backendName(), phase: .verified, target: "\(clamped)%", observed: "accepted"))
+        } catch {
+            recordControl(ControlEvidence(operation: "chargeLimit", backend: backendName(), phase: .failed, target: "\(clamped)%", detail: error.localizedDescription))
+            throw error
+        }
+    }
+
+    private func applyChargeLimitUnchecked(_ clamped: Int) throws {
         switch capabilities.strategy {
         case .systemLimit:
             guard clamped >= SystemChargeLimit.minimumSupported else {
@@ -536,7 +560,13 @@ final class ChargeController {
     @discardableResult
     func beginDischarge(to target: Int) -> String? {
         if canSwitchAdapter {
-            return beginForcedDischarge()
+            recordControl(ControlEvidence(operation: "adapter", backend: "adapter", phase: .requested, target: "off"))
+            if let error = beginForcedDischarge() {
+                recordControl(ControlEvidence(operation: "adapter", backend: "adapter", phase: .failed, target: "off", detail: error))
+                return error
+            }
+            recordControl(ControlEvidence(operation: "adapter", backend: "adapter", phase: .active, target: "off", observed: activeAdapterKey))
+            return nil
         }
         if hasPersistentCeiling {
             // MCL cannot go below 80 %. A lower target would have to be written
@@ -698,11 +728,8 @@ final class ChargeController {
     }
 
     private func requestInflow(_ disabled: Bool) -> String? {
-        guard HelperClient.shared.lastKnownInstalled else {
-            return HelperError.notInstalled.localizedDescription
-        }
         guard HelperClient.shared.supportsInflowCommand else {
-            return t("特权助手版本过旧，请重新安装或更新助手后再校准")
+            return t("特权助手不支持 DisableInflow，请重新安装或更新助手")
         }
         guard let response = HelperClient.shared.request(["cmd": "inflow", "disabled": disabled]) else {
             return t("DisableInflow 助手无响应；租约将在 15 秒内自动到期")

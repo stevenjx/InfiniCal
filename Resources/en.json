@@ -513,6 +513,7 @@
  "当前系统充电上限后端最低只能设置为 80%，低于 80% 的限制不可用": "This system charge-limit backend only supports 80% and above",
  "当前电量低于系统上限下限 80%，无法通过 MCL 暂停充电": "Battery is below the 80% system limit floor; MCL cannot pause charging here",
  "特权助手版本过旧，请重新安装或更新助手后再校准": "Privileged helper is outdated; reinstall or update it before calibrating",
+ "特权助手不支持 DisableInflow，请重新安装或更新助手": "The privileged helper does not support DisableInflow; reinstall or update it",
  "特权助手协议版本：{p}": "Privileged helper protocol: {p}",
  "系统充电上限（MCL）": "System charge limit (MCL)",
  "DisableInflow 助手无响应；租约将在 15 秒内自动到期": "DisableInflow helper did not respond; the lease expires automatically within 15 seconds",
@@ -528,7 +529,7 @@
  "无可用放电杠杆": "no usable discharge lever",
  "系统充电上限只能降到 {p}%，本机没有适配器断电键：{p}% 以下需要用电池自行放电": "The system charge limit only reaches {p}% and this Mac has no adapter-cut key: below {p}% the pack has to drain on its own",
  "已通过系统充电上限把目标设为 {p}%，由 powerd 切换到电池供电": "System charge limit set to {p}%; powerd switches the supply to the battery",
- "放电方式：{p}": "Discharge method: {p}",
+ "放电请求已发送，等待检测到实际电池放电电流": "Discharge requested; waiting for verified battery discharge current",
  "放电指令已下发，但 60 秒内仍未测到放电电流。放电指令保持生效，也可以拔掉电源适配器让它立即开始。": "The discharge command was sent but no discharge current appeared within 60 s. It stays armed; unplugging the adapter makes it start immediately.",
  "接电状态下 60 秒仍未测到放电电流（已尝试：{p}）。放电指令保持生效，若拔掉电源适配器会立即继续。": "No discharge current within 60 s while on AC (tried: {p}). The command stays armed and resumes immediately if the adapter is unplugged.",
  "电池温度 %.1f°C 超过上限 %d°C；此机型最低只能把充电上限设到 %d%%，无法立即暂停充电": "Battery at %.1f°C is above the %d°C limit; this Mac's charge limit cannot go below %d%%, so charging cannot be paused"

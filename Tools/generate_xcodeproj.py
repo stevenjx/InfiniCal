@@ -35,6 +35,7 @@ APP_SOURCES = [
     "Sources/Core/PowerMeter.swift",
     "Sources/Core/PowerFormat.swift",
     "Sources/Core/ChargeController.swift",
+    "Sources/Core/ControlResult.swift",
     "Sources/Core/SystemChargeLimit.swift",
     "Sources/Core/Models.swift",
     "Sources/Core/CalibrationModel.swift",
