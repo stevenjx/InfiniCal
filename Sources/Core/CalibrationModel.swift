@@ -9,6 +9,22 @@
 
 import Foundation
 
+/// Crash-recovery journal, deliberately separate from completed health records.
+/// Integration buckets are never resumed across an unobserved interval.
+struct CalibrationCheckpoint: Codable, Equatable {
+    var schemaVersion = 1
+    var sessionID: UUID
+    var phase: String
+    var startedAt: Date
+    var lastSampleAt: Date
+    var targetPercentage: Int
+    var restoreLimit: Int
+    var stressMode: String
+    var adapterControl: String?
+    var chargeControl: String
+    var reason: String
+}
+
 /// One 1 Hz telemetry sample taken during a calibration session.
 struct CalibrationSample: Identifiable {
     let timestamp: Date

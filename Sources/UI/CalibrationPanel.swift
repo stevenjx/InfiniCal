@@ -30,6 +30,31 @@ struct CalibrationPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
+            if engine.needsRecovery {
+                Card(padding: 12) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(t("检测到未完成的校准"))
+                            .font(.system(size: 13, weight: .medium))
+                        if let checkpoint = engine.pendingRecovery {
+                            Text((CalibrationPhase(rawValue: checkpoint.phase)?.title ?? checkpoint.phase)
+                                 + " · " + checkpoint.lastSampleAt.formatted())
+                                .font(.system(size: 11))
+                        }
+                        Text(t("中断期间无法测量。继续将从预充重新测量，不拼接旧积分；不会自动启动放电。"))
+                            .font(.system(size: 11))
+                        if let error = engine.recoveryError {
+                            Text(error).foregroundColor(theme.chartOrange)
+                        }
+                        HStack {
+                            Button(t("继续（重新测量）")) { _ = engine.restartInterruptedSession() }
+                                .disabled(engine.pendingRecovery == nil)
+                            Button(t("安全清理 / 重试")) { _ = engine.cleanInterruptedSession() }
+                            Button(t("放弃并恢复系统控制")) { _ = engine.cleanInterruptedSession(discard: true) }
+                        }
+                        .font(.system(size: 11))
+                    }
+                }
+            }
             chargeGateCard
             // Kept visible after the session ends: a restore failure at the last
             // phase is exactly the thing the user must not miss.

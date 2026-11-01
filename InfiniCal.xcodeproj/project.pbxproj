@@ -20,6 +20,9 @@
 		38FD3062915C1F55405180DF /* CalibrationModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE2F23A422588E9B0DD52018 /* CalibrationModel.swift */; };
 		1B04BD6ABD3CAA993927E3C9 /* CalibrationMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35D5B5FCA5541756C6343B09 /* CalibrationMath.swift */; };
 		05A817E4FAC9C671F83F8133 /* CalibrationEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC7E4FA2E504472DE1FD193F /* CalibrationEngine.swift */; };
+		1BD4C62D1F263604BB5A29F2 /* GPUStress.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FDC52EE19A737BF52993249 /* GPUStress.swift */; };
+		1A6CA566A237EA8D40ACB7CB /* ProcessSampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E8F1A7ED04D1422CC51A0D5 /* ProcessSampler.swift */; };
+		6C348952EAA151E9342BFC11 /* HIDThermal.swift in Sources */ = {isa = PBXBuildFile; fileRef = B76742D00A659F9DB7EDC770 /* HIDThermal.swift */; };
 		85D163081A208A1E836F56DA /* HistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C509D83CBC83A13CF4407D84 /* HistoryStore.swift */; };
 		4679ED6D469B3C728D05C8BC /* Notifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82BE2237B9BA6EC865EF74E4 /* Notifier.swift */; };
 		437B21A60C4A837BEB66E9BB /* SleepControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47148AED6335858B49C9DC9F /* SleepControl.swift */; };
@@ -35,6 +38,7 @@
 		ADB91C9842F1AB841EC93315 /* PanelsBattery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4ACADE74E3E728E0102F67E4 /* PanelsBattery.swift */; };
 		61852862EEDEA2C6930EAC63 /* PanelsAutomation.swift in Sources */ = {isa = PBXBuildFile; fileRef = C16B588C55BC89F884A6A5B0 /* PanelsAutomation.swift */; };
 		342EA6CDA16B3E916C0CF2E6 /* PanelsAppearance.swift in Sources */ = {isa = PBXBuildFile; fileRef = A00FC777CAAAAD1BF2963ADB /* PanelsAppearance.swift */; };
+		2B7E29FAD008AFF499876743 /* HardwareDiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5680CC5079B3E6E3F98E8BAB /* HardwareDiagnosticsView.swift */; };
 		90F465CE64A62A54DEF916B8 /* HistoryPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E39DFBB45EA26111C1C0D92E /* HistoryPanel.swift */; };
 		5B33DBE485137809FED3CB9B /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16391DEEF67014DD085A970B /* RootView.swift */; };
 		8C24697B5A7D76623EDA6658 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE2A8A9347390182D90B3E69 /* AppDelegate.swift */; };
@@ -87,6 +91,9 @@
 		EE2F23A422588E9B0DD52018 /* CalibrationModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrationModel.swift; sourceTree = "<group>"; };
 		35D5B5FCA5541756C6343B09 /* CalibrationMath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrationMath.swift; sourceTree = "<group>"; };
 		FC7E4FA2E504472DE1FD193F /* CalibrationEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrationEngine.swift; sourceTree = "<group>"; };
+		5FDC52EE19A737BF52993249 /* GPUStress.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPUStress.swift; sourceTree = "<group>"; };
+		1E8F1A7ED04D1422CC51A0D5 /* ProcessSampler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessSampler.swift; sourceTree = "<group>"; };
+		B76742D00A659F9DB7EDC770 /* HIDThermal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HIDThermal.swift; sourceTree = "<group>"; };
 		C509D83CBC83A13CF4407D84 /* HistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryStore.swift; sourceTree = "<group>"; };
 		82BE2237B9BA6EC865EF74E4 /* Notifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notifier.swift; sourceTree = "<group>"; };
 		47148AED6335858B49C9DC9F /* SleepControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepControl.swift; sourceTree = "<group>"; };
@@ -102,6 +109,7 @@
 		4ACADE74E3E728E0102F67E4 /* PanelsBattery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelsBattery.swift; sourceTree = "<group>"; };
 		C16B588C55BC89F884A6A5B0 /* PanelsAutomation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelsAutomation.swift; sourceTree = "<group>"; };
 		A00FC777CAAAAD1BF2963ADB /* PanelsAppearance.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelsAppearance.swift; sourceTree = "<group>"; };
+		5680CC5079B3E6E3F98E8BAB /* HardwareDiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardwareDiagnosticsView.swift; sourceTree = "<group>"; };
 		E39DFBB45EA26111C1C0D92E /* HistoryPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryPanel.swift; sourceTree = "<group>"; };
 		16391DEEF67014DD085A970B /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		EE2A8A9347390182D90B3E69 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -181,6 +189,9 @@
 				EE2F23A422588E9B0DD52018 /* CalibrationModel.swift */,
 				35D5B5FCA5541756C6343B09 /* CalibrationMath.swift */,
 				FC7E4FA2E504472DE1FD193F /* CalibrationEngine.swift */,
+				5FDC52EE19A737BF52993249 /* GPUStress.swift */,
+				1E8F1A7ED04D1422CC51A0D5 /* ProcessSampler.swift */,
+				B76742D00A659F9DB7EDC770 /* HIDThermal.swift */,
 				C509D83CBC83A13CF4407D84 /* HistoryStore.swift */,
 				82BE2237B9BA6EC865EF74E4 /* Notifier.swift */,
 				47148AED6335858B49C9DC9F /* SleepControl.swift */,
@@ -203,6 +214,7 @@
 				4ACADE74E3E728E0102F67E4 /* PanelsBattery.swift */,
 				C16B588C55BC89F884A6A5B0 /* PanelsAutomation.swift */,
 				A00FC777CAAAAD1BF2963ADB /* PanelsAppearance.swift */,
+				5680CC5079B3E6E3F98E8BAB /* HardwareDiagnosticsView.swift */,
 				E39DFBB45EA26111C1C0D92E /* HistoryPanel.swift */,
 				16391DEEF67014DD085A970B /* RootView.swift */,
 				EE2A8A9347390182D90B3E69 /* AppDelegate.swift */,
@@ -336,6 +348,9 @@
 				38FD3062915C1F55405180DF /* CalibrationModel.swift in Sources */,
 				1B04BD6ABD3CAA993927E3C9 /* CalibrationMath.swift in Sources */,
 				05A817E4FAC9C671F83F8133 /* CalibrationEngine.swift in Sources */,
+				1BD4C62D1F263604BB5A29F2 /* GPUStress.swift in Sources */,
+				1A6CA566A237EA8D40ACB7CB /* ProcessSampler.swift in Sources */,
+				6C348952EAA151E9342BFC11 /* HIDThermal.swift in Sources */,
 				85D163081A208A1E836F56DA /* HistoryStore.swift in Sources */,
 				4679ED6D469B3C728D05C8BC /* Notifier.swift in Sources */,
 				437B21A60C4A837BEB66E9BB /* SleepControl.swift in Sources */,
@@ -351,6 +366,7 @@
 				ADB91C9842F1AB841EC93315 /* PanelsBattery.swift in Sources */,
 				61852862EEDEA2C6930EAC63 /* PanelsAutomation.swift in Sources */,
 				342EA6CDA16B3E916C0CF2E6 /* PanelsAppearance.swift in Sources */,
+				2B7E29FAD008AFF499876743 /* HardwareDiagnosticsView.swift in Sources */,
 				90F465CE64A62A54DEF916B8 /* HistoryPanel.swift in Sources */,
 				5B33DBE485137809FED3CB9B /* RootView.swift in Sources */,
 				8C24697B5A7D76623EDA6658 /* AppDelegate.swift in Sources */,
@@ -450,7 +466,7 @@
 				);
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 14;
+				CURRENT_PROJECT_VERSION = 15;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Resources/Info.plist;
@@ -458,7 +474,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.9;
+				MARKETING_VERSION = 1.0.10;
 				PRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -475,7 +491,7 @@
 				);
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 14;
+				CURRENT_PROJECT_VERSION = 15;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Resources/Info.plist;
@@ -483,7 +499,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.9;
+				MARKETING_VERSION = 1.0.10;
 				PRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -498,9 +514,9 @@
 					arm64,
 					x86_64,
 				);
-				CURRENT_PROJECT_VERSION = 14;
+				CURRENT_PROJECT_VERSION = 15;
 				GENERATE_INFOPLIST_FILE = NO;
-				MARKETING_VERSION = 1.0.9;
+				MARKETING_VERSION = 1.0.10;
 				PRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical.helper;
 				PRODUCT_NAME = com.infinitycomputer.infinical.helper;
 				SKIP_INSTALL = YES;
@@ -515,9 +531,9 @@
 					arm64,
 					x86_64,
 				);
-				CURRENT_PROJECT_VERSION = 14;
+				CURRENT_PROJECT_VERSION = 15;
 				GENERATE_INFOPLIST_FILE = NO;
-				MARKETING_VERSION = 1.0.9;
+				MARKETING_VERSION = 1.0.10;
 				PRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical.helper;
 				PRODUCT_NAME = com.infinitycomputer.infinical.helper;
 				SKIP_INSTALL = YES;

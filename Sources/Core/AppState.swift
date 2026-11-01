@@ -234,6 +234,9 @@ final class AppState: ObservableObject {
         capabilities = ChargeController.shared.detectCapabilities()
         capabilities.hasHelper = helperInstalled
         ChargeController.shared.restoreAdapterLeftOff()
+        if CalibrationEngine.shared.needsRecovery {
+            _ = CalibrationEngine.shared.cleanInterruptedSession()
+        }
         snapshot = BatteryReader.read()
         // Populate SoC / display before the first frame. Without this the initial
         // model had those branches missing, so the flow card rendered a single
@@ -336,6 +339,11 @@ final class AppState: ObservableObject {
     /// 「睡眠时停止充电」/「睡眠时充满后停止充电」: the process is suspended during
     /// sleep, so the decision has to be made before the machine goes down.
     private func handleWillSleep() {
+        if calibrationEngine.isRunning {
+            calibrationEngine.stop(reason: t("系统即将睡眠，校准已中断；请处理恢复记录"))
+            return
+        }
+        guard !calibrationEngine.needsRecovery else { return }
         switch sleepMode {
         case 1:
             inhibitChargingForSleep()
@@ -422,7 +430,13 @@ final class AppState: ObservableObject {
         }
         // A running calibration owns the charge hardware; the normal limit loop
         // must stay out of its way until the session ends.
-        if calibrationEngine.isRunning {
+        if let recovered = calibrationEngine.takeRecoveredChargeLimit() {
+            chargeVal = recovered
+        }
+        if calibrationEngine.needsRecovery {
+            // Do not let automation re-disable an adapter awaiting recovery.
+            if calibration != nil { calibration = nil }
+        } else if calibrationEngine.isRunning {
             mirrorCalibration()
         } else {
             if calibration != nil { endCalibrationMirror() }

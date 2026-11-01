@@ -126,7 +126,22 @@ final class CalibrationEngine: ObservableObject {
 
     // MARK: Live telemetry (1 Hz)
 
-    @Published var phase: CalibrationPhase = .idle
+    @Published var phase: CalibrationPhase = .idle {
+        didSet { if isRunning { saveCheckpoint(reason: "phaseChanged") } }
+    }
+    @Published private(set) var pendingRecovery: CalibrationCheckpoint?
+    @Published private(set) var recoveryError: String?
+    private(set) var recoveredChargeLimit: Int?
+    func takeRecoveredChargeLimit() -> Int? {
+        defer { recoveredChargeLimit = nil }
+        return recoveredChargeLimit
+    }
+    private let checkpointKey = "calibrationRecoveryCheckpoint.v1"
+    private var sessionID = UUID()
+    private var sessionRestoreLimit = 80
+    private var lastCheckpointAt = Date.distantPast
+    private var lastSessionUptime: TimeInterval?
+    var needsRecovery: Bool { pendingRecovery != nil || recoveryError != nil }
     @Published var percentage: Int = 0
     @Published var voltage: Double = 0
     @Published var signedAmperage: Double = 0
@@ -352,6 +367,17 @@ final class CalibrationEngine: ObservableObject {
             soundAlert = defaults.bool(forKey: Keys.soundAlert)
         }
 
+        if let data = defaults.data(forKey: checkpointKey) {
+            if let checkpoint = try? JSONDecoder().decode(CalibrationCheckpoint.self, from: data),
+               checkpoint.schemaVersion == 1,
+               CalibrationPhase(rawValue: checkpoint.phase) != nil,
+               (1...100).contains(checkpoint.restoreLimit),
+               (1...99).contains(checkpoint.targetPercentage) {
+                pendingRecovery = checkpoint
+            } else {
+                recoveryError = t("校准恢复记录无法读取；请执行安全清理")
+            }
+        }
         hardwareModel = Self.machineModel()
         records = CalibrationStore.load()
         aggregated = CalibrationStore.aggregate(records)
@@ -397,6 +423,95 @@ final class CalibrationEngine: ObservableObject {
         timer = t
     }
 
+    // MARK: - Recovery journal
+
+    private func saveCheckpoint(reason: String) {
+        let now = Date()
+        let checkpoint = CalibrationCheckpoint(
+            sessionID: sessionID, phase: phase.rawValue,
+            startedAt: sessionStart ?? now, lastSampleAt: now,
+            targetPercentage: dischargeTarget, restoreLimit: sessionRestoreLimit,
+            stressMode: sessionStressMode.rawValue,
+            adapterControl: ChargeController.shared.activeAdapterKey,
+            chargeControl: ChargeController.shared.capabilities.strategy.rawValue,
+            reason: reason)
+        do {
+            defaults.set(try JSONEncoder().encode(checkpoint), forKey: checkpointKey)
+            lastCheckpointAt = now
+        } catch {
+            recoveryError = error.localizedDescription
+        }
+    }
+
+    /// Safe to retry. Never creates a sleep assertion, load or adapter-off request.
+    @discardableResult
+    func cleanInterruptedSession(discard: Bool = false) -> Bool {
+        guard !isRunning else { return false }
+        stopStressLoad()
+        stopDrainPulse()
+        disableSleepBlock()
+        let controller = ChargeController.shared
+        _ = HelperClient.shared.refreshInstallState()
+        _ = controller.detectCapabilities()
+        controller.restoreAdapterLeftOff()
+        controller.endForcedDischarge()
+        guard controller.adapterRestoreError == nil else {
+            recoveryError = controller.adapterRestoreError
+            return false
+        }
+        do {
+            // Clears charge-inhibit keys as well as persisted ceilings.
+            try controller.prepareForFullCharge()
+            let requested = pendingRecovery?.restoreLimit ?? storageLevel
+            let limit = controller.hasPersistentCeiling ? max(80, requested) : requested
+            if controller.capabilities.strategy != .unavailable {
+                try controller.applyChargeLimit(limit)
+            } else if pendingRecovery?.chargeControl != ChargeStrategy.unavailable.rawValue {
+                throw HelperError.smc(t("恢复充电控制不可用，请更新助手后重试"))
+            }
+            FanController.shared.restoreSystemControl()
+            if let error = FanController.shared.lastError {
+                throw HelperError.smc(error)
+            }
+            recoveredChargeLimit = limit
+            recoveryError = nil
+            append(t("已完成校准安全清理，未启动放电或加压"))
+            if discard {
+                recoveredChargeLimit = limit
+                defaults.set(limit, forKey: "chargeVal")
+                defaults.removeObject(forKey: checkpointKey)
+                pendingRecovery = nil
+            }
+            return true
+        } catch {
+            recoveryError = error.localizedDescription
+            return false
+        }
+    }
+
+    /// An unobserved gap cannot produce a continuous capacity measurement.
+    /// Continue the workflow with a fresh full cycle, never reuse old buckets.
+    @discardableResult
+    func restartInterruptedSession() -> Bool {
+        guard let checkpoint = pendingRecovery,
+              cleanInterruptedSession(), BatteryReader.read().isPluggedIn else { return false }
+        let backup = defaults.data(forKey: checkpointKey)
+        defaults.removeObject(forKey: checkpointKey)
+        pendingRecovery = nil
+        dischargeTarget = checkpoint.targetPercentage
+        stressMode = DischargeStressMode(rawValue: checkpoint.stressMode) ?? .silent
+        if start() {
+            sessionRestoreLimit = checkpoint.restoreLimit
+            saveCheckpoint(reason: "restartedAfterInterruption")
+            append(t("上次测量已中断，已从预充重新测量；中断区间不计入容量"))
+            return true
+        }
+        defaults.set(backup, forKey: checkpointKey)
+        pendingRecovery = checkpoint
+        recoveryError = startFailureReason
+        return false
+    }
+
     // MARK: - Session control
 
     /// Returns false when a precondition refused the run, so the caller can put
@@ -404,6 +519,10 @@ final class CalibrationEngine: ObservableObject {
     @discardableResult
     func start() -> Bool {
         guard !isRunning else { return false }
+        guard !needsRecovery else {
+            startFailureReason = t("请先处理上次校准的恢复记录")
+            return false
+        }
         startFailureReason = nil
 
         let snapshot = BatteryReader.read()
@@ -423,6 +542,12 @@ final class CalibrationEngine: ObservableObject {
             append(message)
             return false
         }
+        sessionID = UUID()
+        sessionStart = Date()
+        sessionRestoreLimit = max(1, min(100, defaults.object(forKey: "chargeVal") as? Int ?? storageLevel))
+        sessionStressMode = stressMode
+        saveCheckpoint(reason: "preparing")
+        guard recoveryError == nil else { return false }
         // Fresh key table: the log below is what identifies this machine's
         // control mechanism, so it must not come from a stale launch-time scan.
         _ = ChargeController.shared.detectCapabilities()
@@ -435,10 +560,12 @@ final class CalibrationEngine: ObservableObject {
             let message = tf("校准未开始：恢复充电失败 — {p}", error.localizedDescription)
             startFailureReason = message
             append(message)
+            pendingRecovery = defaults.data(forKey: checkpointKey).flatMap { try? JSONDecoder().decode(CalibrationCheckpoint.self, from: $0) }
             return false
         }
 
         isRunning = true
+        lastSessionUptime = ProcessInfo.processInfo.systemUptime
         noChargeTicks = 0
         chargingIssue = nil
         ensureTelemetryTimer()
@@ -507,8 +634,10 @@ final class CalibrationEngine: ObservableObject {
 
     func stop(reason: String? = nil) {
         guard isRunning else { return }
+        saveCheckpoint(reason: reason ?? "userStopped")
+        pendingRecovery = defaults.data(forKey: checkpointKey).flatMap { try? JSONDecoder().decode(CalibrationCheckpoint.self, from: $0) }
         stopStressLoad()
-        releaseDischarge(limit: storageLevel)
+        releaseDischarge(limit: sessionRestoreLimit)
         disableSleepBlock()
         FanController.shared.endSessionCooling()
         isRunning = false
@@ -530,8 +659,9 @@ final class CalibrationEngine: ObservableObject {
     /// assertion held once the process is gone.
     func prepareForTermination() {
         guard isRunning else { return }
+        saveCheckpoint(reason: "applicationTermination")
         stopStressLoad()
-        releaseDischarge(limit: storageLevel)
+        releaseDischarge(limit: sessionRestoreLimit)
         disableSleepBlock()
         FanController.shared.endSessionCooling()
         isRunning = false
@@ -574,6 +704,16 @@ final class CalibrationEngine: ObservableObject {
         updateEstimates(smoothedPower: smoothedPower)
 
         guard isRunning else { return }
+        if let last = lastSessionUptime, uptime - last > 5 {
+            stop(reason: t("采样中断超过 5 秒，校准已暂停；请处理恢复记录"))
+            return
+        }
+        lastSessionUptime = uptime
+        if now.timeIntervalSince(lastCheckpointAt) >= 5 { saveCheckpoint(reason: "sampling") }
+        guard recoveryError == nil else {
+            stop(reason: t("保存校准恢复记录失败，已停止校准"))
+            return
+        }
 
         sessionPoints.append(point)
         if sessionPoints.count > 120_000 { sessionPoints.removeFirst(20_000) }
@@ -951,6 +1091,10 @@ final class CalibrationEngine: ObservableObject {
     private func finish() {
         stopStressLoad()
         releaseDischarge(limit: storageLevel)
+        guard chargingIssue == nil else {
+            stop(reason: t("校准测量结束，但安全清理失败，请重试清理"))
+            return
+        }
         disableSleepBlock()
         FanController.shared.endSessionCooling()
         isRunning = false
@@ -986,6 +1130,13 @@ final class CalibrationEngine: ObservableObject {
             exportReports(record: record)
         }
         records = CalibrationStore.append(record)
+        if CalibrationStore.load().contains(where: { $0.id == record.id }) {
+            defaults.removeObject(forKey: checkpointKey)
+            pendingRecovery = nil
+        } else {
+            pendingRecovery = defaults.data(forKey: checkpointKey).flatMap { try? JSONDecoder().decode(CalibrationCheckpoint.self, from: $0) }
+            recoveryError = t("校准结果保存失败；恢复记录已保留")
+        }
         aggregated = CalibrationStore.aggregate(records)
         trend = BatteryTrend.compute(days: DailyHistory.shared.days)
         defaults.set(Date().timeIntervalSince1970, forKey: Keys.lastRun)
@@ -1028,6 +1179,7 @@ final class CalibrationEngine: ObservableObject {
     /// this machine actually has. A machine with no charge key has nothing to
     /// restore, so it must not report a failure.
     private func releaseDischarge(limit: Int = 100) {
+        chargingIssue = nil
         let controller = ChargeController.shared
         stopDrainPulse()
         controller.endForcedDischarge()

@@ -687,10 +687,26 @@ final class FanController: ObservableObject {
     }
 
     /// Called on quit: a forced fan must never outlive the app.
-    func restoreSystemControl() {
-        for fan in fans {
-            try? writeMode(index: fan.index, manual: false)
+    @discardableResult
+    func restoreSystemControl() -> Bool {
+        sessionCooling = false
+        modesBeforeSession.removeAll()
+        lastAppliedFixed.removeAll()
+        lastCurveWrite.removeAll()
+        // Cancels the pending endSessionCooling closure before handing back.
+        var failures: [String] = []
+        let currentFans = readFansNow()
+        let count = try? SMC.shared.readDouble("FNum")
+        if currentFans.isEmpty, count != 0 {
+            lastError = t("无法确认风扇状态，请重试安全清理")
+            return false
         }
+        for fan in currentFans {
+            do { try writeMode(index: fan.index, manual: false) }
+            catch { failures.append(error.localizedDescription) }
+        }
+        lastError = failures.isEmpty ? nil : failures.joined(separator: "; ")
+        return failures.isEmpty
     }
 
     // MARK: - Persistence

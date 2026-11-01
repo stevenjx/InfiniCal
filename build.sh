@@ -16,6 +16,10 @@ else
   SDK="$(xcrun --show-sdk-path)"
 fi
 
+# Reject source/version drift and run hardware-free regression tests before build.
+python3 "$ROOT/Tools/quality_gate.py" source
+python3 "$ROOT/Tools/quality_gate.py" test
+
 # Only clean our own products; keep Xcode DerivedData (build/xcode) intact.
 rm -rf "$APP" "$BUILD/obj"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Library/Helper" "$BUILD/obj"
@@ -52,6 +56,7 @@ SOURCES=(
   "$ROOT/Sources/UI/PanelsBattery.swift"
   "$ROOT/Sources/UI/PanelsAutomation.swift"
   "$ROOT/Sources/UI/PanelsAppearance.swift"
+  "$ROOT/Sources/UI/HardwareDiagnosticsView.swift"
   "$ROOT/Sources/UI/HistoryPanel.swift"
   "$ROOT/Sources/UI/RootView.swift"
   "$ROOT/Sources/UI/AppDelegate.swift"
@@ -90,8 +95,9 @@ cp "$ROOT/Resources/en.json" "$APP/Contents/Resources/en.json"
 chmod +x "$APP/Contents/MacOS/InfiniCal" "$APP/Contents/Library/Helper/com.infinitycomputer.infinical.helper"
 
 # Ad-hoc signature so the app can run locally (replace with a Developer ID for distribution).
-codesign --force --sign - --timestamp=none "$APP/Contents/Library/Helper/com.infinitycomputer.infinical.helper" >/dev/null 2>&1 || true
-codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
+codesign --force --sign - --timestamp=none "$APP/Contents/Library/Helper/com.infinitycomputer.infinical.helper"
+codesign --force --deep --sign - "$APP"
+python3 "$ROOT/Tools/quality_gate.py" artifact
 
 echo "==> built $APP"
 lipo -info "$APP/Contents/MacOS/InfiniCal"

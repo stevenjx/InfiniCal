@@ -90,11 +90,11 @@ func isSafeExec(_ path: String, _ arguments: [String]) -> Bool {
         ]
         return allowed.contains(arguments)
     case "/usr/bin/pmset":
-        guard arguments.count == 4,
+        guard arguments.count == 3,
               arguments[0] == "-a" || arguments[0] == "-b" || arguments[0] == "-c",
               arguments[1] == "lowpowermode",
               arguments[2] == "0" || arguments[2] == "1" else { return false }
-        return arguments[0] == "-a" || arguments.count == 4
+        return true
     default:
         return false
     }

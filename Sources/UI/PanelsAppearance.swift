@@ -6,11 +6,14 @@ import SwiftUI
 
 struct OtherView: View {
     @EnvironmentObject private var state: AppState
+    @StateObject private var showingDiagnostics = UIFlag()
     private var theme: Theme { Theme.current }
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 12) {
+                Button(t("硬件兼容性诊断")) { showingDiagnostics.value = true }
+                    .sheet(isPresented: $showingDiagnostics.value) { HardwareDiagnosticsView() }
                 HStack(spacing: 10) {
                     IconBadge(symbol: "circle.lefthalf.filled")
                     Text(t("外观模式"))
