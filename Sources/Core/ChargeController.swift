@@ -90,6 +90,15 @@ final class HelperClient {
 
     var supportsInflowCommand: Bool { helperProtocolVersion >= 2 && helperCapabilities.contains("inflow") }
 
+    var needsUpdate: Bool {
+        guard lastKnownInstalled else { return false }
+        if helperProtocolVersion != 3 || !Set(["write", "info", "exec", "inflow"]).isSubset(of: helperCapabilities) { return true }
+        // Protocol compatibility alone does not detect helper fixes within v3.
+        guard let bundled = try? Data(contentsOf: URL(fileURLWithPath: bundledHelperPath)),
+              let installed = try? Data(contentsOf: URL(fileURLWithPath: Self.helperPath)) else { return true }
+        return bundled != installed
+    }
+
     var bundledHelperPath: String {
         Bundle.main.bundlePath + "/Contents/Library/Helper/com.infinitycomputer.infinical.helper"
     }
@@ -630,6 +639,16 @@ final class ChargeController {
             }
         case .bclm:
             if allowed {
+                // Calibration and inhibit backends can coexist with BCLM.
+                // Releasing the ceiling alone does not clear CH0B/CH0C/CHTE.
+                if let info = capabilities.chte, info.isWritable, info.size == 4 {
+                    try HelperClient.shared.smcWriteBytes("CHTE", [0, 0, 0, 0])
+                }
+                for (key, info) in [("CH0B", capabilities.ch0b), ("CH0C", capabilities.ch0c)] {
+                    if let info, info.isWritable, info.size == 1 {
+                        try HelperClient.shared.smcWrite(key, 0)
+                    }
+                }
                 let limit = targetLimit ?? 100
                 try HelperClient.shared.smcWrite("BCLM", UInt8(max(0, min(100, limit))))
             } else {

@@ -22,7 +22,7 @@ final class MenuBarController: NSObject {
     /// Snapshot last drawn into the status item. The battery level only moves
     /// every few minutes, but the state object publishes every 2 s; without this
     /// the button allocates a fresh NSImage on every tick.
-    private var lastButtonKey: (Bool, Int, Bool, ChargeState, Int, Bool)?
+    private var lastButtonKey: String?
 
     init(openWindow: @escaping () -> Void) {
         self.openWindow = openWindow
@@ -83,8 +83,8 @@ final class MenuBarController: NSObject {
     private func updateButton() {
         guard let button = statusItem.button else { return }
         let snapshot = state.snapshot
-        let key = (snapshot.isPresent, snapshot.percentage, snapshot.isCharging,
-                   state.chargeState, state.chargeVal, L10n.isChinese)
+        let discharging = snapshot.instantAmperage < -0.05 || snapshot.amperage < -0.05
+        let key = "\(snapshot.isPresent)-\(snapshot.percentage)-\(snapshot.isCharging)-\(snapshot.isPluggedIn)-\(discharging)-\(state.chargeState)-\(state.chargeVal)-\(L10n.isChinese)"
         if let last = lastButtonKey, last == key { return }
         lastButtonKey = key
         guard snapshot.isPresent else {
@@ -94,8 +94,7 @@ final class MenuBarController: NSObject {
             return
         }
         let percent = snapshot.percentage
-        button.image = batteryImage(symbolName(percent: percent, charging: snapshot.isCharging),
-                                    description: tf("电池 {p}%", "\(percent)"))
+        button.image = stateBatteryImage(mode: discharging ? "discharge" : (snapshot.isCharging ? "charge" : "hold"))
         button.attributedTitle = statusTitle(" \(percent)%")
         button.toolTip = tf("{p} · 限制 {p}%", state.chargeState.title, "\(state.chargeVal)")
     }
@@ -128,15 +127,35 @@ final class MenuBarController: NSObject {
         return image
     }
 
-    private func symbolName(percent: Int, charging: Bool) -> String {
-        if charging, percent >= 95 { return "battery.100.bolt" }
-        switch percent {
-        case 88...: return "battery.100"
-        case 63..<88: return "battery.75"
-        case 38..<63: return "battery.50"
-        case 13..<38: return "battery.25"
-        default: return "battery.0"
+    /// Three vector template glyphs share the same battery outline.
+    private func stateBatteryImage(mode: String) -> NSImage {
+        let image = NSImage(size: NSSize(width: 27, height: 16), flipped: false) { _ in
+            NSColor.black.setStroke()
+            NSColor.black.setFill()
+            let outline = NSBezierPath(roundedRect: NSRect(x: 1, y: 2, width: 23, height: 12), xRadius: 2, yRadius: 2)
+            outline.lineWidth = 1.4
+            outline.stroke()
+            NSBezierPath(roundedRect: NSRect(x: 25, y: 6, width: 2, height: 4), xRadius: 0.5, yRadius: 0.5).fill()
+            if mode == "charge" {
+                let bolt = NSBezierPath()
+                bolt.move(to: NSPoint(x: 14, y: 13)); bolt.line(to: NSPoint(x: 9, y: 7))
+                bolt.line(to: NSPoint(x: 12, y: 7)); bolt.line(to: NSPoint(x: 11, y: 3))
+                bolt.line(to: NSPoint(x: 17, y: 9)); bolt.line(to: NSPoint(x: 14, y: 9))
+                bolt.close(); bolt.fill()
+            } else if mode == "discharge" {
+                let arrow = NSBezierPath()
+                arrow.move(to: NSPoint(x: 12.5, y: 12)); arrow.line(to: NSPoint(x: 12.5, y: 5))
+                arrow.move(to: NSPoint(x: 9, y: 8)); arrow.line(to: NSPoint(x: 12.5, y: 4.5)); arrow.line(to: NSPoint(x: 16, y: 8))
+                arrow.lineWidth = 1.6; arrow.stroke()
+            } else {
+                NSBezierPath(rect: NSRect(x: 9, y: 5, width: 2.5, height: 6)).fill()
+                NSBezierPath(rect: NSRect(x: 14, y: 5, width: 2.5, height: 6)).fill()
+            }
+            return true
         }
+        image.isTemplate = true
+        image.accessibilityDescription = t(mode == "charge" ? "充电中" : (mode == "discharge" ? "放电中" : "停止充电"))
+        return image
     }
 
     // MARK: - Interaction

@@ -230,7 +230,7 @@ final class AppState: ObservableObject {
         syncTheme()
         loadHistory()
         helperInstalled = HelperClient.shared.refreshInstallState()
-        showFirstRunHelperPrompt = !helperInstalled && !defaults.bool(forKey: "didShowFirstRunHelperPrompt")
+        showFirstRunHelperPrompt = !helperInstalled || HelperClient.shared.needsUpdate
         capabilities = ChargeController.shared.detectCapabilities()
         capabilities.hasHelper = helperInstalled
         ChargeController.shared.restoreAdapterLeftOff()
@@ -489,6 +489,7 @@ final class AppState: ObservableObject {
                                        plugged: snapshot.isPluggedIn,
                                        health: snapshot.healthPercent,
                                        cycleCount: snapshot.cycleCount,
+                                       reportedCapacityMAh: snapshot.maxCapacity,
                                        seconds: seconds)
     }
 

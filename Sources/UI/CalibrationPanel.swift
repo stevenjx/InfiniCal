@@ -30,6 +30,19 @@ struct CalibrationPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
+            if let quality = engine.resultQuality {
+                Card(padding: 12) {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(tf("校准质量等级：{p}", t(quality.label)))
+                            .font(.system(size: 13, weight: .medium))
+                        Text(t("质量等级基于过程证据，不代表统计概率或测量精度保证"))
+                            .font(.system(size: 11)).foregroundColor(theme.textSecondary)
+                        ForEach(quality.reasons, id: \.self) { reason in
+                            Text(t(reason)).font(.system(size: 11))
+                        }
+                    }
+                }
+            }
             if engine.needsRecovery {
                 Card(padding: 12) {
                     VStack(alignment: .leading, spacing: 8) {
@@ -1398,6 +1411,12 @@ private struct CalibrationHistorySheet: View {
                 .buttonStyle(.plain)
             }
 
+            Text(tf("校准质量等级：{p}", record.quality.map { t($0.label) } ?? t("未评估（旧记录）")))
+                .font(.system(size: 11)).foregroundColor(theme.textSecondary)
+            if let quality = record.quality, !quality.reasons.isEmpty {
+                Text(quality.reasons.map { t($0) }.joined(separator: "; "))
+                    .font(.system(size: 11)).foregroundColor(theme.textSecondary)
+            }
             HStack(spacing: 14) {
                 value(t("实测容量"), "\(Int(record.calculatedCapacityMAh)) mAh")
                 value(t("放电能量"), String(format: "%.2f Wh", record.dischargeEnergyWh))

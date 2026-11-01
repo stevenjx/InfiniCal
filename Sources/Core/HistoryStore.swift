@@ -23,6 +23,10 @@ struct DailyStat: Codable, Identifiable, Equatable {
     var pluggedSeconds: Double = 0
     var lastHealthPercent: Int = 0
     var cycleCount: Int = 0
+    // Optional fields keep pre-trend history decodable. Unknown is not zero.
+    var reportedCapacityMAh: Int? = nil
+    var observedSeconds: Double? = nil
+    var highTemperatureSeconds: Double? = nil
 
     var id: Date { day }
     var averageTemperature: Double {
@@ -147,6 +151,78 @@ struct BatteryTrend {
     }
 }
 
+/// Descriptive least-squares slope; no lifetime extrapolation or probability claim.
+struct HealthRegression {
+    let changePer30Days: Double
+    let rSquared: Double
+    let sampleCount: Int
+    let spanDays: Double
+
+    static func fit(_ samples: [(Date, Double)]) -> Self? {
+        let points = samples.filter { $0.1.isFinite && $0.1 > 0 }.sorted { $0.0 < $1.0 }
+        guard points.count >= 4, let first = points.first, let last = points.last else { return nil }
+        let span = last.0.timeIntervalSince(first.0) / 86400
+        guard span >= 14, Set(points.map { Calendar.current.startOfDay(for: $0.0) }).count >= 4 else { return nil }
+        let xs = points.map { $0.0.timeIntervalSince(first.0) / 86400 }
+        let ys = points.map { $0.1 }
+        let mx = xs.reduce(0, +) / Double(xs.count)
+        let my = ys.reduce(0, +) / Double(ys.count)
+        let sxx = xs.reduce(0) { $0 + pow($1 - mx, 2) }
+        guard sxx > 0 else { return nil }
+        let slope = zip(xs, ys).reduce(0) { $0 + ($1.0 - mx) * ($1.1 - my) } / sxx
+        let residual = zip(xs, ys).reduce(0) { $0 + pow($1.1 - (my + slope * ($1.0 - mx)), 2) }
+        let total = ys.reduce(0) { $0 + pow($1 - my, 2) }
+        return Self(changePer30Days: slope * 30, rSquared: total > 0 ? max(0, 1 - residual / total) : 0,
+                    sampleCount: points.count, spanDays: span)
+    }
+}
+
+/// Windowed descriptive comparison, not a prediction of battery lifetime.
+struct HealthWindow {
+    let days: [DailyStat]
+    let records: [CalibrationRecord]
+    let excludedRecords: Int
+
+    init(days: [DailyStat], records: [CalibrationRecord], count: Int, now: Date = Date(), calendar: Calendar = .current) {
+        let start = calendar.date(byAdding: .day, value: -(max(1, count) - 1), to: calendar.startOfDay(for: now)) ?? now
+        self.days = days.filter { $0.day >= start && $0.day <= now && !$0.isEmpty }.sorted { $0.day < $1.day }
+        let candidates = records.filter { $0.endDate >= start && $0.endDate <= now }
+        self.records = candidates.filter {
+            $0.quality?.eligibleForAggregation == true && $0.calculatedCapacityMAh.isFinite && $0.calculatedCapacityMAh > 0
+        }.sorted { $0.endDate < $1.endDate }
+        excludedRecords = candidates.count - self.records.count
+    }
+
+    static func delta(_ values: [Double]) -> Double? {
+        let valid = values.filter { $0.isFinite && $0 > 0 }
+        guard valid.count >= 2, let first = valid.first, let last = valid.last else { return nil }
+        return last - first
+    }
+    /// Latest eligible measurement anchors comparisons; missing conditions are excluded.
+    var comparableRecords: [CalibrationRecord] {
+        guard let reference = records.last?.conditions else { return [] }
+        return records.filter { $0.conditions.map { reference.matches($0) } == true }
+    }
+    var capacityDelta: Double? { Self.delta(comparableRecords.map { $0.calculatedCapacityMAh }) }
+    var resistanceDelta: Double? { Self.delta(comparableRecords.map { $0.internalResistanceMilliohm }) }
+    var capacityRate: HealthRegression? {
+        HealthRegression.fit(comparableRecords.map { ($0.endDate, $0.calculatedCapacityMAh) })
+    }
+    var resistanceRate: HealthRegression? {
+        HealthRegression.fit(comparableRecords.map { ($0.endDate, $0.internalResistanceMilliohm) })
+    }
+    var reportedDelta: Double? { Self.delta(days.compactMap { $0.reportedCapacityMAh.map(Double.init) }) }
+    var cycleDelta: Double? {
+        let values = days.map { Double($0.cycleCount) }
+        guard let result = Self.delta(values), result >= 0 else { return nil }
+        return result
+    }
+    var highTemperatureHours: Double? {
+        let values = days.compactMap { $0.highTemperatureSeconds }
+        return values.isEmpty ? nil : values.reduce(0, +) / 3600
+    }
+}
+
 final class DailyHistory: ObservableObject {
 
     static let shared = DailyHistory()
@@ -170,6 +246,7 @@ final class DailyHistory: ObservableObject {
                     plugged: Bool,
                     health: Int,
                     cycleCount: Int,
+                    reportedCapacityMAh: Int = 0,
                     seconds: TimeInterval) {
         guard seconds > 0, seconds < 300 else { return }
         let today = calendar.startOfDay(for: Date())
@@ -194,6 +271,11 @@ final class DailyHistory: ObservableObject {
         if plugged { stat.pluggedSeconds += seconds }
         if health > 0 { stat.lastHealthPercent = health }
         if cycleCount > 0 { stat.cycleCount = cycleCount }
+        if reportedCapacityMAh > 0 { stat.reportedCapacityMAh = reportedCapacityMAh }
+        if temperature > 0, temperature < 120 {
+            stat.observedSeconds = (stat.observedSeconds ?? 0) + seconds
+            stat.highTemperatureSeconds = (stat.highTemperatureSeconds ?? 0) + (temperature >= 40 ? seconds : 0)
+        }
 
         days.append(stat)
         if days.count > retentionDays { days.removeFirst(days.count - retentionDays) }

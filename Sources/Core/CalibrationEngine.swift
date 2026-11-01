@@ -127,8 +127,18 @@ final class CalibrationEngine: ObservableObject {
     // MARK: Live telemetry (1 Hz)
 
     @Published var phase: CalibrationPhase = .idle {
-        didSet { if isRunning { saveCheckpoint(reason: "phaseChanged") } }
+        didSet {
+            if isRunning {
+                qualityPhases.insert(phase.rawValue)
+                saveCheckpoint(reason: "phaseChanged")
+            }
+        }
     }
+    @Published private(set) var resultQuality: CalibrationQuality?
+    private var qualityPhases: Set<String> = []
+    private var qualityIssues: Set<String> = []
+    private var negativeSamples = 0
+    private var positiveSamples = 0
     @Published private(set) var pendingRecovery: CalibrationCheckpoint?
     @Published private(set) var recoveryError: String?
     private(set) var recoveredChargeLimit: Int?
@@ -564,6 +574,11 @@ final class CalibrationEngine: ObservableObject {
             return false
         }
 
+        resultQuality = nil
+        qualityPhases = []
+        qualityIssues = ["使用私有硬件控制路径"]
+        negativeSamples = 0
+        positiveSamples = 0
         isRunning = true
         lastSessionUptime = ProcessInfo.processInfo.systemUptime
         noChargeTicks = 0
@@ -635,6 +650,7 @@ final class CalibrationEngine: ObservableObject {
     func stop(reason: String? = nil) {
         guard isRunning else { return }
         saveCheckpoint(reason: reason ?? "userStopped")
+        resultQuality = assessQuality(completed: false)
         pendingRecovery = defaults.data(forKey: checkpointKey).flatMap { try? JSONDecoder().decode(CalibrationCheckpoint.self, from: $0) }
         stopStressLoad()
         releaseDischarge(limit: sessionRestoreLimit)
@@ -705,6 +721,7 @@ final class CalibrationEngine: ObservableObject {
 
         guard isRunning else { return }
         if let last = lastSessionUptime, uptime - last > 5 {
+            qualityIssues.insert("采样中断")
             stop(reason: t("采样中断超过 5 秒，校准已暂停；请处理恢复记录"))
             return
         }
@@ -718,6 +735,10 @@ final class CalibrationEngine: ObservableObject {
         sessionPoints.append(point)
         if sessionPoints.count > 120_000 { sessionPoints.removeFirst(20_000) }
 
+        if phase == .discharging, signedAmperage < -0.05 { negativeSamples += 1 }
+        if phase == .rechargingToFull, signedAmperage > 0.05 { positiveSamples += 1 }
+        if isThermalCutoffActive { qualityIssues.insert("发生过热保护") }
+        if adapterFailureLogged || chargingIssue != nil { qualityIssues.insert("发生控制或充电异常") }
         handleThermalCutoff()
         let totals = integrator.step(uptime: uptime,
                                      currentSignedAmps: signedAmperage,
@@ -796,7 +817,7 @@ final class CalibrationEngine: ObservableObject {
 
     private func updateEstimates(smoothedPower: Double) {
         let fallbackCap = rawMaxCapacityMAh > 500 ? rawMaxCapacityMAh : max(designCapacityMAh * 0.93, 1)
-        let estimate = model.inferTrueHealth(records: records,
+        let estimate = model.inferTrueHealth(records: records.filter { $0.quality?.eligibleForAggregation == true },
                                              designCapacityMAh: designCapacityMAh,
                                              hardwareMaxCapacityMAh: fallbackCap)
         aiTrueCapacityMAh = estimate.capacityMAh
@@ -1088,7 +1109,20 @@ final class CalibrationEngine: ObservableObject {
         notify(t("回落至存储电量"), tf("校准即将完成，正在缓慢放电至 {p}% 存储电量。", "\(storageLevel)"))
     }
 
+    private func assessQuality(completed: Bool) -> CalibrationQuality {
+        var issues = qualityIssues
+        if ChargeController.shared.usesIntelInflow || ChargeController.shared.activeAdapterKey != nil {
+            issues.insert("使用私有硬件控制路径")
+        }
+        return CalibrationQuality.evaluate(phases: qualityPhases, negativeSamples: negativeSamples,
+            positiveSamples: positiveSamples, dischargeAh: dischargeEnergyAh,
+            rechargeAh: rechargeEnergyAh, span: dischargeStartPercentage - dischargeTarget,
+            issues: issues, backend: ChargeController.shared.capabilities.strategy.rawValue,
+            completed: completed)
+    }
+
     private func finish() {
+        resultQuality = assessQuality(completed: true)
         stopStressLoad()
         releaseDischarge(limit: storageLevel)
         guard chargingIssue == nil else {
@@ -1124,7 +1158,14 @@ final class CalibrationEngine: ObservableObject {
                                        rechargeEnergyWh: rechargeEnergyWh,
                                        rechargeEnergyAh: rechargeEnergyAh,
                                        coulombicEfficiency: coulombicEfficiency,
-                                       internalResistanceMilliohm: internalResistanceMilliohm)
+                                       internalResistanceMilliohm: internalResistanceMilliohm,
+                                       quality: resultQuality,
+                                       conditions: CalibrationConditions(model: hardwareModel,
+                                           backend: ChargeController.shared.capabilities.strategy.rawValue,
+                                           stressMode: sessionStressMode.rawValue, target: dischargeTarget,
+                                           startPercentage: dischargeStartPercentage,
+                                           meanTemperature: dischargeCurve.isEmpty ? 0 : dischargeCurve.reduce(0) { $0 + $1.temperature } / Double(dischargeCurve.count),
+                                           meanPower: dischargeAveragePower, designCapacityMAh: designCapacityMAh))
 
         if autoExport {
             exportReports(record: record)
@@ -1196,7 +1237,7 @@ final class CalibrationEngine: ObservableObject {
                 // a state the system does not own.
                 try controller.applyChargeLimit(limit)
             case .bclm:
-                try controller.applyChargeLimit(limit)
+                try controller.setChargingAllowed(true, targetLimit: limit)
             case .ch0bch0c, .chte:
                 try controller.setChargingAllowed(true)
             case .unavailable:
@@ -1568,6 +1609,12 @@ final class CalibrationEngine: ObservableObject {
             "",
             t("----------------- 多周期加权评估 -----------------")
         ]
+        if let quality = record.quality {
+            lines += [tf("校准质量等级：{p}", t(quality.label)),
+                      t("质量等级基于过程证据，不代表统计概率或测量精度保证"),
+                      quality.reasons.map { t($0) }.joined(separator: "; "),
+                      "Samples: discharge=\(quality.negativeSamples), recharge=\(quality.positiveSamples); backend=\(quality.backend)"]
+        }
         if let aggregated {
             lines += [
                 "",

@@ -67,10 +67,14 @@ def tests():
     checkpoint = checkpoint_file[checkpoint_file.index("struct CalibrationCheckpoint:"):checkpoint_file.index("/// One 1 Hz")]
     helper = (ROOT / "Helper/main.swift").read_text()
     validation = helper[helper.index("func isAllowedWriteKey("):helper.index("let allowedExecutables:")]
+    quality = checkpoint_file[checkpoint_file.index("struct CalibrationQuality:"):checkpoint_file.index("struct CalibrationConditions:")]
+    conditions = checkpoint_file[checkpoint_file.index("struct CalibrationConditions:"):checkpoint_file.index("/// Result of one completed")]
     record = checkpoint_file[checkpoint_file.index("struct CalibrationRecord:"):checkpoint_file.index("/// Weighted blend")]
-    swift = "import Foundation\n" + policy + checkpoint + record + validation
+    swift = "import Foundation\n" + policy + checkpoint + quality + conditions + record + validation
     swift += (ROOT / "Sources/Core/ControlResult.swift").read_text()
     swift += (ROOT / "Sources/Core/CalibrationMath.swift").read_text()
+    history = (ROOT / "Sources/Core/HistoryStore.swift").read_text()
+    swift += history[history.index("struct DailyStat:"):history.index("final class DailyHistory:")]
     swift += '''
 func check(_ condition: Bool, _ message: String) { precondition(condition, message) }
 for sailing in [false, true] {
@@ -104,7 +108,39 @@ check(decoded == c, "checkpoint round trip")
 check((try? JSONDecoder().decode(CalibrationCheckpoint.self, from: Data("{}".utf8))) == nil, "corrupt checkpoint")
 let evidence = ControlEvidence(operation: "test", backend: "mock", phase: .accepted)
 check(evidence.observed == nil, "acceptance is not observation")
-print("PASS pure policy/math/checkpoint/helper-validation tests (no hardware)")
+let phases: Set<String> = ["chargingToFull", "discharging", "rechargingToFull", "holdingAtFull", "dischargingToBuffer"]
+func quality(_ complete: Bool, _ span: Int, _ issues: Set<String>, _ samples: Int = 100) -> CalibrationQuality {
+    CalibrationQuality.evaluate(phases: phases, negativeSamples: samples, positiveSamples: samples, dischargeAh: 3, rechargeAh: 3.1, span: span, issues: issues, backend: "mock", completed: complete)
+}
+check(quality(true, 80, []).grade == .high, "clean cycle")
+check(quality(false, 80, []).grade == .invalid, "incomplete cycle")
+check(quality(true, 80, [], 0).grade == .invalid, "no current")
+check(quality(true, 20, []).grade == .low, "narrow span")
+check(!quality(true, 20, []).eligibleForAggregation, "low grade isolation")
+check(quality(true, 80, ["发生过热保护"]).grade == .medium, "thermal event")
+let legacyData = try JSONEncoder().encode(CalibrationRecord())
+let legacy = try JSONDecoder().decode(CalibrationRecord.self, from: legacyData)
+check(legacy.quality == nil, "legacy quality")
+check(HealthWindow.delta([]) == nil, "empty trend")
+check(HealthWindow.delta([5000]) == nil, "single sample")
+check(HealthWindow.delta([5000, 4900]) == -100, "capacity delta")
+check(HealthWindow.delta([Double.nan, 0, 5000]) == nil, "invalid values excluded")
+check(BatteryTrend.compute(days: []) == nil, "insufficient trend")
+let oldDay = DailyStat(day: Date(), temperatureSamples: 1)
+check(oldDay.reportedCapacityMAh == nil && oldDay.highTemperatureSeconds == nil, "legacy missing data")
+let window = HealthWindow(days: [oldDay], records: [], count: 7)
+check(window.highTemperatureHours == nil && window.capacityDelta == nil, "unknown not zero")
+let anchor = Date(timeIntervalSinceReferenceDate: 0)
+let synthetic = (0..<10).map { (anchor.addingTimeInterval(Double($0) * 7 * 86400), 5000.0 - Double($0) * 7) }
+let fit = HealthRegression.fit(synthetic)!
+check(abs(fit.changePer30Days + 30) < 1e-8 && fit.rSquared > 0.999, "synthetic known slope")
+check(HealthRegression.fit(Array(synthetic.prefix(3))) == nil, "regression minimum samples")
+check(HealthRegression.fit((0..<4).map { (anchor, Double(5000 - $0)) }) == nil, "same-day pseudoreplication")
+let conditions = CalibrationConditions(model: "test", backend: "bclm", stressMode: "silent", target: 10, startPercentage: 100, meanTemperature: 30, meanPower: 10, designCapacityMAh: 6000)
+check(conditions.matches(conditions), "self match")
+let mismatch = CalibrationConditions(model: "test", backend: "bclm", stressMode: "silent", target: 10, startPercentage: 100, meanTemperature: 40, meanPower: 10, designCapacityMAh: 6000)
+check(!conditions.matches(mismatch), "temperature mismatch")
+print("PASS pure policy/math/checkpoint/helper-validation/quality/trend tests (no hardware)")
 '''
     with tempfile.TemporaryDirectory(prefix="infinical-tests-") as directory:
         main = Path(directory) / "main.swift"

@@ -9,7 +9,7 @@ struct FirstRunHelperSheet: View {
             Image(systemName: "lock.shield.fill")
                 .font(.system(size: 34))
                 .foregroundColor(theme.accent)
-            Text(t("安装特权助手"))
+            Text(t(HelperClient.shared.needsUpdate ? "更新特权助手" : "安装特权助手"))
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundColor(theme.textPrimary)
             Text(t("InfiniCal 需要特权助手才能精确读取 SMC 数据，并执行充电限制、放电和电池校准。助手只用于本机电池控制，不联网。"))

@@ -49,6 +49,70 @@ struct CalibrationSample: Identifiable {
     var id: Date { timestamp }
 }
 
+/// Evidence quality, not a probability or a laboratory accuracy claim.
+struct CalibrationQuality: Codable, Equatable {
+    enum Grade: String, Codable { case high, medium, low, invalid }
+    let grade: Grade
+    let reasons: [String]
+    let completedPhases: [String]
+    let negativeSamples: Int
+    let positiveSamples: Int
+    let backend: String
+
+    static func evaluate(phases: Set<String>, negativeSamples: Int, positiveSamples: Int,
+                         dischargeAh: Double, rechargeAh: Double, span: Int,
+                         issues: Set<String>, backend: String, completed: Bool) -> Self {
+        let required: Set<String> = ["chargingToFull", "discharging", "rechargingToFull", "holdingAtFull", "dischargingToBuffer"]
+        var reasons = issues
+        if !completed || !required.isSubset(of: phases) { reasons.insert("阶段未完整完成") }
+        if negativeSamples < 30 || positiveSamples < 30 { reasons.insert("有效电流样本不足") }
+        if !dischargeAh.isFinite || !rechargeAh.isFinite || dischargeAh <= 0 || rechargeAh <= 0 {
+            reasons.insert("缺少有效充放电积分")
+        }
+        if span < 50 { reasons.insert("测量电量跨度不足 50%") }
+        let invalid = !completed || !required.isSubset(of: phases)
+            || negativeSamples < 30 || positiveSamples < 30
+            || !dischargeAh.isFinite || !rechargeAh.isFinite || dischargeAh <= 0 || rechargeAh <= 0
+        let grade: Grade = invalid ? .invalid : (span < 50 || issues.contains("采样中断") ? .low : (reasons.isEmpty ? .high : .medium))
+        return Self(grade: grade, reasons: reasons.sorted(), completedPhases: phases.sorted(),
+                    negativeSamples: negativeSamples, positiveSamples: positiveSamples, backend: backend)
+    }
+
+    var label: String {
+        switch grade {
+        case .high: return "高"
+        case .medium: return "中"
+        case .low: return "低"
+        case .invalid: return "无效"
+        }
+    }
+    var eligibleForAggregation: Bool { grade == .high || grade == .medium }
+}
+
+struct CalibrationConditions: Codable, Equatable {
+    let model: String
+    let backend: String
+    let stressMode: String
+    let target: Int
+    let startPercentage: Int
+    let meanTemperature: Double
+    let meanPower: Double
+    let designCapacityMAh: Double
+
+    func matches(_ other: Self) -> Bool {
+        guard meanTemperature.isFinite, other.meanTemperature.isFinite,
+              meanTemperature > 0, other.meanTemperature > 0,
+              meanPower.isFinite, other.meanPower.isFinite, meanPower > 0, other.meanPower > 0,
+              designCapacityMAh > 0, other.designCapacityMAh > 0,
+              model != "--" else { return false }
+        return model == other.model && backend == other.backend && stressMode == other.stressMode
+            && target == other.target && abs(startPercentage - other.startPercentage) <= 2
+            && abs(meanTemperature - other.meanTemperature) <= 3
+            && abs(meanPower - other.meanPower) / max(meanPower, other.meanPower) <= 0.2
+            && abs(designCapacityMAh - other.designCapacityMAh) / max(designCapacityMAh, other.designCapacityMAh) <= 0.02
+    }
+}
+
 /// Result of one completed session. Everything is measured, nothing is copied
 /// from a third-party app.
 struct CalibrationRecord: Codable, Identifiable, Equatable {
@@ -68,6 +132,9 @@ struct CalibrationRecord: Codable, Identifiable, Equatable {
     var coulombicEfficiency: Double = 0
     var internalResistanceMilliohm: Double = 0
     var reportFilePath: String? = nil
+    /// nil means legacy record: quality was not assessed, never assume high.
+    var quality: CalibrationQuality? = nil
+    var conditions: CalibrationConditions? = nil
 }
 
 /// Weighted blend of the most recent sessions.
@@ -125,7 +192,7 @@ enum CalibrationStore {
     /// Multi-session blend: the newest five valid sessions, weighted by recency.
     static func aggregate(_ records: [CalibrationRecord]) -> AggregatedHealth? {
         let valid = records
-            .filter { $0.calculatedCapacityMAh > 1000 && $0.batteryHealthPercentage > 0 }
+            .filter { $0.calculatedCapacityMAh > 1000 && $0.batteryHealthPercentage > 0 && $0.quality?.eligibleForAggregation == true }
             .sorted { $0.startDate > $1.startDate }
         guard !valid.isEmpty else { return nil }
 
