@@ -16,7 +16,8 @@ struct CalibrationPage: View {
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
             CalibrationPanel()
-                .padding(22)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
         }
     }
 }
@@ -28,7 +29,7 @@ struct CalibrationPanel: View {
     private var theme: Theme { Theme.current }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 7) {
             header
             if let quality = engine.resultQuality {
                 Card(padding: 12) {
@@ -134,7 +135,7 @@ struct CalibrationPanel: View {
                           points: engine.chartPoints,
                           keyPath: \.power)
             }
-            .frame(height: 158)
+            .frame(height: 110)
             controlBar
             Card(padding: 12) {
                 HStack(spacing: 10) {
@@ -431,8 +432,8 @@ struct CalibrationPanel: View {
     }
 
     private var pipelineCard: some View {
-        Card(padding: 14) {
-            VStack(alignment: .leading, spacing: 10) {
+        Card(padding: 10) {
+            VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     Image(systemName: "arrow.triangle.branch")
                         .font(.system(size: 10, weight: .semibold))
@@ -510,7 +511,7 @@ struct CalibrationPanel: View {
     // MARK: - Results
 
     private var enduranceCard: some View {
-        Card(padding: 14) {
+        Card(padding: 10) {
             VStack(alignment: .leading, spacing: 8) {
                 cardTitle("clock", t("续航评估"), tint: theme.chartOrange) {
                     if engine.aiRemainingMinutes > 0 {
@@ -543,7 +544,7 @@ struct CalibrationPanel: View {
     }
 
     private var healthCard: some View {
-        Card(padding: 14) {
+        Card(padding: 10) {
             VStack(alignment: .leading, spacing: 8) {
                 cardTitle("heart", t("健康度与容量"), tint: theme.chartBlue) {
                     if engine.aiConfidence > 0 {

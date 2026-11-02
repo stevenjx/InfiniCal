@@ -24,6 +24,8 @@
 		1A6CA566A237EA8D40ACB7CB /* ProcessSampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E8F1A7ED04D1422CC51A0D5 /* ProcessSampler.swift */; };
 		6C348952EAA151E9342BFC11 /* HIDThermal.swift in Sources */ = {isa = PBXBuildFile; fileRef = B76742D00A659F9DB7EDC770 /* HIDThermal.swift */; };
 		85D163081A208A1E836F56DA /* HistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C509D83CBC83A13CF4407D84 /* HistoryStore.swift */; };
+		896F5B9621A9F69D848E0570 /* UpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48BB0DFD6037E386E1B55ACD /* UpdateChecker.swift */; };
+		CA7B2E903228E86F220A7AA1 /* UpdatePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA41B8B1FC1FEB4BCA29BF00 /* UpdatePanel.swift */; };
 		4679ED6D469B3C728D05C8BC /* Notifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82BE2237B9BA6EC865EF74E4 /* Notifier.swift */; };
 		5734B7106079282AD7CCAE0E /* AnomalyAlerts.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDC381DEFC38BD86762D8824 /* AnomalyAlerts.swift */; };
 		437B21A60C4A837BEB66E9BB /* SleepControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47148AED6335858B49C9DC9F /* SleepControl.swift */; };
@@ -96,6 +98,8 @@
 		1E8F1A7ED04D1422CC51A0D5 /* ProcessSampler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessSampler.swift; sourceTree = "<group>"; };
 		B76742D00A659F9DB7EDC770 /* HIDThermal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HIDThermal.swift; sourceTree = "<group>"; };
 		C509D83CBC83A13CF4407D84 /* HistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryStore.swift; sourceTree = "<group>"; };
+		48BB0DFD6037E386E1B55ACD /* UpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateChecker.swift; sourceTree = "<group>"; };
+		EA41B8B1FC1FEB4BCA29BF00 /* UpdatePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdatePanel.swift; sourceTree = "<group>"; };
 		82BE2237B9BA6EC865EF74E4 /* Notifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notifier.swift; sourceTree = "<group>"; };
 		DDC381DEFC38BD86762D8824 /* AnomalyAlerts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnomalyAlerts.swift; sourceTree = "<group>"; };
 		47148AED6335858B49C9DC9F /* SleepControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepControl.swift; sourceTree = "<group>"; };
@@ -195,6 +199,7 @@
 				1E8F1A7ED04D1422CC51A0D5 /* ProcessSampler.swift */,
 				B76742D00A659F9DB7EDC770 /* HIDThermal.swift */,
 				C509D83CBC83A13CF4407D84 /* HistoryStore.swift */,
+				48BB0DFD6037E386E1B55ACD /* UpdateChecker.swift */,
 				82BE2237B9BA6EC865EF74E4 /* Notifier.swift */,
 				DDC381DEFC38BD86762D8824 /* AnomalyAlerts.swift */,
 				47148AED6335858B49C9DC9F /* SleepControl.swift */,
@@ -208,6 +213,7 @@
 		CA7A437E526C3B93AF91BECA /* UI */ = {
 			isa = PBXGroup;
 			children = (
+				EA41B8B1FC1FEB4BCA29BF00 /* UpdatePanel.swift */,
 				73F838EA1F1816594DE856B9 /* Charts.swift */,
 				2E20F26DA04039DF24CBE088 /* PowerFlowView.swift */,
 				6AB9BA48442206934EE15499 /* DashboardView.swift */,
@@ -355,6 +361,8 @@
 				1A6CA566A237EA8D40ACB7CB /* ProcessSampler.swift in Sources */,
 				6C348952EAA151E9342BFC11 /* HIDThermal.swift in Sources */,
 				85D163081A208A1E836F56DA /* HistoryStore.swift in Sources */,
+				896F5B9621A9F69D848E0570 /* UpdateChecker.swift in Sources */,
+				CA7B2E903228E86F220A7AA1 /* UpdatePanel.swift in Sources */,
 				4679ED6D469B3C728D05C8BC /* Notifier.swift in Sources */,
 				5734B7106079282AD7CCAE0E /* AnomalyAlerts.swift in Sources */,
 				437B21A60C4A837BEB66E9BB /* SleepControl.swift in Sources */,
@@ -470,7 +478,7 @@
 				);
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 17;
+				CURRENT_PROJECT_VERSION = 18;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Resources/Info.plist;
@@ -478,7 +486,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.12;
+				MARKETING_VERSION = 1.0.13;
 				PRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -495,7 +503,7 @@
 				);
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 17;
+				CURRENT_PROJECT_VERSION = 18;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Resources/Info.plist;
@@ -503,7 +511,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.12;
+				MARKETING_VERSION = 1.0.13;
 				PRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -518,9 +526,9 @@
 					arm64,
 					x86_64,
 				);
-				CURRENT_PROJECT_VERSION = 17;
+				CURRENT_PROJECT_VERSION = 18;
 				GENERATE_INFOPLIST_FILE = NO;
-				MARKETING_VERSION = 1.0.12;
+				MARKETING_VERSION = 1.0.13;
 				PRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical.helper;
 				PRODUCT_NAME = com.infinitycomputer.infinical.helper;
 				SKIP_INSTALL = YES;
@@ -535,9 +543,9 @@
 					arm64,
 					x86_64,
 				);
-				CURRENT_PROJECT_VERSION = 17;
+				CURRENT_PROJECT_VERSION = 18;
 				GENERATE_INFOPLIST_FILE = NO;
-				MARKETING_VERSION = 1.0.12;
+				MARKETING_VERSION = 1.0.13;
 				PRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical.helper;
 				PRODUCT_NAME = com.infinitycomputer.infinical.helper;
 				SKIP_INSTALL = YES;

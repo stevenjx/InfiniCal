@@ -181,7 +181,10 @@ final class FanController: ObservableObject {
         timer = nil
     }
 
+    var updateSuspended = false
+
     private func tick() {
+        guard !updateSuspended else { return }
         refresh()
         applyCurveIfNeeded()
         refreshPowermetricsCPUTemperature()
@@ -432,6 +435,7 @@ final class FanController: ObservableObject {
     // MARK: - Control
 
     func setMode(_ mode: FanMode, for index: Int) {
+        guard !updateSuspended else { return }
         // UI actions arrive while SwiftUI is still inside a view update; mutating
         // @Published there triggers "Publishing changes from within view updates".
         // Hop to the next runloop tick so every state change is published outside
@@ -510,6 +514,7 @@ final class FanController: ObservableObject {
     }
 
     private func applyFixed(index: Int, rpm: Int) {
+        guard !updateSuspended else { return }
         guard let fan = fan(index), fan.canControl else {
             lastError = t("此机型未暴露可写的风扇控制键")
             return
@@ -528,6 +533,7 @@ final class FanController: ObservableObject {
     }
 
     private func writeMode(index: Int, manual: Bool) throws {
+        if manual && updateSuspended { throw HelperError.smc(t("自动控制已暂停；请重试安全退出，或明确恢复控制。")) }
         if SMC.shared.keyInfo("F\(index)Md")?.isWritable == true {
             try HelperClient.shared.smcWriteBytes("F\(index)Md", [manual ? 1 : 0])
             return
@@ -584,6 +590,7 @@ final class FanController: ObservableObject {
     // MARK: - Curve
 
     private func applyCurveIfNeeded(force: Bool = false) {
+        guard !updateSuspended else { return }
         guard curveEnabled || sessionCooling else { return }
         guard let temperature = curveTemperature() else { return }
         // 1 °C deadband: without it a sensor sitting on a threshold rewrites the

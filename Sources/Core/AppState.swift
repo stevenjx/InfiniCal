@@ -339,6 +339,7 @@ final class AppState: ObservableObject {
     /// 「睡眠时停止充电」/「睡眠时充满后停止充电」: the process is suspended during
     /// sleep, so the decision has to be made before the machine goes down.
     private func handleWillSleep() {
+        guard !updatePreparationActive else { return }
         if calibrationEngine.isRunning {
             calibrationEngine.stop(reason: t("系统即将睡眠，校准已中断；请处理恢复记录"))
             return
@@ -413,7 +414,46 @@ final class AppState: ObservableObject {
         flowTicker.update(flowModel)
     }
 
+    @Published private(set) var updatePreparationActive = false
+
+    /// nil means cleanup requests succeeded, not a claim of electrical verification.
+    func prepareForUpdate() -> String? {
+        guard !calibrationEngine.isRunning, !calibrationEngine.needsRecovery else {
+            return t("校准或恢复处理中，请先结束校准或完成安全清理")
+        }
+        updatePreparationActive = true
+        FanController.shared.updateSuspended = true
+        calibrationEngine.prepareIdleForUpdate()
+        let controller = ChargeController.shared
+        controller.stopHoldingCeiling()
+        controller.restoreAdapterLeftOff()
+        controller.endForcedDischarge()
+        var failures: [String] = []
+        if !helperInstalled && snapshot.isPresent {
+            failures.append(t("特权助手不可用，无法确认更新前安全恢复；请安装助手后重试"))
+        }
+        if let error = controller.adapterRestoreError { failures.append(error) }
+        if failures.isEmpty, helperInstalled {
+            do { try controller.prepareForFullCharge() }
+            catch { failures.append(error.localizedDescription) }
+        }
+        if helperInstalled, !FanController.shared.restoreSystemControl() {
+            failures.append(FanController.shared.lastError ?? t("恢复风扇失败"))
+        }
+        // Fail closed: keep all ordinary automation suspended until explicit retry/resume.
+        return failures.isEmpty ? nil : failures.joined(separator: "; ")
+    }
+
+    func cancelUpdatePreparation() {
+        updatePreparationActive = false
+        FanController.shared.updateSuspended = false
+        calibrationEngine.resumeAfterUpdateCancellation()
+        lastAppliedLimit = nil
+        lastChargingAllowed = nil
+    }
+
     private func tick() {
+        guard !updatePreparationActive else { return }
         tickCount += 1
         snapshot = BatteryReader.read()
         recordDailyEnergy()
@@ -770,7 +810,8 @@ final class AppState: ObservableObject {
 
     /// All non-calibration actions share the same ownership barrier.
     private func ordinaryControlAllowed() -> Bool {
-        guard ControlSafety.ordinaryAllowed(running: calibrationEngine.isRunning, recovering: calibrationEngine.needsRecovery) else {
+        guard !updatePreparationActive,
+              ControlSafety.ordinaryAllowed(running: calibrationEngine.isRunning, recovering: calibrationEngine.needsRecovery) else {
             statusNote = t("校准或恢复处理中，请先结束校准或完成安全清理")
             return false
         }
@@ -1012,6 +1053,7 @@ final class AppState: ObservableObject {
     }
 
     func startCalibration() {
+        guard !updatePreparationActive else { return }
         guard !calibrationEngine.isRunning else { return }
         // Started first: the engine refuses when the system is holding the
         // charge below full, and this mirror must not claim a session that
@@ -1101,7 +1143,7 @@ final class AppState: ObservableObject {
     /// `catchUp` is the 「自动补做未完成的任务」 path: a task whose time passed
     /// while the Mac slept, or while the app was closed, still runs — once.
     func checkScheduledTasks(catchUp: Bool = false) {
-        guard !calibrationEngine.isRunning, !calibrationEngine.needsRecovery else { return }
+        guard !updatePreparationActive, !calibrationEngine.isRunning, !calibrationEngine.needsRecovery else { return }
         let now = Date()
         var changed = false
         for index in tasks.indices where isDue(tasks[index], at: now, catchUp: catchUp) {

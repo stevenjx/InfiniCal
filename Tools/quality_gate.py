@@ -75,6 +75,8 @@ def tests():
     swift += (ROOT / "Sources/Core/ControlResult.swift").read_text()
     swift += (ROOT / "Sources/Core/CalibrationMath.swift").read_text()
     history = (ROOT / "Sources/Core/HistoryStore.swift").read_text()
+    updater = (ROOT / "Sources/Core/UpdateChecker.swift").read_text()
+    swift += updater[updater.index("struct UpdateVersion:"):updater.index("private final class UpdateRedirectPolicy")]
     alerts = (ROOT / "Sources/Core/AnomalyAlerts.swift").read_text()
     swift += alerts[alerts.index("struct AnomalyRule {"):alerts.index("struct AnomalyEvidence:")]
     swift += history[history.index("struct DailyStat:"):history.index("final class DailyHistory:")]
@@ -161,6 +163,10 @@ for current in [0.5, 0.0, -0.01, Double.nan, Double.infinity] {
 check(ControlSafety.loadAllowed(running: true, dischargePhase: true, current: -1, failed: false, waiting: false, hot: false), "confirmed current")
 check(!ControlSafety.loadAllowed(running: true, dischargePhase: true, current: -1, failed: true, waiting: false, hot: false), "failure removes load permission")
 check(!ControlSafety.loadAllowed(running: false, dischargePhase: true, current: -1, failed: false, waiting: false, hot: false), "stopped session")
+check(UpdateVersion("1.0.12")! > UpdateVersion("1.0.9")!, "numeric version comparison")
+check(UpdateVersion("v1.2.0")! == UpdateVersion("1.2")!, "trailing zeros")
+check(UpdateVersion("1.2-beta") == nil && UpdateVersion("1..2") == nil, "reject malformed versions")
+check(UpdateVersion("1.999999999999999999999")! > UpdateVersion("1.9")!, "no integer overflow")
 var gate = AnomalyGate()
 let rule = AnomalyRule(id: "test", title: "test", duration: 5, cooldown: 20)
 gate.beginSample(at: anchor)

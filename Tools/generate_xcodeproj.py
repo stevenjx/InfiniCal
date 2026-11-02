@@ -45,6 +45,8 @@ APP_SOURCES = [
     "Sources/Core/ProcessSampler.swift",
     "Sources/Core/HIDThermal.swift",
     "Sources/Core/HistoryStore.swift",
+    "Sources/Core/UpdateChecker.swift",
+    "Sources/UI/UpdatePanel.swift",
     "Sources/Core/Notifier.swift",
     "Sources/Core/AnomalyAlerts.swift",
     "Sources/Core/SleepControl.swift",
@@ -452,7 +454,7 @@ app_common = '''\t\t\t\tMACOSX_DEPLOYMENT_TARGET = 12.0;
 \t\t\t\t);
 \t\t\t\tASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
 \t\t\t\tCOMBINE_HIDPI_IMAGES = YES;
-\t\t\t\tCURRENT_PROJECT_VERSION = 17;
+\t\t\t\tCURRENT_PROJECT_VERSION = 18;
 \t\t\t\tENABLE_PREVIEWS = YES;
 \t\t\t\tGENERATE_INFOPLIST_FILE = NO;
 \t\t\t\tINFOPLIST_FILE = Resources/Info.plist;
@@ -460,7 +462,7 @@ app_common = '''\t\t\t\tMACOSX_DEPLOYMENT_TARGET = 12.0;
 \t\t\t\t\t"$(inherited)",
 \t\t\t\t\t"@executable_path/../Frameworks",
 \t\t\t\t);
-\t\t\t\tMARKETING_VERSION = 1.0.12;
+\t\t\t\tMARKETING_VERSION = 1.0.13;
 \t\t\t\tPRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical;
 \t\t\t\tPRODUCT_NAME = "$(TARGET_NAME)";
 \t\t\t\tSWIFT_EMIT_LOC_STRINGS = NO;
@@ -471,9 +473,9 @@ helper_common = '''\t\t\t\tMACOSX_DEPLOYMENT_TARGET = 12.0;
 \t\t\t\t\tarm64,
 \t\t\t\t\tx86_64,
 \t\t\t\t);
-\t\t\t\tCURRENT_PROJECT_VERSION = 17;
+\t\t\t\tCURRENT_PROJECT_VERSION = 18;
 \t\t\t\tGENERATE_INFOPLIST_FILE = NO;
-\t\t\t\tMARKETING_VERSION = 1.0.12;
+\t\t\t\tMARKETING_VERSION = 1.0.13;
 \t\t\t\tPRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical.helper;
 \t\t\t\tPRODUCT_NAME = com.infinitycomputer.infinical.helper;
 \t\t\t\tSKIP_INSTALL = YES;

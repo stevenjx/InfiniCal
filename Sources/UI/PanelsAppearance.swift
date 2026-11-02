@@ -7,13 +7,22 @@ import SwiftUI
 struct OtherView: View {
     @EnvironmentObject private var state: AppState
     @StateObject private var showingDiagnostics = UIFlag()
+    @StateObject private var showingUpdates = UIFlag()
+    @ObservedObject private var updater = UpdateChecker.shared
     private var theme: Theme { Theme.current }
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 12) {
-                Button(t("硬件兼容性诊断")) { showingDiagnostics.value = true }
-                    .sheet(isPresented: $showingDiagnostics.value) { HardwareDiagnosticsView() }
+                HStack(spacing: 10) {
+                    Button(t("硬件兼容性诊断")) { showingDiagnostics.value = true }
+                        .sheet(isPresented: $showingDiagnostics.value) { HardwareDiagnosticsView() }
+                    Button(t("检查更新")) {
+                        updater.check()
+                        showingUpdates.value = true
+                    }
+                    .sheet(isPresented: $showingUpdates.value) { UpdateSheet() }
+                }
                 HStack(spacing: 10) {
                     IconBadge(symbol: "circle.lefthalf.filled")
                     Text(t("外观模式"))
@@ -73,6 +82,11 @@ struct OtherView: View {
                                   title: t("开机时自动启动"),
                                   help: t("登录 macOS 后自动运行，让充电限制与风扇策略持续生效。"),
                                   isOn: $state.launchAtLogin)
+                        Divider().background(theme.divider)
+                        ToggleRow(symbol: "arrow.triangle.2.circlepath",
+                                  title: t("自动检查更新（每 24 小时）"),
+                                  help: t("默认关闭；启用后仅向 GitHub 查询版本，不会自动下载或安装。"),
+                                  isOn: $updater.autoCheck)
                     }
                 }
 

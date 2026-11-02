@@ -532,6 +532,7 @@ final class CalibrationEngine: ObservableObject {
     /// its own mirror state back instead of showing a session that never began.
     @discardableResult
     func start() -> Bool {
+        guard !updateSuspended else { return false }
         guard !isRunning else { return false }
         guard !needsRecovery else {
             startFailureReason = t("请先处理上次校准的恢复记录")
@@ -680,6 +681,18 @@ final class CalibrationEngine: ObservableObject {
 
     /// Quit path: a session must never leave the pack blocked or the sleep
     /// assertion held once the process is gone.
+    private var updateSuspended = false
+
+    func prepareIdleForUpdate() {
+        guard !isRunning else { return }
+        updateSuspended = true
+        stopStressLoad()
+        stopDrainPulse()
+        disableSleepBlock()
+    }
+
+    func resumeAfterUpdateCancellation() { updateSuspended = false }
+
     func prepareForTermination() {
         guard isRunning else { return }
         saveCheckpoint(reason: "applicationTermination")
@@ -694,6 +707,7 @@ final class CalibrationEngine: ObservableObject {
     // MARK: - Tick
 
     private func tick() {
+        guard !updateSuspended else { return }
         let phase = self.phase
         if phase == .idle && !isRunning && telemetryPageUsers == 0 {
             return

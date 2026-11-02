@@ -220,6 +220,7 @@ struct MenuBarPanel: View {
     @ObservedObject private var fans = FanController.shared
     @ObservedObject private var alerts = AnomalyAlerts.shared
     @StateObject private var exportMessage = UIValue<String?>(nil)
+    @StateObject private var showUpdates = UIFlag()
     var openWindow: () -> Void
 
     private var theme: Theme { Theme.current }
@@ -229,6 +230,8 @@ struct MenuBarPanel: View {
             header
             metrics
             controlSummary
+            Button(t("检查更新")) { showUpdates.value = true }
+                .buttonStyle(.plain).font(.system(size: 11)).foregroundColor(theme.accent)
             actions
             Button(t("导出当前诊断")) { exportDiagnostics() }
                 .buttonStyle(.plain).font(.system(size: 11)).foregroundColor(theme.accent)
@@ -241,7 +244,11 @@ struct MenuBarPanel: View {
         .frame(width: 300)
         .background(theme.windowBackground)
         .preferredColorScheme(theme.isDark ? .dark : .light)
-        .onAppear { fans.beginMonitoring() }
+        .sheet(isPresented: $showUpdates.value) { UpdateSheet() }
+        .onAppear {
+            fans.beginMonitoring()
+            Task { @MainActor in UpdateChecker.shared.check(manual: false) }
+        }
         .onDisappear { fans.endMonitoring() }
     }
 

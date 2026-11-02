@@ -7,6 +7,8 @@ import SwiftUI
 
 struct RootView: View {
     @EnvironmentObject private var state: AppState
+    @ObservedObject private var updater = UpdateChecker.shared
+    @StateObject private var showingUpdates = UIFlag()
     private var theme: Theme { Theme.current }
 
     var body: some View {
@@ -68,6 +70,28 @@ struct RootView: View {
             }
 
             Spacer(minLength: 0)
+
+            if let release = updater.release,
+               updater.status == .available || updater.status == .noPackage {
+                VStack(alignment: .leading, spacing: 6) {
+                    Button { showingUpdates.value = true } label: {
+                        Label(tf("发现新版本 {p}", release.tag), systemImage: "arrow.down.circle.fill")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .buttonStyle(.plain).foregroundColor(theme.accent)
+                    .sheet(isPresented: $showingUpdates.value) { UpdateSheet() }
+                    HStack(spacing: 10) {
+                        if let url = release.downloadURL {
+                            Button(t("下载更新")) { NSWorkspace.shared.open(url) }
+                        }
+                        Button(t("发布页")) { NSWorkspace.shared.open(release.pageURL) }
+                    }.buttonStyle(.plain).font(.system(size: 10)).foregroundColor(theme.textSecondary)
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 8).fill(theme.selectedSidebar))
+                .padding(.horizontal, 12).padding(.bottom, 10)
+            }
 
             ZStack {
                 // Centred in the sidebar regardless of what sits at either end.
