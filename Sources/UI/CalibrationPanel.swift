@@ -30,13 +30,6 @@ struct CalibrationPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
-            HStack {
-                Text(t("脱敏会话导出")).font(.system(size: 11))
-                ForEach(["txt", "csv", "json"], id: \.self) { format in
-                    Button(format.uppercased()) { engine.exportSession(format: format) }
-                        .disabled(!engine.hasExportSamples)
-                }
-            }
             if let quality = engine.resultQuality {
                 Card(padding: 12) {
                     VStack(alignment: .leading, spacing: 5) {
@@ -143,6 +136,17 @@ struct CalibrationPanel: View {
             }
             .frame(height: 158)
             controlBar
+            Card(padding: 12) {
+                HStack(spacing: 10) {
+                    Text(t("报告与数据导出"))
+                        .font(.system(size: 12, weight: .medium))
+                    Spacer()
+                    ForEach(["txt", "csv", "json"], id: \.self) { format in
+                        Button(format.uppercased()) { engine.exportSession(format: format) }
+                            .disabled(!engine.hasExportSamples)
+                    }
+                }
+            }
         }
         .onAppear {
             engine.beginTelemetryPage()
@@ -338,7 +342,7 @@ struct CalibrationPanel: View {
                             Circle()
                                 .fill(engine.isExternalConnected ? theme.chartGreen : theme.textTertiary)
                                 .frame(width: 5, height: 5)
-                            Text(tf("设计 {p} mAh · 固件满充 {p} mAh", "\(Int(engine.designCapacityMAh))", "\(Int(engine.rawMaxCapacityMAh))"))
+                            Text(tf("设计 {p} mAh · 系统满充容量 {p} mAh", "\(Int(engine.designCapacityMAh))", "\(Int(engine.rawMaxCapacityMAh))"))
                                 .font(.system(size: 9.5))
                                 .foregroundColor(theme.textTertiary)
                                 .lineLimit(1)
@@ -768,9 +772,9 @@ struct CalibrationPanel: View {
                         Text(mode.title).tag(mode)
                     }
                 }
-                .pickerStyle(.segmented)
+                .pickerStyle(.menu)
                 .labelsHidden()
-                .frame(width: 176)
+                .frame(width: L10n.isChinese ? 100 : 140)
             }
             .padding(.horizontal, 9)
             .padding(.vertical, 4)
