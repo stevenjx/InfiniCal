@@ -113,6 +113,45 @@ struct CalibrationConditions: Codable, Equatable {
     }
 }
 
+struct CalibrationPhaseEvent: Codable {
+    let phase: String
+    let date: Date
+}
+
+/// Explicit allowlist: no serials, paths, process names, arbitrary logs or errors.
+struct CalibrationExport: Codable {
+    struct Sample: Codable {
+        let timestamp: Date
+        let phase: String
+        let percentage: Double
+        let voltage: Double
+        let amperage: Double
+        let temperature: Double
+        let power: Double
+    }
+    let schemaVersion: Int
+    let generatedAt: Date
+    let completed: Bool
+    let backend: String
+    let helperProtocol: Int
+    let model: String
+    let capabilities: [String]
+    let measuredCapacityMAh: Double?
+    let measuredCapacityWh: Double?
+    let healthPercentage: Double?
+    let sampleCount: Int
+    let droppedSamples: Int
+    let quality: CalibrationQuality?
+    let conditions: CalibrationConditions?
+    let timeline: [CalibrationPhaseEvent]
+    let samples: [Sample]
+
+    var csv: String {
+        "Timestamp,Phase,Percentage,Voltage(V),Amperage(A),Temperature(C),Power(W)\n"
+            + samples.map { "\($0.timestamp.ISO8601Format()),\($0.phase),\($0.percentage),\($0.voltage),\($0.amperage),\($0.temperature),\($0.power)" }.joined(separator: "\n")
+    }
+}
+
 /// Result of one completed session. Everything is measured, nothing is copied
 /// from a third-party app.
 struct CalibrationRecord: Codable, Identifiable, Equatable {

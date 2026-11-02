@@ -768,7 +768,17 @@ final class AppState: ObservableObject {
 
     var topUpRestoreLimit: Int? { topUpRestore }
 
+    /// All non-calibration actions share the same ownership barrier.
+    private func ordinaryControlAllowed() -> Bool {
+        guard ControlSafety.ordinaryAllowed(running: calibrationEngine.isRunning, recovering: calibrationEngine.needsRecovery) else {
+            statusNote = t("校准或恢复处理中，请先结束校准或完成安全清理")
+            return false
+        }
+        return true
+    }
+
     func topUp() {
+        guard ordinaryControlAllowed() else { return }
         if topUpRestore == nil { topUpRestore = chargeVal }
         let restore = topUpRestore ?? chargeVal
         userPaused = false
@@ -965,6 +975,7 @@ final class AppState: ObservableObject {
     }()
 
     func pauseCharging() {
+        guard ordinaryControlAllowed() else { return }
         userPaused = true
         // Pausing overrides a running top-up: the user asked for it to stop.
         topUpRestore = nil
@@ -1068,6 +1079,7 @@ final class AppState: ObservableObject {
     /// immediately re-pinned the ceiling to the current charge and cancelled the
     /// discharge it had just started.
     func startDischarge(to target: Int) {
+        guard ordinaryControlAllowed() else { return }
         guard target >= 1, target < snapshot.percentage else { return }
         userPaused = false
         guard snapshot.isPluggedIn else {
@@ -1089,6 +1101,7 @@ final class AppState: ObservableObject {
     /// `catchUp` is the 「自动补做未完成的任务」 path: a task whose time passed
     /// while the Mac slept, or while the app was closed, still runs — once.
     func checkScheduledTasks(catchUp: Bool = false) {
+        guard !calibrationEngine.isRunning, !calibrationEngine.needsRecovery else { return }
         let now = Date()
         var changed = false
         for index in tasks.indices where isDue(tasks[index], at: now, catchUp: catchUp) {
@@ -1123,6 +1136,7 @@ final class AppState: ObservableObject {
     }
 
     func run(_ task: ScheduledTask) {
+        guard ordinaryControlAllowed() else { return }
         switch task.kind {
         case .topUp:
             topUp()

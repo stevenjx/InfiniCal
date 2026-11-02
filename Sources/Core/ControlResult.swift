@@ -1,5 +1,18 @@
 import Foundation
 
+/// Hardware-free predicates shared by entry points and regression tests.
+enum ControlSafety {
+    static func ordinaryAllowed(running: Bool, recovering: Bool) -> Bool {
+        !running && !recovering
+    }
+
+    static func loadAllowed(running: Bool, dischargePhase: Bool, current: Double,
+                            failed: Bool, waiting: Bool, hot: Bool) -> Bool {
+        running && dischargePhase && current.isFinite && current < -0.05
+            && !failed && !waiting && !hot
+    }
+}
+
 /// A hardware-control result distinguishes a successful request from verified state.
 enum ControlPhase: String {
     case requested

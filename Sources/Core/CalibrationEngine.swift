@@ -130,11 +130,15 @@ final class CalibrationEngine: ObservableObject {
         didSet {
             if isRunning {
                 qualityPhases.insert(phase.rawValue)
+                phaseTimeline.append(CalibrationPhaseEvent(phase: phase.rawValue, date: Date()))
                 saveCheckpoint(reason: "phaseChanged")
             }
         }
     }
     @Published private(set) var resultQuality: CalibrationQuality?
+    private var phaseTimeline: [CalibrationPhaseEvent] = []
+    private var exportDroppedSamples = 0
+    private var lastCompletedRecord: CalibrationRecord?
     private var qualityPhases: Set<String> = []
     private var qualityIssues: Set<String> = []
     private var negativeSamples = 0
@@ -575,6 +579,9 @@ final class CalibrationEngine: ObservableObject {
         }
 
         resultQuality = nil
+        phaseTimeline = []
+        exportDroppedSamples = 0
+        lastCompletedRecord = nil
         qualityPhases = []
         qualityIssues = ["使用私有硬件控制路径"]
         negativeSamples = 0
@@ -733,7 +740,10 @@ final class CalibrationEngine: ObservableObject {
         }
 
         sessionPoints.append(point)
-        if sessionPoints.count > 120_000 { sessionPoints.removeFirst(20_000) }
+        if sessionPoints.count > 120_000 {
+            sessionPoints.removeFirst(20_000)
+            exportDroppedSamples += 20_000
+        }
 
         if phase == .discharging, signedAmperage < -0.05 { negativeSamples += 1 }
         if phase == .rechargingToFull, signedAmperage > 0.05 { positiveSamples += 1 }
@@ -847,6 +857,7 @@ final class CalibrationEngine: ObservableObject {
             dischargeEnergyAh = totals.dischargeAh
             updateDischargeDerived(now: now)
             ensureDischargeOnAC()
+            guard isRunning else { return }
             if percentage <= dischargeTarget { endDischargePhase() }
 
         case .rechargingToFull:
@@ -865,6 +876,7 @@ final class CalibrationEngine: ObservableObject {
 
         case .dischargingToBuffer:
             ensureDischargeOnAC()
+            guard isRunning else { return }
             if percentage <= storageLevel { finish() }
 
         case .idle, .completed:
@@ -904,6 +916,7 @@ final class CalibrationEngine: ObservableObject {
     private func ensureDischargeOnAC() {
         drainTicks += 1
         if drainTicks % 2 == 0 { reassertDrainLever() }
+        guard isRunning else { return }
         if signedAmperage < -0.05 {
             noDischargeTicks = 0
             if needsUnplugForDischarge {
@@ -915,6 +928,7 @@ final class CalibrationEngine: ObservableObject {
             if phase == .discharging, stressTasks.isEmpty { startStressLoad() }
             return
         }
+        stopStressLoad()
         noDischargeTicks += 1
         // Do not release the lever and do not stop the phase: a charge ceiling
         // and an adapter cut both take effect asynchronously, and the old
@@ -943,9 +957,9 @@ final class CalibrationEngine: ObservableObject {
     private func reassertDrainLever() {
         let controller = ChargeController.shared
         guard controller.canSwitchAdapter else { return }
-        if let reason = controller.beginForcedDischarge(), !adapterFailureLogged {
+        if let reason = controller.beginForcedDischarge() {
             adapterFailureLogged = true
-            append(tf("适配器切换未生效：{p}", reason))
+            stop(reason: tf("适配器切换未生效：{p}", reason))
         }
     }
 
@@ -1002,6 +1016,7 @@ final class CalibrationEngine: ObservableObject {
         drainTicks = 0
         adapterFailureLogged = false
         holdDischarge()
+        guard isRunning else { return }
         startDrain(hold: dischargeTarget)
     }
 
@@ -1016,11 +1031,11 @@ final class CalibrationEngine: ObservableObject {
     private func startDrain(hold: Int) {
         if ChargeController.shared.canSwitchAdapter {
             if let failure = ChargeController.shared.beginForcedDischarge() {
-                append(tf("适配器切换请求失败 — {p}", failure))
-                needsUnplugForDischarge = true
+                stop(reason: tf("适配器切换请求失败 — {p}", failure))
                 return
             }
-            startStressLoad()
+            // Acceptance is not discharge evidence. The next telemetry tick
+            // starts load only after observing negative pack current.
             return
         }
         if ChargeController.shared.hasPersistentCeiling {
@@ -1105,6 +1120,7 @@ final class CalibrationEngine: ObservableObject {
         drainTicks = 0
         adapterFailureLogged = false
         holdDischarge()
+        guard isRunning else { return }
         startDrain(hold: storageLevel)
         notify(t("回落至存储电量"), tf("校准即将完成，正在缓慢放电至 {p}% 存储电量。", "\(storageLevel)"))
     }
@@ -1167,6 +1183,7 @@ final class CalibrationEngine: ObservableObject {
                                            meanTemperature: dischargeCurve.isEmpty ? 0 : dischargeCurve.reduce(0) { $0 + $1.temperature } / Double(dischargeCurve.count),
                                            meanPower: dischargeAveragePower, designCapacityMAh: designCapacityMAh))
 
+        lastCompletedRecord = record
         if autoExport {
             exportReports(record: record)
         }
@@ -1204,14 +1221,15 @@ final class CalibrationEngine: ObservableObject {
         switch controller.capabilities.strategy {
         case .ch0bch0c, .chte:
             do { try controller.setChargingAllowed(false) } catch {
-                append(tf("SMC: 阻断充电失败 — {p}", error.localizedDescription))
+                stop(reason: tf("SMC: 阻断充电失败 — {p}", error.localizedDescription))
+                return
             }
         case .systemLimit, .bclm, .unavailable:
             break
         }
         guard controller.canSwitchAdapter else { return }
         if let reason = controller.beginForcedDischarge() {
-            append(tf("适配器切换请求失败 — {p}", reason))
+            stop(reason: tf("适配器切换请求失败 — {p}", reason))
         } else {
             append(tf("已关闭适配器供电（{p}），等待实测电池放电电流", controller.activeAdapterKey ?? "SMC"))
         }
@@ -1251,8 +1269,15 @@ final class CalibrationEngine: ObservableObject {
 
     // MARK: - Stress load
 
+    private var loadPermitted: Bool {
+        ControlSafety.loadAllowed(running: isRunning, dischargePhase: phase == .discharging,
+            current: signedAmperage, failed: adapterFailureLogged,
+            waiting: needsUnplugForDischarge, hot: isThermalCutoffActive)
+    }
+
     private func startStressLoad() {
         stopStressLoad()
+        guard loadPermitted else { return }
         guard !needsUnplugForDischarge else { return }
         guard !isThermalCutoffActive, stressMode != .silent else { return }
 
@@ -1285,6 +1310,7 @@ final class CalibrationEngine: ObservableObject {
     /// GPU load runs on its own axis so the thermal guard can drop it while the
     /// CPU workers keep going.
     private func startGPULoad() {
+        guard loadPermitted else { return }
         guard !needsUnplugForDischarge else { return }
         guard stressMode.gpuDutyCycle > 0 else { return }
         guard gpu.isAvailable else {
@@ -1586,107 +1612,75 @@ final class CalibrationEngine: ObservableObject {
     // MARK: - Reports
 
     private func exportReports(record: CalibrationRecord) {
+        // Automatic exports share the same allowlisted format as manual exports.
+        let package = makeExport()
         let stamp = Self.fileStamp.string(from: Date())
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateStyle = .medium
-        dateFormatter.timeStyle = .medium
-        let startText = sessionStart.map { dateFormatter.string(from: $0) } ?? "--"
+        lastReportURL = write(exportText(package), name: "InfiniCal_Calibration_Report_\(stamp).txt")
+        lastCSVURL = write(package.csv, name: "InfiniCal_Telemetry_\(stamp).csv")
+        return
+    }
 
-        var lines: [String] = [
-            "==================================================",
-            t("InfiniCal 电池校准分析报告"),
-            "==================================================",
-            tf("设备型号: {p}", hardwareModel),
-            tf("电池序列号: {p}", batterySerial),
-            tf("校准开始时间: {p}", startText),
-            tf("校准结束时间: {p}", dateFormatter.string(from: Date())),
-            tf("起始放电电量: {p}%", "\(dischargeStartPercentage)"),
-            tf("总放电时长: {p}", finalDischargeDurationText),
-            tf("循环次数: {p}", "\(cycleCount)"),
-            tf("设计容量: {p} mAh", String(format: "%.0f", designCapacityMAh)),
-            tf("实测容量: {p} Wh ({p} mAh)", String(format: "%.2f", record.calculatedCapacityWh), String(format: "%.0f", record.calculatedCapacityMAh)),
-            tf("单次健康度: {p}", String(format: "%.1f%%", record.batteryHealthPercentage)),
-            "",
-            t("----------------- 多周期加权评估 -----------------")
-        ]
-        if let quality = record.quality {
-            lines += [tf("校准质量等级：{p}", t(quality.label)),
-                      t("质量等级基于过程证据，不代表统计概率或测量精度保证"),
-                      quality.reasons.map { t($0) }.joined(separator: "; "),
-                      "Samples: discharge=\(quality.negativeSamples), recharge=\(quality.positiveSamples); backend=\(quality.backend)"]
-        }
-        if let aggregated {
-            lines += [
-                "",
-                tf("有效样本数: {p}", "\(aggregated.sessionCount)"),
-                tf("综合真实容量: {p} mAh ({p} Wh)", String(format: "%.0f", aggregated.capacityMAh), String(format: "%.2f", aggregated.capacityWh)),
-                tf("综合真实健康度: {p}", String(format: "%.1f%%", aggregated.healthPercent)),
-                tf("置信度: {p}", String(format: "%.0f%%", aggregated.confidence))
-            ]
-        }
-        lines += [
-            "",
-            t("----------------- 电芯性能与内阻 -----------------"),
-            tf("直流内阻 (DCIR): {p}", internalResistanceMilliohm > 0 ? String(format: "%.1f mΩ", internalResistanceMilliohm) : "--"),
-            tf("电芯电压: {p}", cellVoltages.map { String(format: "%.3fV", $0) }.joined(separator: ", ")),
-            tf("电芯压差 (ΔV): {p}", String(format: "%.1f mV", cellDeltaMillivolts)),
-            tf("放电能量: {p} Wh ({p} Ah)", String(format: "%.2f", dischargeEnergyWh), String(format: "%.3f", dischargeEnergyAh)),
-            tf("复充能量: {p} Wh ({p} Ah)", String(format: "%.2f", rechargeEnergyWh), String(format: "%.3f", rechargeEnergyAh)),
-            tf("库仑效率: {p}", rechargeEnergyAh > 0 ? String(format: "%.1f%%", coulombicEfficiency) : "--"),
-            tf("终止电压: {p}", String(format: "%.2f V", voltage)),
-            tf("终止温度: {p}", String(format: "%.1f °C", temperature))
-        ]
+    var hasExportSamples: Bool { !sessionPoints.isEmpty }
 
-        if splitSamples > 0 {
-            let cpu = splitCPUSum / Double(splitSamples)
-            let gpu = splitGPUSum / Double(splitSamples)
-            let ane = splitANESum / Double(splitSamples)
-            let total = max(0.001, cpu + gpu + ane)
-            lines += [
-                "",
-                t("----------------- 功耗归因 -----------------"),
-                tf("SoC 分项均值: CPU {p} W ({p}%) · GPU {p} W ({p}%) · ANE {p} W ({p}%)",
-                   String(format: "%.2f", cpu), "\(Int(cpu / total * 100))",
-                   String(format: "%.2f", gpu), "\(Int(gpu / total * 100))",
-                   String(format: "%.2f", ane), "\(Int(ane / total * 100))"),
-                tf("分项采样: {p} 次（每 30 秒一次）", "\(splitSamples)")
-            ]
-            let processes = topProcessSummary()
-            if !processes.isEmpty {
-                lines.append(tf("放电期间高频进程: {p}", processes))
+    private func makeExport() -> CalibrationExport {
+        let timeline = phaseTimeline
+        let samples = sessionPoints.compactMap { point -> CalibrationExport.Sample? in
+            guard [point.percentage, point.voltage, point.amperage, point.temperature, point.power].allSatisfy({ $0.isFinite }) else { return nil }
+            let samplePhase = timeline.last(where: { $0.date <= point.timestamp })?.phase ?? "unknown"
+            return CalibrationExport.Sample(timestamp: point.timestamp, phase: samplePhase,
+                percentage: point.percentage, voltage: point.voltage, amperage: point.amperage,
+                temperature: point.temperature, power: point.power)
+        }
+        return CalibrationExport(schemaVersion: 1, generatedAt: Date(), completed: phase == .completed && lastCompletedRecord != nil,
+            backend: ChargeController.shared.capabilities.strategy.rawValue,
+            helperProtocol: HelperClient.shared.helperProtocolVersion,
+            model: hardwareModel,
+            capabilities: ChargeController.shared.capabilities.rawKeys.map { $0.0 },
+            measuredCapacityMAh: lastCompletedRecord?.calculatedCapacityMAh,
+            measuredCapacityWh: lastCompletedRecord?.calculatedCapacityWh,
+            healthPercentage: lastCompletedRecord?.batteryHealthPercentage,
+            sampleCount: samples.count,
+            droppedSamples: exportDroppedSamples + sessionPoints.count - samples.count,
+            quality: resultQuality ?? assessQuality(completed: false), conditions: lastCompletedRecord?.conditions,
+            timeline: timeline, samples: samples)
+    }
+
+    private func exportText(_ package: CalibrationExport) -> String {
+        let record = lastCompletedRecord
+        var lines = [t("InfiniCal 电池校准分析报告"),
+            "Schema=\(package.schemaVersion) · \(package.generatedAt.ISO8601Format())",
+            t(package.completed ? "完整会话" : "不完整会话（不可作为完整容量测量）"),
+            "Backend=\(package.backend) · Helper=\(package.helperProtocol)",
+            "Samples=\(package.sampleCount) · Dropped=\(package.droppedSamples)",
+            t("仅导出本次运行保留的观测样本；中断区间不补齐，缺失功耗来源不推算。"),
+            tf("校准质量等级：{p}", package.quality.map { t($0.label) } ?? "--"),
+            package.quality?.reasons.map { t($0) }.joined(separator: "; ") ?? "--",
+            "Capacity=\(record.map { String(format: "%.0f mAh", $0.calculatedCapacityMAh) } ?? "--")",
+            "SOH=\(record.map { String(format: "%.1f%%", $0.batteryHealthPercentage) } ?? "--")",
+            "Discharge=\(dischargeEnergyAh) Ah · Recharge=\(rechargeEnergyAh) Ah",
+            t("控制请求不等于硬件验证；实际效果请核对各阶段电流样本。")]
+        lines += package.timeline.map { "\($0.date.ISO8601Format()) · \($0.phase)" }
+        lines.append(t("默认脱敏：未导出序列号、用户名、路径、进程名和原始日志。"))
+        return lines.joined(separator: "\n")
+    }
+
+    func exportSession(format: String) {
+        guard hasExportSamples else { return }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "InfiniCal-Session." + format
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let package = makeExport()
+            if format == "json" {
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+                encoder.dateEncodingStrategy = .iso8601
+                try encoder.encode(package).write(to: url, options: .atomic)
+            } else {
+                try (format == "csv" ? package.csv : exportText(package)).write(to: url, atomically: true, encoding: .utf8)
             }
-            if sessionStressMode == .silent, gpu / total >= 0.4 {
-                lines.append(t("GPU 占比偏高，但本次未施加 GPU 负载：放电期间可能有图形密集型应用在活跃。"))
-            }
-            lines.append(t("说明: 分项为 powermetrics 实测；进程占比是 CPU 占用，不是焦耳，仅作粗粒度参考。"))
-        }
-
-        lines.append(t("----------------- 过程日志 -----------------"))
-        var text = lines.joined(separator: "\n")
-        for line in log { text += "\n\(line)" }
-        text += "\n==================================================\n"
-
-        sessionReportURL = write(text, name: "InfiniCal_Calibration_Report_\(stamp).txt")
-        lastReportURL = sessionReportURL
-
-        var csv = "Timestamp,Percentage,Power(W),Voltage(V),Amperage(A),Temperature(C),"
-        csv += "SocPower(W),SocPowerSource,DisplayPower(W),DisplayPowerSource\n"
-        let iso = ISO8601DateFormatter()
-        for point in sessionPoints {
-            csv += "\(iso.string(from: point.timestamp)),\(point.percentage),"
-            csv += "\(String(format: "%.3f", point.power)),\(String(format: "%.3f", point.voltage)),"
-            csv += "\(String(format: "%.3f", point.amperage)),\(String(format: "%.2f", point.temperature)),"
-            csv += "\(String(format: "%.2f", point.socPower)),\(Self.qualityToken(point.socPowerQuality)),"
-            csv += "\(String(format: "%.2f", point.displayPower)),\(Self.qualityToken(point.displayPowerQuality))\n"
-        }
-        sessionCSVURL = write(csv, name: "InfiniCal_Telemetry_\(stamp).csv")
-        lastCSVURL = sessionCSVURL
-
-        if let report = sessionReportURL {
-            append(tf("报告已导出: {p} → {p}", report.lastPathComponent, report.deletingLastPathComponent().path))
-        } else {
-            append(t("报告导出失败：目标目录不可写"))
-        }
+            append(t("脱敏会话导出成功"))
+        } catch { chargingIssue = error.localizedDescription }
     }
 
     /// Most frequently seen names in the discharge window, with how often they

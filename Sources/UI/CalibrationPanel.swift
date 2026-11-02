@@ -30,6 +30,13 @@ struct CalibrationPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
+            HStack {
+                Text(t("脱敏会话导出")).font(.system(size: 11))
+                ForEach(["txt", "csv", "json"], id: \.self) { format in
+                    Button(format.uppercased()) { engine.exportSession(format: format) }
+                        .disabled(!engine.hasExportSamples)
+                }
+            }
             if let quality = engine.resultQuality {
                 Card(padding: 12) {
                     VStack(alignment: .leading, spacing: 5) {

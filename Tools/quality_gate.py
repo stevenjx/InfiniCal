@@ -68,9 +68,10 @@ def tests():
     helper = (ROOT / "Helper/main.swift").read_text()
     validation = helper[helper.index("func isAllowedWriteKey("):helper.index("let allowedExecutables:")]
     quality = checkpoint_file[checkpoint_file.index("struct CalibrationQuality:"):checkpoint_file.index("struct CalibrationConditions:")]
-    conditions = checkpoint_file[checkpoint_file.index("struct CalibrationConditions:"):checkpoint_file.index("/// Result of one completed")]
+    conditions = checkpoint_file[checkpoint_file.index("struct CalibrationConditions:"):checkpoint_file.index("struct CalibrationPhaseEvent:")]
+    export = checkpoint_file[checkpoint_file.index("struct CalibrationPhaseEvent:"):checkpoint_file.index("/// Result of one completed")]
     record = checkpoint_file[checkpoint_file.index("struct CalibrationRecord:"):checkpoint_file.index("/// Weighted blend")]
-    swift = "import Foundation\n" + policy + checkpoint + quality + conditions + record + validation
+    swift = "import Foundation\n" + policy + checkpoint + quality + conditions + export + record + validation
     swift += (ROOT / "Sources/Core/ControlResult.swift").read_text()
     swift += (ROOT / "Sources/Core/CalibrationMath.swift").read_text()
     history = (ROOT / "Sources/Core/HistoryStore.swift").read_text()
@@ -142,6 +143,24 @@ let conditions = CalibrationConditions(model: "test", backend: "bclm", stressMod
 check(conditions.matches(conditions), "self match")
 let mismatch = CalibrationConditions(model: "test", backend: "bclm", stressMode: "silent", target: 10, startPercentage: 100, meanTemperature: 40, meanPower: 10, designCapacityMAh: 6000)
 check(!conditions.matches(mismatch), "temperature mismatch")
+let exportSample = CalibrationExport.Sample(timestamp: anchor, phase: "discharging", percentage: 80, voltage: 12, amperage: -1, temperature: 30, power: 12)
+let package = CalibrationExport(schemaVersion: 1, generatedAt: anchor, completed: false, backend: "mock", helperProtocol: 3, model: "test", capabilities: ["BCLM"], measuredCapacityMAh: nil, measuredCapacityWh: nil, healthPercentage: nil, sampleCount: 1, droppedSamples: 0, quality: nil, conditions: nil, timeline: [], samples: [exportSample])
+let exportBytes = try JSONEncoder().encode(package)
+let exportObject = try JSONSerialization.jsonObject(with: exportBytes) as! [String: Any]
+check(exportObject["samples"] != nil && exportObject["schemaVersion"] != nil, "export schema")
+check(exportObject["batterySerial"] == nil && exportObject["reportFilePath"] == nil && exportObject["log"] == nil, "export privacy allowlist")
+check(package.csv.split(separator: "\\n").count == 2 && package.csv.contains("Phase"), "CSV sample and header")
+for running in [false, true] {
+    for recovering in [false, true] {
+        check(ControlSafety.ordinaryAllowed(running: running, recovering: recovering) == (!running && !recovering), "control ownership")
+    }
+}
+for current in [0.5, 0.0, -0.01, Double.nan, Double.infinity] {
+    check(!ControlSafety.loadAllowed(running: true, dischargePhase: true, current: current, failed: false, waiting: false, hot: false), "no load without discharge evidence")
+}
+check(ControlSafety.loadAllowed(running: true, dischargePhase: true, current: -1, failed: false, waiting: false, hot: false), "confirmed current")
+check(!ControlSafety.loadAllowed(running: true, dischargePhase: true, current: -1, failed: true, waiting: false, hot: false), "failure removes load permission")
+check(!ControlSafety.loadAllowed(running: false, dischargePhase: true, current: -1, failed: false, waiting: false, hot: false), "stopped session")
 var gate = AnomalyGate()
 let rule = AnomalyRule(id: "test", title: "test", duration: 5, cooldown: 20)
 gate.beginSample(at: anchor)

@@ -814,7 +814,12 @@ final class ChargeController {
         }
         // Only write when this app actually cut the adapter. Restoring "on"
         // unconditionally would poke CHIE on every calibration start.
-        guard let saved = savedAdapterState else { return }
+        guard let saved = savedAdapterState else {
+            if UserDefaults.standard.bool(forKey: adapterOffFlag) {
+                restoreAdapterLeftOff()
+            }
+            return
+        }
         do {
             try HelperClient.shared.smcWriteBytes(saved.key, [saved.on])
             // Never discard recovery information before the restore succeeds.
@@ -845,7 +850,10 @@ final class ChargeController {
         // versions must restore the actual key, never an unrelated first match.
         let control = recordedKey == nil ? adapterCandidates.first
             : adapterCandidates.first(where: { $0.key == recordedKey })
-        guard let control else { return }
+        guard let control else {
+            adapterRestoreError = t("无法确认上次关闭的适配器控制键；恢复记录已保留，请检查助手后重试")
+            return
+        }
         savedAdapterState = (control.key, control.on)
         endForcedDischarge()
     }

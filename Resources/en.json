@@ -1,4 +1,13 @@
 {
+ "校准或恢复处理中，请先结束校准或完成安全清理": "Calibration owns control; stop it or complete safe recovery first",
+ "无法确认上次关闭的适配器控制键；恢复记录已保留，请检查助手后重试": "Cannot identify the adapter recovery target; record retained. Check the helper and retry",
+ "脱敏会话导出": "Redacted session export",
+ "完整会话": "Completed session",
+ "不完整会话（不可作为完整容量测量）": "Incomplete session (not a complete capacity measurement)",
+ "仅导出本次运行保留的观测样本；中断区间不补齐，缺失功耗来源不推算。": "Exports retained samples from this run only. Gaps and missing power sources are not reconstructed.",
+ "控制请求不等于硬件验证；实际效果请核对各阶段电流样本。": "Control requests are not hardware verification; inspect current samples for each phase.",
+ "默认脱敏：未导出序列号、用户名、路径、进程名和原始日志。": "Redacted by default: no serial numbers, usernames, paths, process names or raw logs.",
+ "脱敏会话导出成功": "Redacted session exported",
  "导出当前诊断": "Export current diagnostics",
  "策略：{p}": "Policy: {p}",
  "请求上限 {p}% · 实际电量 {p}%": "Requested limit {p}% · Observed charge {p}%",
