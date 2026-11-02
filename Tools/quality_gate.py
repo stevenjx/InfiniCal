@@ -71,8 +71,175 @@ def tests():
     conditions = checkpoint_file[checkpoint_file.index("struct CalibrationConditions:"):checkpoint_file.index("struct CalibrationPhaseEvent:")]
     export = checkpoint_file[checkpoint_file.index("struct CalibrationPhaseEvent:"):checkpoint_file.index("/// Result of one completed")]
     record = checkpoint_file[checkpoint_file.index("struct CalibrationRecord:"):checkpoint_file.index("/// Weighted blend")]
-    swift = "import Foundation\n" + policy + checkpoint + quality + conditions + export + record + validation
+    smc_source = (ROOT / "Sources/Core/SMC.swift").read_text()
+    smc_info = smc_source[smc_source.index("struct SMCKeyInfo {"):smc_source.index("enum SMCError:")]
+    smc_loads = smc_source[smc_source.index("    fileprivate static func loadU8"):smc_source.index("    // MARK: - Typed helpers")]
+    smc_decode = smc_source[smc_source.index("    static func decode("):smc_source.index("    func writeUInt8(")]
+    swift = "import Foundation\n" + policy + checkpoint + quality + conditions + export + record
+    swift += smc_info + "enum SMCError: Error { case unsupportedType(String) }\nenum SMC {\n" + smc_loads + smc_decode + "}\n" + validation
+    write_branch = helper[helper.index('    case "write":'):helper.index('    case "socpower":')]
+    swift += '''
+final class MockWriteSMC {
+    var metadata: [String: SMCKeyInfo] = [:]
+    var readings: [String: (SMCKeyInfo, [UInt8])] = [:]
+    var writes = 0
+    func keyInfo(_ key: String) -> SMCKeyInfo? { metadata[key] }
+    func readBytes(_ key: String) throws -> (SMCKeyInfo, [UInt8]) {
+        guard let result = readings[key] else { throw SMCError.unsupportedType(key) }
+        return result
+    }
+    func writeBytes(_ key: String, _ bytes: [UInt8]) throws { writes += 1 }
+}
+let smc = MockWriteSMC()
+func handleWrite(_ request: [String: Any]) -> [String: Any] {
+    switch request["cmd"] as? String {
+''' + write_branch + '''
+    default: return ["ok": false]
+    }
+}
+'''
     swift += (ROOT / "Sources/Core/ControlResult.swift").read_text()
+    app_state = (ROOT / "Sources/Core/AppState.swift").read_text()
+    fan_source = (ROOT / "Sources/Core/FanController.swift").read_text()
+    update_methods = app_state[app_state.index("    func prepareForUpdate()"):app_state.index("    private func tick()", app_state.index("    func prepareForUpdate()"))]
+    fan_cancel = fan_source[fan_source.index("    func completeUpdateCancellation()"):fan_source.index("    // MARK: - Persistence")]
+    fan_properties = fan_source[fan_source.index("    @Published var modes:"):fan_source.index("    @Published var curveSensorKey:")].replace("@Published ", "").replace("UserDefaults.standard", "defaults")
+    swift += '''
+// 只抽取生产入口与成功取消方法；所有外部依赖均为内存桩。
+func t(_ text: String) -> String { text }
+struct TestCapabilities { var hasHelper = false; var protocolVersion = 0; var features: Set<String> = [] }
+final class HelperClient {
+    static let shared = HelperClient()
+    var available = false
+    var protocolVersion = 0
+    var features: Set<String> = []
+    var refreshes = 0
+    func refreshInstallState() -> Bool { refreshes += 1; return available }
+}
+final class ChargeController {
+    static let shared = ChargeController()
+    var adapterRestoreError: String?
+    var chargeFails = false
+    var scans = 0
+    func detectCapabilities() -> TestCapabilities {
+        scans += 1
+        return TestCapabilities(hasHelper: HelperClient.shared.available,
+                                protocolVersion: HelperClient.shared.protocolVersion,
+                                features: HelperClient.shared.features)
+    }
+    func stopHoldingCeiling() {}
+    func restoreAdapterLeftOff() {}
+    func endForcedDischarge() {}
+    func prepareForFullCharge() throws {
+        check(FanController.shared.updateSuspended, "充电清理期间风扇仍暂停")
+        if chargeFails { throw NSError(domain: "charge", code: 1) }
+    }
+}
+final class TestCalibration {
+    var isRunning = false
+    var needsRecovery = false
+    var suspended = false
+    var resumes = 0
+    func prepareIdleForUpdate() { suspended = true }
+    func resumeAfterUpdateCancellation() { suspended = false; resumes += 1 }
+}
+enum FanMode { case auto, fixed, full }
+struct TestFan { let index: Int }
+final class TestDefaults {
+    var curve = true
+    func set(_ value: Bool, forKey: String) { curve = value }
+}
+final class FanController {
+    static let shared = FanController()
+    enum Keys { static let curveEnabled = "curve" }
+    let defaults = TestDefaults()
+    var persistedModes: [Int: FanMode] = [:]
+    func persistModes() { persistedModes = modes }
+''' + fan_properties + '''
+    var fans = [TestFan(index: 0), TestFan(index: 1)]
+    var sessionCooling = true
+    var modesBeforeSession: [Int: FanMode] = [0: .full]
+    var lastAppliedFixed = [0: 4000]
+    var lastCurveWrite = [0: 4000]
+    var lastCurveTemperature: Double? = 80
+    var activePresetName: String?
+    var updateSuspended = false
+    var lastError: String? = "fan"
+    var restoreFails = false
+    var restores = 0
+    var curveWrites = 0
+    func applyCurveIfNeeded(force: Bool) {
+        if !updateSuspended && (curveEnabled || sessionCooling) { curveWrites += 1 }
+    }
+    func restoreSystemControl() -> Bool {
+        check(updateSuspended, "风扇清理期间保持暂停")
+        restores += 1
+        return !restoreFails
+    }
+''' + fan_cancel + '''
+}
+final class TestAppState {
+    let calibrationEngine = TestCalibration()
+    var updatePreparationActive = false
+    var helperInstalled = true
+    var capabilities = TestCapabilities()
+    var lastAppliedLimit: Int? = 80
+    var lastChargingAllowed: Bool? = false
+''' + update_methods + '''
+}
+let updateApp = TestAppState()
+let updateFan = FanController.shared
+let updateHelper = HelperClient.shared
+let updateCharge = ChargeController.shared
+func checkPaused() {
+    check(updateApp.updatePreparationActive && updateFan.updateSuspended && updateApp.calibrationEngine.suspended,
+          "失败时三个门禁必须保持暂停")
+    check(updateApp.calibrationEngine.resumes == 0, "失败不可恢复校准入口")
+}
+updateFan.modes = [0: .fixed, 1: .full, 7: .full]
+updateFan.curveEnabled = true
+check(updateApp.prepareForUpdate() != nil, "不能使用缓存的 helperInstalled=true")
+checkPaused()
+check(!updateApp.helperInstalled && updateHelper.refreshes == 1 && updateCharge.scans == 1, "首次准备主动刷新")
+updateHelper.available = true
+updateHelper.protocolVersion = 3
+updateHelper.features = ["inflow"]
+updateCharge.adapterRestoreError = "adapter"
+check(updateApp.cancelUpdatePreparation() == "adapter", "适配器失败返回 UI 错误")
+checkPaused()
+updateCharge.adapterRestoreError = nil
+updateCharge.chargeFails = true
+check(updateApp.cancelUpdatePreparation() != nil, "充电清理失败阻止取消")
+checkPaused()
+updateCharge.chargeFails = false
+updateFan.restoreFails = true
+check(updateApp.cancelUpdatePreparation() == "fan", "风扇失败阻止取消")
+checkPaused()
+check(updateFan.modes[0] == .fixed && updateFan.curveEnabled, "失败不提交自动策略")
+updateFan.restoreFails = false
+updateHelper.protocolVersion = 4
+updateHelper.features = ["inflow", "new"]
+check(updateApp.prepareForUpdate() == nil, "暂停期间重试可成功")
+checkPaused()
+check(updateApp.capabilities.protocolVersion == 4 && updateApp.capabilities.features.contains("new"), "同为已安装也重扫协议能力")
+check(updateApp.cancelUpdatePreparation() == nil, "失败后取消重试成功")
+check(!updateApp.updatePreparationActive && !updateFan.updateSuspended && !updateApp.calibrationEngine.suspended, "成功后解除门禁")
+check(updateApp.lastAppliedLimit == nil && updateApp.lastChargingAllowed == nil, "清除充电应用缓存")
+check(updateFan.modes.values.allSatisfy { $0 == .auto } && updateFan.modes.count == 3, "所有已知风扇同步自动")
+check(updateFan.persistedModes == updateFan.modes && !updateFan.defaults.curve && !updateFan.curveEnabled, "didSet 持久化自动与关闭曲线")
+check(!updateFan.sessionCooling && updateFan.modesBeforeSession.isEmpty && updateFan.lastAppliedFixed.isEmpty && updateFan.lastCurveWrite.isEmpty && updateFan.lastCurveTemperature == nil, "清除重放缓存")
+let cancelCounts = [updateHelper.refreshes, updateCharge.scans, updateFan.restores, updateApp.calibrationEngine.resumes]
+updateFan.modes[0] = .full
+check(updateApp.cancelUpdatePreparation() == nil, "连续取消幂等")
+check(cancelCounts == [updateHelper.refreshes, updateCharge.scans, updateFan.restores, updateApp.calibrationEngine.resumes] && updateFan.modes[0] == .full, "重复取消不清理、不覆盖之后手动选择")
+// 排空真实 curveEnabled.didSet 排队的回调，取消成功后也不能重启曲线。
+RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+check(updateFan.curveWrites == 0, "didSet 异步回调不会绕过安全自动策略")
+updateHelper.available = false
+check(updateApp.prepareForUpdate() != nil && !updateApp.capabilities.hasHelper, "helper 消失时再次刷新并拒绝")
+check(updateHelper.refreshes == updateCharge.scans, "每次尝试都刷新安装状态与能力")
+print("PASS update retry/cancellation transitions and fan persistence (no hardware)")
+'''
     swift += (ROOT / "Sources/Core/CalibrationMath.swift").read_text()
     history = (ROOT / "Sources/Core/HistoryStore.swift").read_text()
     updater = (ROOT / "Sources/Core/UpdateChecker.swift").read_text()
@@ -98,6 +265,106 @@ check(isSafeExec("/usr/bin/powermetrics", ["--samplers", "cpu_power", "-n", "1",
 check(!isSafeExec("/usr/bin/powermetrics", ["--samplers", "cpu_power"]), "unbounded sample")
 for key in ["BCLM", "CHIE", "CHTE", "FS! ", "F0Md", "F1Tg"] { check(isAllowedWriteKey(key), "allowed key") }
 for key in ["ACEN", "XXXX", "F0Ac", "F９Md", "BCLMM"] { check(!isAllowedWriteKey(key), "denied key") }
+func metadata(_ type: String, _ size: UInt32, _ writable: Bool = true) -> SMCKeyInfo {
+    SMCKeyInfo(size: size, type: type, attributes: writable ? 0x40 : 0)
+}
+func floatBytes(_ value: Float) -> [UInt8] {
+    var bits = value.bitPattern
+    return withUnsafeBytes(of: &bits) { Array($0) }
+}
+func native16(_ value: UInt16) -> [UInt8] {
+    var raw = value
+    return withUnsafeBytes(of: &raw) { Array($0) }
+}
+let fanReadings: [String: Double] = ["FNum": 2, "F0Mn": 1000, "F0Mx": 6000]
+func accepts(_ key: String, _ type: String, _ size: UInt32, _ bytes: [UInt8],
+             _ readings: [String: Double] = fanReadings) -> Bool {
+    WriteValidation.accepts(key: key, info: metadata(type, size), bytes: bytes, read: { readings[$0] })
+}
+for (key, allowed) in [("CH0B", [0, 2]), ("CH0C", [0, 2]), ("CHIE", [0, 8]),
+                       ("CH0I", [0, 1]), ("CH0J", [0, 1]), ("BCLM", Array(0...100))] {
+    for value in 0...255 {
+        check(accepts(key, "ui8 ", 1, [UInt8(value)]) == allowed.contains(value), "byte value domain")
+    }
+    check(!accepts(key, "si8 ", 1, [0]), "wrong byte type")
+    check(!accepts(key, "ui8 ", 2, [0, 0]), "wrong byte width")
+}
+for value in 0...255 {
+    check(accepts("CHTE", "ui32", 4, [UInt8(value), 0, 0, 0]) == (value <= 1), "CHTE low mask")
+}
+for index in 1...3 {
+    var payload: [UInt8] = [0, 0, 0, 0]; payload[index] = 1
+    check(!accepts("CHTE", "ui32", 4, payload), "CHTE other bits")
+}
+check(!accepts("CHTE", "flt ", 4, [0, 0, 0, 0]), "CHTE type")
+for value in 0...65535 {
+    check(accepts("FS! ", "ui16", 2, [UInt8(value >> 8), UInt8(value & 255)]) == (value & ~5 == 0), "FS known mode bits")
+}
+check(accepts("FS! ", "ui16", 2, [0, 0], [:]), "FS zero recovery without count")
+for count in [Double.nan, .infinity, -1, 1.5, 9] {
+    check(!accepts("FS! ", "ui16", 2, [0, 1], ["FNum": count]), "invalid fan count")
+}
+check(!accepts("FS! ", "fpe2", 2, [0, 0]), "FS type")
+for value in 0...255 {
+    check(accepts("F0Md", "ui8 ", 1, [UInt8(value)]) == (value <= 1), "fan mode values")
+}
+check(!accepts("F2Md", "ui8 ", 1, [1]), "unknown fan index")
+check(!accepts("F0Md", "si8 ", 1, [0]), "mode type")
+for value: Float in [0, 999, 1000, 3000, 6000, 6001, -1, .nan, .infinity, -.infinity] {
+    check(accepts("F0Tg", "flt ", 4, floatBytes(value)) == (value.isFinite && value >= 1000 && value <= 6000), "float bounds and finite")
+}
+for value: UInt16 in [0, 3999, 4000, 12000, 24000, 24001, 65535] {
+    check(accepts("F0Tg", "fpe2", 2, native16(value)) == (value >= 4000 && value <= 24000), "fpe2 uses actual SMC decoder")
+}
+check(accepts("F0Tg", "ui8 ", 1, [100], ["FNum": 1, "F0Mn": 0, "F0Mx": 255]), "existing ui8 encoder")
+check(accepts("F0Tg", "ui16", 2, native16(3000)), "existing ui16 encoder")
+let appFpe2: [UInt8] = [UInt8(12000 >> 8), UInt8(12000 & 255)]
+let decodedAppFpe2 = try SMC.decode(info: metadata("fpe2", 2), bytes: appFpe2)
+check(accepts("F0Tg", "fpe2", 2, appFpe2) == (decodedAppFpe2 >= 1000 && decodedAppFpe2 <= 6000), "App big-endian fpe2 is validated by actual decoder, not guessed")
+for (type, width) in [("flt ", 4), ("fpe2", 2), ("ui16", 2), ("ui8 ", 1)] {
+    for size in [0, 1, 2, 3, 4, 5] where size != width {
+        check(WriteValidation.numeric(info: metadata(type, UInt32(size)), bytes: Array(repeating: 0, count: size)) == nil, "hardware read metadata width")
+    }
+}
+check(!accepts("F0Tg", "si32", 4, floatBytes(3000)), "unsupported target type")
+check(accepts("F0Tg", "flt ", 4, floatBytes(0), ["FNum": 1, "F0Mn": 0, "F0Mx": 6000]), "zero only with zero minimum")
+for bounds: [String: Double] in [[:], ["FNum": 1], ["FNum": 1, "F0Mn": 1000],
+    ["FNum": 1, "F0Mn": .nan, "F0Mx": 6000], ["FNum": 1, "F0Mn": 0, "F0Mx": .infinity],
+    ["FNum": 1, "F0Mn": -1, "F0Mx": 6000], ["FNum": 1, "F0Mn": 7000, "F0Mx": 6000],
+    ["FNum": 1, "F0Mn": 0, "F0Mx": 0]] {
+    check(!accepts("F0Tg", "flt ", 4, floatBytes(3000), bounds), "missing or invalid bounds fail closed")
+}
+for key in ["CHWA", "ACEN", "F0Ac", "XXXX"] {
+    check(!accepts(key, "ui8 ", 1, [0]), "no whitelist expansion")
+}
+for key in ["CH0B", "CHTE", "FS! ", "F0Md", "F0Tg"] {
+    let type = key == "CHTE" ? "ui32" : (key == "FS! " ? "ui16" : (key == "F0Tg" ? "flt " : "ui8 "))
+    let width: UInt32 = type == "ui32" || type == "flt " ? 4 : (type == "ui16" ? 2 : 1)
+    for size: UInt32 in [0, 1, 2, 3, 4, 5, 33] where size != width {
+        check(!accepts(key, type, size, Array(repeating: 0, count: Int(size))), "declared width mismatch")
+    }
+    check(!accepts(key, type, width, []), "short payload")
+    check(!accepts(key, type, width, Array(repeating: 0, count: Int(width) + 1)), "long payload")
+    check(!WriteValidation.accepts(key: key, info: metadata(type, width, false), bytes: Array(repeating: 0, count: Int(width)), read: { fanReadings[$0] }), "read-only")
+}
+check(WriteValidation.payload("00aAfF") == [0, 170, 255], "hex valid")
+for value: Any in [true, false, NSNumber(value: 1.5), NSNumber(value: -1), 256, [true], [1.5], [-1], [256], NSNull(), "", "0", "-1", "+1", "gg", " 0", "００", String(repeating: "00", count: 33)] {
+    check(WriteValidation.payload(value) == nil, "no JSON coercion or malformed hex")
+}
+for json in ["true", "false", "1.5", "-1", "256", "[true]", "[1.5]", "[-1]", "[256]", "null"] {
+    let object = try JSONSerialization.jsonObject(with: Data(("{\\"bytes\\":" + json + "}").utf8)) as! [String: Any]
+    check(WriteValidation.payload(object["bytes"]) == nil, "JSON NSNumber coercion rejected")
+}
+smc.metadata["CH0B"] = metadata("ui8 ", 1)
+check(handleWrite(["cmd": "write", "key": "CH0B", "bytes": "02"])["ok"] as? Bool == true && smc.writes == 1, "valid handler writes once")
+for payload: Any in ["01", "0000", true, -1, 1.5, [256]] {
+    check(handleWrite(["cmd": "write", "key": "CH0B", "bytes": payload])["ok"] as? Bool == false, "handler rejects")
+}
+smc.metadata["CH0B"] = metadata("si8 ", 1)
+_ = handleWrite(["cmd": "write", "key": "CH0B", "bytes": "00"])
+smc.metadata["F0Tg"] = metadata("flt ", 4)
+_ = handleWrite(["cmd": "write", "key": "F0Tg", "bytes": "00000000"])
+check(smc.writes == 1, "all rejected handler requests perform zero SMC writes")
 let integrator = CoulombIntegrator()
 _ = integrator.step(uptime: 0, currentSignedAmps: -1, voltageVolts: 12)
 let first = integrator.step(uptime: 1, currentSignedAmps: -1, voltageVolts: 12)
@@ -167,6 +434,20 @@ check(UpdateVersion("1.0.12")! > UpdateVersion("1.0.9")!, "numeric version compa
 check(UpdateVersion("v1.2.0")! == UpdateVersion("1.2")!, "trailing zeros")
 check(UpdateVersion("1.2-beta") == nil && UpdateVersion("1..2") == nil, "reject malformed versions")
 check(UpdateVersion("1.999999999999999999999")! > UpdateVersion("1.9")!, "no integer overflow")
+var restoredFans: [Int] = []
+let partialFanFailure = FanRecovery.restore(count: 2) { index in
+    restoredFans.append(index)
+    if index == 0 { throw NSError(domain: "mock-write", code: 1) }
+}
+check(restoredFans == [0, 1] && partialFanFailure.count == 1 && partialFanFailure[0].hasPrefix("F0:"), "partial failure attempts every declared fan")
+check(FanRecovery.restore(count: 2) { _ in }.isEmpty, "all declared fans verified")
+check(!FanRecovery.restore(count: 2) { index in
+    if index == 1 { throw NSError(domain: "mock-readback", code: 2) }
+}.isEmpty, "unverified second fan blocks recovery")
+var unknownFanWrites = 0
+check(!FanRecovery.restore(count: nil) { _ in unknownFanWrites += 1 }.isEmpty && unknownFanWrites == 0, "unknown count is not fanless")
+check(FanRecovery.restore(count: 0) { _ in fatalError("fanless write") }.isEmpty, "confirmed fanless")
+check(!FanRecovery.restore(count: 9) { _ in fatalError("invalid count write") }.isEmpty, "invalid fan count")
 var gate = AnomalyGate()
 let rule = AnomalyRule(id: "test", title: "test", duration: 5, cooldown: 20)
 gate.beginSample(at: anchor)

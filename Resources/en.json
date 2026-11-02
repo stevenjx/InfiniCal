@@ -1,4 +1,8 @@
 {
+ "自动控制已暂停；可重试安全退出，或取消准备并安全恢复。恢复失败将保持暂停。": "Automatic control is paused. Retry quitting safely, or cancel preparation and recover safely. Failed recovery keeps control paused.",
+ "取消更新准备并安全恢复": "Cancel update preparation and recover safely",
+ "取消准备成功后，风扇恢复系统自动，曲线关闭；如需固定转速、全速或曲线，请之后手动重选。": "After cancellation succeeds, fans return to system automatic control and the fan curve is disabled. Manually select fixed speed, full speed or a curve again afterwards if needed.",
+ "风扇恢复后仍未确认系统自动模式": "System automatic fan mode could not be confirmed after recovery",
  "发现新版本 {p}": "Update available: {p}",
  "发布页": "Release page",
  "在浏览器中查看最新发布": "View latest release in browser",

@@ -1,5 +1,19 @@
 import Foundation
 
+/// Recovery never infers a fanless machine from failed enumeration.
+/// Injected operations keep partial failures testable without SMC access.
+enum FanRecovery {
+    static func restore(count: Int?, restoreAndVerify: (Int) throws -> Void) -> [String] {
+        guard let count, (0...8).contains(count) else { return ["countUnknown"] }
+        var failures: [String] = []
+        for index in 0..<count {
+            do { try restoreAndVerify(index) }
+            catch { failures.append("F\(index): \(error.localizedDescription)") }
+        }
+        return failures
+    }
+}
+
 /// Hardware-free predicates shared by entry points and regression tests.
 enum ControlSafety {
     static func ordinaryAllowed(running: Bool, recovering: Bool) -> Bool {

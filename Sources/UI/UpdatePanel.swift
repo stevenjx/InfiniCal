@@ -80,10 +80,14 @@ struct UpdatePanel: View {
             Text(t("此操作仅在安全准备成功后退出；安装需由你手动完成。"))
                 .font(.caption).foregroundColor(.secondary)
             if app.updatePreparationActive {
-                Text(t("自动控制已暂停；请重试安全退出，或明确恢复控制。"))
+                Text(t("自动控制已暂停；可重试安全退出，或取消准备并安全恢复。恢复失败将保持暂停。"))
                     .font(.caption).foregroundColor(.orange)
-                Button(t("取消更新准备并恢复控制")) { app.cancelUpdatePreparation() }
+                Button(t("取消更新准备并安全恢复")) {
+                    actions.error = app.cancelUpdatePreparation()
+                }
             }
+            Text(t("取消准备成功后，风扇恢复系统自动，曲线关闭；如需固定转速、全速或曲线，请之后手动重选。"))
+                .font(.caption).foregroundColor(.secondary)
             if let error = actions.error {
                 Text(verbatim: error)
                     .foregroundColor(.red)

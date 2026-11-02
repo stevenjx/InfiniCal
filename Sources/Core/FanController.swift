@@ -701,19 +701,57 @@ final class FanController: ObservableObject {
         lastAppliedFixed.removeAll()
         lastCurveWrite.removeAll()
         // Cancels the pending endSessionCooling closure before handing back.
-        var failures: [String] = []
-        let currentFans = readFansNow()
-        let count = try? SMC.shared.readDouble("FNum")
-        if currentFans.isEmpty, count != 0 {
-            lastError = t("无法确认风扇状态，请重试安全清理")
-            return false
+        // Unlike UI telemetry, recovery must not omit a fan whose RPM read fails.
+        let rawCount = try? SMC.shared.readDouble("FNum")
+        let count: Int?
+        if let rawCount, rawCount.isFinite, rawCount >= 0, rawCount <= 8,
+           rawCount.rounded(.towardZero) == rawCount {
+            count = Int(rawCount)
+        } else {
+            // Missing FNum is not proof of zero fans. Attempt all known indices,
+            // but keep the outcome uncertain even if those writes succeed.
+            count = nil
         }
-        for fan in currentFans {
-            do { try writeMode(index: fan.index, manual: false) }
-            catch { failures.append(error.localizedDescription) }
+        let restore: (Int) throws -> Void = { index in
+            try self.writeMode(index: index, manual: false)
+            if SMC.shared.keyInfo("F\(index)Md")?.isWritable == true {
+                let mode = try SMC.shared.readDouble("F\(index)Md")
+                guard mode.isFinite, mode == 0 else {
+                    throw HelperError.smc(t("风扇恢复后仍未确认系统自动模式"))
+                }
+            } else {
+                let flags = try SMC.shared.readDouble("FS! ")
+                guard flags.isFinite, flags >= 0, flags <= 65535,
+                      flags.rounded(.towardZero) == flags,
+                      Int(flags) & (1 << (index * 2)) == 0 else {
+                    throw HelperError.smc(t("风扇恢复后仍未确认系统自动模式"))
+                }
+            }
+        }
+        var failures = FanRecovery.restore(count: count, restoreAndVerify: restore)
+        if count == nil {
+            let known = Set(fans.map(\.index) + Array(modes.keys))
+                .filter { (0..<8).contains($0) }.sorted()
+            for index in known {
+                do { try restore(index) }
+                catch { failures.append("F\(index): \(error.localizedDescription)") }
+            }
+            failures[0] = t("无法确认风扇状态，请重试安全清理")
         }
         lastError = failures.isEmpty ? nil : failures.joined(separator: "; ")
         return failures.isEmpty
+    }
+
+    // 仅供更新取消的安全清理成功后调用；不写硬件，也不重放旧的固定/全速策略。
+    func completeUpdateCancellation() {
+        curveEnabled = false
+        modes = Dictionary(uniqueKeysWithValues: Set(modes.keys).union(fans.map(\.index)).map { ($0, .auto) })
+        sessionCooling = false
+        modesBeforeSession.removeAll()
+        lastAppliedFixed.removeAll()
+        lastCurveWrite.removeAll()
+        lastCurveTemperature = nil
+        activePresetName = t("自动")
     }
 
     // MARK: - Persistence

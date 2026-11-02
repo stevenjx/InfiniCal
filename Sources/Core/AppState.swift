@@ -425,11 +425,14 @@ final class AppState: ObservableObject {
         FanController.shared.updateSuspended = true
         calibrationEngine.prepareIdleForUpdate()
         let controller = ChargeController.shared
+        helperInstalled = HelperClient.shared.refreshInstallState()
+        capabilities = controller.detectCapabilities()
+        capabilities.hasHelper = helperInstalled
         controller.stopHoldingCeiling()
         controller.restoreAdapterLeftOff()
         controller.endForcedDischarge()
         var failures: [String] = []
-        if !helperInstalled && snapshot.isPresent {
+        if !helperInstalled {
             failures.append(t("特权助手不可用，无法确认更新前安全恢复；请安装助手后重试"))
         }
         if let error = controller.adapterRestoreError { failures.append(error) }
@@ -444,12 +447,17 @@ final class AppState: ObservableObject {
         return failures.isEmpty ? nil : failures.joined(separator: "; ")
     }
 
-    func cancelUpdatePreparation() {
-        updatePreparationActive = false
-        FanController.shared.updateSuspended = false
+    func cancelUpdatePreparation() -> String? {
+        guard updatePreparationActive else { return nil }
+        if let error = prepareForUpdate() { return error }
+        // 全部清理成功后，先同步安全自动策略，最后才打开普通控制门禁。
+        FanController.shared.completeUpdateCancellation()
         calibrationEngine.resumeAfterUpdateCancellation()
         lastAppliedLimit = nil
         lastChargingAllowed = nil
+        FanController.shared.updateSuspended = false
+        updatePreparationActive = false
+        return nil
     }
 
     private func tick() {

@@ -33,7 +33,7 @@ InfiniCal 从本机 IORegistry、SMC 和 IOHID 读取数据，用于**测量真�
 
 前往 [Releases](https://github.com/stevenjx/InfiniCal/releases) 下载最新版本。
 
-**当前版本：1.0.13** · arm64 + x86_64 通用包 · macOS 12 Monterey 及以上
+**当前版本：1.0.14** · arm64 + x86_64 通用包 · macOS 12 Monterey 及以上
 
 > 应用使用 ad-hoc 签名，未经 Apple 公证。首次打开可能需要在系统设置中允许运行。
 

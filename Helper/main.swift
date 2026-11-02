@@ -81,6 +81,76 @@ func isAllowedWriteKey(_ key: String) -> Bool {
     return false
 }
 
+enum WriteValidation {
+    // 只接收 App 使用的十六进制字符串，不桥接 NSNumber 或截断数字数组。
+    static func payload(_ value: Any?) -> [UInt8]? {
+        guard let hex = value as? String, !hex.isEmpty, hex.utf8.count <= 64,
+              hex.utf8.count % 2 == 0,
+              hex.utf8.allSatisfy({ (48...57).contains($0) || (65...70).contains($0) || (97...102).contains($0) }) else { return nil }
+        let chars = Array(hex.utf8)
+        return stride(from: 0, to: chars.count, by: 2).map {
+            UInt8(String(bytes: chars[$0..<$0 + 2], encoding: .ascii)!, radix: 16)!
+        }
+    }
+
+    static func numeric(info: SMCKeyInfo, bytes: [UInt8]) -> Double? {
+        let width: Int
+        switch info.type {
+        case "ui8 ": width = 1
+        case "ui16", "fpe2": width = 2
+        case "flt ": width = 4
+        default: return nil
+        }
+        guard info.size == UInt32(width), bytes.count == width,
+              let value = try? SMC.decode(info: info, bytes: bytes), value.isFinite else { return nil }
+        return value
+    }
+
+    static func accepts(key: String, info: SMCKeyInfo, bytes: [UInt8],
+                        read: (String) -> Double?) -> Bool {
+        guard isAllowedWriteKey(key), info.isWritable, bytes.count == Int(info.size) else { return false }
+        switch key {
+        case "CH0B", "CH0C", "CHIE", "CH0I", "CH0J", "BCLM":
+            guard info.type == "ui8 ", info.size == 1 else { return false }
+            switch key {
+            case "CH0B", "CH0C": return bytes[0] == 0 || bytes[0] == 2
+            case "CHIE": return bytes[0] == 0 || bytes[0] == 8
+            case "BCLM": return bytes[0] <= 100
+            default: return bytes[0] <= 1
+            }
+        case "CHTE":
+            // App 写入 [0/1, 0, 0, 0]，不允许其他控制位。
+            return info.type == "ui32" && info.size == 4
+                && bytes[0] <= 1 && bytes.dropFirst().allSatisfy { $0 == 0 }
+        case "FS! ":
+            guard info.type == "ui16", info.size == 2 else { return false }
+            // 与 App writeMode 的大端输出一致；每个风扇只允许 01 模式。
+            let flags = UInt16(bytes[0]) << 8 | UInt16(bytes[1])
+            if flags == 0 { return true }
+            guard let count = fanCount(read) else { return false }
+            let mask = (0..<count).reduce(UInt16(0)) { $0 | (UInt16(1) << ($1 * 2)) }
+            return flags & ~mask == 0
+        default:
+            guard let count = fanCount(read),
+                  let index = Int(String(key[key.index(after: key.startIndex)])), index < count else { return false }
+            if key.hasSuffix("Md") {
+                return info.type == "ui8 " && info.size == 1 && bytes[0] <= 1
+            }
+            guard let target = numeric(info: info, bytes: bytes),
+                  let minimum = read("F\(index)Mn"), let maximum = read("F\(index)Mx"),
+                  minimum.isFinite, maximum.isFinite, minimum >= 0, maximum > 0,
+                  minimum <= maximum else { return false }
+            return target >= minimum && target <= maximum
+        }
+    }
+
+    private static func fanCount(_ read: (String) -> Double?) -> Int? {
+        guard let count = read("FNum"), count.isFinite, count >= 0, count <= 8,
+              count.rounded(.towardZero) == count else { return nil }
+        return Int(count)
+    }
+}
+
 func isSafeExec(_ path: String, _ arguments: [String]) -> Bool {
     switch path {
     case "/usr/bin/powermetrics":
@@ -156,26 +226,17 @@ func handle(_ request: [String: Any]) -> [String: Any] {
         }
 
     case "write":
-        guard let key = request["key"] as? String, key.count == 4,
+        guard let key = request["key"] as? String,
               isAllowedWriteKey(key),
-              let hex = request["bytes"] as? String,
-              hex.count <= 64,
-              hex.count % 2 == 0 else {
+              let bytes = WriteValidation.payload(request["bytes"]) else {
             return ["ok": false, "error": "write key or payload not allowed"]
         }
-        var bytes: [UInt8] = []
-        var index = hex.startIndex
-        while index < hex.endIndex {
-            let next = hex.index(index, offsetBy: 2, limitedBy: hex.endIndex) ?? hex.endIndex
-            guard let byte = UInt8(hex[index..<next], radix: 16) else {
-                return ["ok": false, "error": "bad hex"]
-            }
-            bytes.append(byte)
-            index = next
-        }
-        guard let info = smc.keyInfo(key), info.isWritable,
-              bytes.count == Int(info.size) else {
-            return ["ok": false, "error": "key is missing, read-only, or wrong width"]
+        guard let info = smc.keyInfo(key),
+              WriteValidation.accepts(key: key, info: info, bytes: bytes, read: { name in
+                  guard let (metadata, raw) = try? smc.readBytes(name) else { return nil }
+                  return WriteValidation.numeric(info: metadata, bytes: raw)
+              }) else {
+            return ["ok": false, "error": "write type, width, value, or hardware bounds not allowed"]
         }
         do {
             try smc.writeBytes(key, bytes)
