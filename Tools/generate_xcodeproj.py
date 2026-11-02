@@ -46,6 +46,7 @@ APP_SOURCES = [
     "Sources/Core/HIDThermal.swift",
     "Sources/Core/HistoryStore.swift",
     "Sources/Core/Notifier.swift",
+    "Sources/Core/AnomalyAlerts.swift",
     "Sources/Core/SleepControl.swift",
     "Sources/Core/FanController.swift",
     "Sources/Core/Theme.swift",

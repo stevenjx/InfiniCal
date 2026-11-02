@@ -20,6 +20,12 @@ final class Notifier {
 
     private init() {}
 
+    /// Requested targets and independent telemetry stay explicitly separated.
+    static func evidenceBody(_ body: String, requested: String, actual: String, sampledAt: Date) -> String {
+        body + "\n" + tf("请求值：{p}", requested) + "\n" + tf("实际观测：{p}", actual)
+            + "\n" + tf("采样时间：{p}", sampledAt.formatted(date: .omitted, time: .standard))
+    }
+
     /// Asked once, on the first launch that needs it.
     func prepare() {
         guard !didRequestAuthorization else { return }

@@ -43,6 +43,7 @@ SOURCES=(
   "$ROOT/Sources/Core/HIDThermal.swift"
   "$ROOT/Sources/Core/HistoryStore.swift"
   "$ROOT/Sources/Core/Notifier.swift"
+  "$ROOT/Sources/Core/AnomalyAlerts.swift"
   "$ROOT/Sources/Core/SleepControl.swift"
   "$ROOT/Sources/Core/FanController.swift"
   "$ROOT/Sources/Core/Theme.swift"

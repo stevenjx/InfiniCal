@@ -25,6 +25,7 @@
 		6C348952EAA151E9342BFC11 /* HIDThermal.swift in Sources */ = {isa = PBXBuildFile; fileRef = B76742D00A659F9DB7EDC770 /* HIDThermal.swift */; };
 		85D163081A208A1E836F56DA /* HistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C509D83CBC83A13CF4407D84 /* HistoryStore.swift */; };
 		4679ED6D469B3C728D05C8BC /* Notifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82BE2237B9BA6EC865EF74E4 /* Notifier.swift */; };
+		5734B7106079282AD7CCAE0E /* AnomalyAlerts.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDC381DEFC38BD86762D8824 /* AnomalyAlerts.swift */; };
 		437B21A60C4A837BEB66E9BB /* SleepControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 47148AED6335858B49C9DC9F /* SleepControl.swift */; };
 		C0C82567F3B0C2DB741B0022 /* FanController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E9620A37C822723069282351 /* FanController.swift */; };
 		8D46EC944C72D8277C8F7BC5 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2139CF0FDE43CE2C7F1BD00 /* Theme.swift */; };
@@ -96,6 +97,7 @@
 		B76742D00A659F9DB7EDC770 /* HIDThermal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HIDThermal.swift; sourceTree = "<group>"; };
 		C509D83CBC83A13CF4407D84 /* HistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryStore.swift; sourceTree = "<group>"; };
 		82BE2237B9BA6EC865EF74E4 /* Notifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notifier.swift; sourceTree = "<group>"; };
+		DDC381DEFC38BD86762D8824 /* AnomalyAlerts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnomalyAlerts.swift; sourceTree = "<group>"; };
 		47148AED6335858B49C9DC9F /* SleepControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepControl.swift; sourceTree = "<group>"; };
 		E9620A37C822723069282351 /* FanController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FanController.swift; sourceTree = "<group>"; };
 		C2139CF0FDE43CE2C7F1BD00 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
@@ -194,6 +196,7 @@
 				B76742D00A659F9DB7EDC770 /* HIDThermal.swift */,
 				C509D83CBC83A13CF4407D84 /* HistoryStore.swift */,
 				82BE2237B9BA6EC865EF74E4 /* Notifier.swift */,
+				DDC381DEFC38BD86762D8824 /* AnomalyAlerts.swift */,
 				47148AED6335858B49C9DC9F /* SleepControl.swift */,
 				E9620A37C822723069282351 /* FanController.swift */,
 				C2139CF0FDE43CE2C7F1BD00 /* Theme.swift */,
@@ -353,6 +356,7 @@
 				6C348952EAA151E9342BFC11 /* HIDThermal.swift in Sources */,
 				85D163081A208A1E836F56DA /* HistoryStore.swift in Sources */,
 				4679ED6D469B3C728D05C8BC /* Notifier.swift in Sources */,
+				5734B7106079282AD7CCAE0E /* AnomalyAlerts.swift in Sources */,
 				437B21A60C4A837BEB66E9BB /* SleepControl.swift in Sources */,
 				C0C82567F3B0C2DB741B0022 /* FanController.swift in Sources */,
 				8D46EC944C72D8277C8F7BC5 /* Theme.swift in Sources */,

@@ -218,6 +218,8 @@ struct MenuBarPanel: View {
 
     @EnvironmentObject private var state: AppState
     @ObservedObject private var fans = FanController.shared
+    @ObservedObject private var alerts = AnomalyAlerts.shared
+    @StateObject private var exportMessage = UIValue<String?>(nil)
     var openWindow: () -> Void
 
     private var theme: Theme { Theme.current }
@@ -226,7 +228,13 @@ struct MenuBarPanel: View {
         VStack(alignment: .leading, spacing: 12) {
             header
             metrics
+            controlSummary
             actions
+            Button(t("导出当前诊断")) { exportDiagnostics() }
+                .buttonStyle(.plain).font(.system(size: 11)).foregroundColor(theme.accent)
+            if let message = exportMessage.value {
+                Text(message).font(.system(size: 10)).foregroundColor(theme.textSecondary)
+            }
             footer
         }
         .padding(14)
@@ -273,6 +281,66 @@ struct MenuBarPanel: View {
         }
         .padding(10)
         .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(theme.card))
+    }
+
+    private var controlSummary: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(state.capabilities.strategy.title)
+                .font(.system(size: 11, weight: .medium))
+            Text(state.capabilities.summary)
+                .font(.system(size: 10)).foregroundColor(theme.textSecondary)
+            Text(tf("策略：{p}", policyText))
+                .font(.system(size: 11))
+            Text(tf("请求上限 {p}% · 实际电量 {p}%", "\(state.chargeVal)", "\(state.snapshot.percentage)"))
+                .font(.system(size: 11))
+            Text(actualText).font(.system(size: 11))
+            Text(tf("采样时间：{p}", state.snapshot.timestamp.formatted(date: .omitted, time: .standard)))
+                .font(.system(size: 10)).foregroundColor(theme.textSecondary)
+            if !state.statusNote.isEmpty {
+                Text(state.statusNote).font(.system(size: 10)).foregroundColor(theme.chartOrange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !alerts.events.isEmpty {
+                Text(tf("异常记录：{p}（历史页查看）", "\(alerts.events.count)"))
+                    .font(.system(size: 10)).foregroundColor(theme.chartOrange)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 10).fill(theme.card))
+    }
+
+    private var policyText: String {
+        if CalibrationEngine.shared.needsRecovery { return t("等待校准恢复") }
+        if CalibrationEngine.shared.isRunning { return CalibrationEngine.shared.phase.title }
+        if state.topUpRestoreLimit != nil { return t("一次性充满") }
+        if state.userPaused { return t("手动暂停") }
+        if state.automaticDischarge { return t("自动放电") }
+        if state.sailingMode { return tf("航海模式：{p}%–{p}%", "\(max(0, state.chargeVal - state.sailingLevel))", "\(state.chargeVal)") }
+        return t("充电上限控制")
+    }
+
+    private var actualText: String {
+        let sample = state.snapshot
+        guard sample.isPresent else { return t("未检测到电池") }
+        let current = sample.instantAmperage
+        let flow = current < -0.05 ? t("放电中") : (current > 0.05 ? t("充电中") : t("未检测到明显电流"))
+        return flow + String(format: " · %.3f A · %.2f V", current, sample.voltage)
+    }
+
+    private func exportDiagnostics() {
+        // Opening the save dialog makes this an explicit user-initiated read.
+        let report = HardwareDiagnosticReport.capture()
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "InfiniCal-Diagnostics.json"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            encoder.dateEncodingStrategy = .iso8601
+            try encoder.encode(report).write(to: url, options: .atomic)
+            exportMessage.value = t("诊断已导出（不含序列号）")
+        } catch { exportMessage.value = error.localizedDescription }
     }
 
     private var actions: some View {

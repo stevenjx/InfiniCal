@@ -74,6 +74,8 @@ def tests():
     swift += (ROOT / "Sources/Core/ControlResult.swift").read_text()
     swift += (ROOT / "Sources/Core/CalibrationMath.swift").read_text()
     history = (ROOT / "Sources/Core/HistoryStore.swift").read_text()
+    alerts = (ROOT / "Sources/Core/AnomalyAlerts.swift").read_text()
+    swift += alerts[alerts.index("struct AnomalyRule {"):alerts.index("struct AnomalyEvidence:")]
     swift += history[history.index("struct DailyStat:"):history.index("final class DailyHistory:")]
     swift += '''
 func check(_ condition: Bool, _ message: String) { precondition(condition, message) }
@@ -140,7 +142,20 @@ let conditions = CalibrationConditions(model: "test", backend: "bclm", stressMod
 check(conditions.matches(conditions), "self match")
 let mismatch = CalibrationConditions(model: "test", backend: "bclm", stressMode: "silent", target: 10, startPercentage: 100, meanTemperature: 40, meanPower: 10, designCapacityMAh: 6000)
 check(!conditions.matches(mismatch), "temperature mismatch")
-print("PASS pure policy/math/checkpoint/helper-validation/quality/trend tests (no hardware)")
+var gate = AnomalyGate()
+let rule = AnomalyRule(id: "test", title: "test", duration: 5, cooldown: 20)
+gate.beginSample(at: anchor)
+check(!gate.evaluate(rule, trigger: true, recover: false, now: anchor), "no spike alert")
+gate.beginSample(at: anchor.addingTimeInterval(5))
+check(gate.evaluate(rule, trigger: true, recover: false, now: anchor.addingTimeInterval(5)), "sustained alert")
+check(!gate.evaluate(rule, trigger: true, recover: false, now: anchor.addingTimeInterval(6)), "cooldown")
+gate.ignore("test")
+check(!gate.evaluate(rule, trigger: true, recover: false, now: anchor.addingTimeInterval(30)), "ignore episode")
+_ = gate.evaluate(rule, trigger: false, recover: true, now: anchor.addingTimeInterval(31))
+check(!gate.evaluate(rule, trigger: true, recover: false, now: anchor.addingTimeInterval(32)), "fresh episode duration")
+gate.beginSample(at: anchor.addingTimeInterval(100))
+check(!gate.evaluate(rule, trigger: true, recover: false, now: anchor.addingTimeInterval(100)), "gap resets evidence")
+print("PASS pure policy/math/checkpoint/helper-validation/quality/trend/anomaly tests (no hardware)")
 '''
     with tempfile.TemporaryDirectory(prefix="infinical-tests-") as directory:
         main = Path(directory) / "main.swift"

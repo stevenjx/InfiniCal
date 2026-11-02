@@ -185,7 +185,7 @@ final class AppState: ObservableObject {
     private var lastAppliedLimit: Int?
     private var lastChargingAllowed: Bool?
     private var heatPause = false
-    private var userPaused = false
+    private(set) var userPaused = false
     private var previousPluggedIn: Bool?
     private var manualDischargeTarget: Int?
     private var dischargeRequestedAt: Date?
@@ -445,6 +445,10 @@ final class AppState: ObservableObject {
             evaluateChargeControl()
         }
         updateChargeState()
+        AnomalyAlerts.shared.sample(snapshot, limit: chargeVal,
+            intentionalDrain: manualDischargeTarget != nil || ChargeController.shared.activeAdapterKey != nil || ChargeController.shared.heldCeiling != nil || calibrationEngine.isRunning,
+            suppressLimit: calibrationEngine.isRunning || calibrationEngine.needsRecovery,
+            calibration: calibrationEngine, fanError: FanController.shared.lastError)
         notifyLimitReached()
         // `ps` is a process spawn; skip it while nobody can see the list.
         if tickCount % 10 == 0, dashboardBackgroundUpdates || NSApp.isActive {
@@ -511,7 +515,10 @@ final class AppState: ObservableObject {
         } else {
             Notifier.shared.post(key: "charge-limit",
                                  title: tf("已充至 {p}%", "\(chargeVal)"),
-                                 body: t("充电已暂停，电池保持在设定上限。"),
+                                 body: Notifier.evidenceBody(
+                                    t("电量已达到设定上限；是否停充以实际电流为准。"),
+                                    requested: "\(chargeVal)%", actual: "\(current)% / \(String(format: "%.3f", snapshot.instantAmperage)) A / Charging=\(snapshot.isCharging)",
+                                    sampledAt: snapshot.timestamp),
                                  cooldown: 3600)
         }
     }

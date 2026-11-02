@@ -9,6 +9,7 @@ import AppKit
 struct HistoryView: View {
 
     @ObservedObject private var history = DailyHistory.shared
+    @ObservedObject private var alerts = AnomalyAlerts.shared
     @ObservedObject private var calibration = CalibrationEngine.shared
     @StateObject private var range = UIValue<Int>(7)
     private var theme: Theme { Theme.current }
@@ -20,6 +21,7 @@ struct HistoryView: View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 12) {
                 header
+                alertCenter
 
                 if isEmpty {
                     emptyState
@@ -62,6 +64,33 @@ struct HistoryView: View {
             }
         }
         .frame(height: 34)
+    }
+
+    private var alertCenter: some View {
+        Card(padding: 14) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(t("异常告警")).font(.system(size: 13, weight: .medium))
+                Text(t("仅在 App 运行并持续观测时判断；提醒是异常证据，不是硬件故障诊断。"))
+                    .font(.system(size: 11)).foregroundColor(theme.textSecondary)
+                if alerts.events.isEmpty { Text(t("暂无异常记录")).font(.system(size: 11)) }
+                ForEach(alerts.events) { event in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(t(event.title))
+                            Spacer()
+                            Text(event.date, style: .time)
+                            Button(t("忽略本次")) { alerts.ignore(event.id) }
+                            Button(t("关闭此类")) { alerts.setDisabled(event.id, true) }
+                        }
+                        Text(event.detail).textSelection(.enabled)
+                    }.font(.system(size: 11))
+                }
+                ForEach(AnomalyAlerts.rules.filter { alerts.disabled.contains($0.id) }, id: \.id) { rule in
+                    Button(t("重新启用") + " · " + t(rule.title)) { alerts.setDisabled(rule.id, false) }
+                        .font(.system(size: 11))
+                }
+            }
+        }
     }
 
     private var healthTrends: some View {
