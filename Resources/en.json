@@ -756,5 +756,13 @@
  "深度校准会把电量放到约 10%，电池将在接近放空的状态下工作。非必要不建议频繁执行。": "Deep calibration drains to about 10%, so the pack works close to empty. Avoid running it often unless you need a full measurement.",
  "确认开始深度校准": "Confirm deep calibration",
  "深度校准不会自动执行，已按标准校准开始": "Deep calibration never starts automatically — started a standard calibration instead",
- "快速检查模式，未做完整深度放电": "Quick check mode: no full-depth discharge was performed"
+ "快速检查模式，未做完整深度放电": "Quick check mode: no full-depth discharge was performed",
+ "电芯压差": "Cell spread",
+ "电芯电压": "Cell voltages",
+ "压差 {p} mV": "spread {p} mV",
+ "约 {p} W": "about {p} W",
+ "约 {p} W · 关闭可多 {p} 分钟": "about {p} W · closing it adds {p} min",
+ "平均放电功率": "Mean discharge power",
+ "起始电量": "Start level",
+ "校准深度": "Calibration depth"
 }

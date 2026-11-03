@@ -433,6 +433,32 @@ let cpLegacy = CalibrationCheckpoint(sessionID: UUID(), phase: "idle", startedAt
     adapterControl: nil, chargeControl: "bclm", reason: "legacy")
 check(try JSONDecoder().decode(CalibrationCheckpoint.self,
       from: try JSONEncoder().encode(cpLegacy)).preset == nil, "legacy journal without preset still decodes")
+// P2-01 power attribution: ps reports 100% per core, so the share of the whole
+// CPU is the percentage over (100 × cores).
+let halfCore = PowerAttribution.attribute(cpuPercent: 50, cores: 10, cpuWatts: 10,
+                                          currentWatts: 20, fullCapacityHours: 5)
+check(halfCore.watts == 0.5, "half a core of ten gets 5% of CPU watts")
+check(halfCore.gainMinutes > 0, "closing a load buys battery minutes")
+let oneCore = PowerAttribution.attribute(cpuPercent: 100, cores: 10, cpuWatts: 10,
+                                         currentWatts: 20, fullCapacityHours: 5)
+check(oneCore.watts == 1.0, "one full core of ten gets 10%")
+check(oneCore.gainMinutes > halfCore.gainMinutes, "a bigger load buys more minutes")
+// Attribution needs a measurement and a battery estimate; without either it
+// must report zero rather than invent a figure.
+let noCPUWatts = PowerAttribution.attribute(cpuPercent: 100, cores: 10, cpuWatts: 0,
+                                            currentWatts: 20, fullCapacityHours: 5)
+check(noCPUWatts == PowerAttribution.Result(watts: 0, gainMinutes: 0), "no CPU measurement means no claim")
+let onAC = PowerAttribution.attribute(cpuPercent: 100, cores: 10, cpuWatts: 10,
+                                      currentWatts: 20, fullCapacityHours: nil)
+check(onAC.watts == 0 && onAC.gainMinutes == 0, "on AC no battery minutes are claimed")
+// The load cannot exceed the total draw, and the runtime must stay finite.
+let absurd = PowerAttribution.attribute(cpuPercent: 100, cores: 1, cpuWatts: 100,
+                                        currentWatts: 1, fullCapacityHours: 5)
+check(absurd.watts == 100, "share is capped at the whole CPU")
+check(absurd.gainMinutes >= 0 && absurd.gainMinutes < 100_000, "runtime stays bounded")
+let subPixel = PowerAttribution.attribute(cpuPercent: 0.01, cores: 8, cpuWatts: 8,
+                                          currentWatts: 20, fullCapacityHours: 5)
+check(subPixel.watts > 0 && subPixel.watts < 0.001, "a tiny load still attributes a tiny share")
 check(quality(true, 80, ["发生过热保护"]).grade == .medium, "thermal event")
 let legacyData = try JSONEncoder().encode(CalibrationRecord())
 let legacy = try JSONDecoder().decode(CalibrationRecord.self, from: legacyData)

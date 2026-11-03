@@ -828,7 +828,8 @@ final class CalibrationEngine: ObservableObject {
                                       socPower: socPowerWatts,
                                       socPowerQuality: socPowerQuality,
                                       displayPower: displayPowerWatts,
-                                      displayPowerQuality: displayPowerQuality)
+                                      displayPowerQuality: displayPowerQuality,
+                                      cellDeltaMillivolts: cellDeltaMillivolts)
         appendChartPoint(point)
         updateEstimates(smoothedPower: smoothedPower)
 
@@ -1116,7 +1117,8 @@ final class CalibrationEngine: ObservableObject {
                                                 socPower: socPowerWatts,
                                                 socPowerQuality: socPowerQuality,
                                                 displayPower: displayPowerWatts,
-                                                displayPowerQuality: displayPowerQuality))
+                                                displayPowerQuality: displayPowerQuality,
+                                                cellDeltaMillivolts: cellDeltaMillivolts))
         append(tf("预充完成，转入受控放电阶段（{p}%）[{p}]", "\(percentage)", stressMode.title))
         notify(t("预充完成"), tf("电池已充至 {p}%，开始受控放电校准。", "\(percentage)"))
         drainTicks = 0
@@ -1699,7 +1701,8 @@ final class CalibrationEngine: ObservableObject {
                 socPower: slice.reduce(0) { $0 + $1.socPower } / count,
                 socPowerQuality: slice.last?.socPowerQuality ?? .unavailable,
                 displayPower: slice.reduce(0) { $0 + $1.displayPower } / count,
-                displayPowerQuality: slice.last?.displayPowerQuality ?? .unavailable
+                displayPowerQuality: slice.last?.displayPowerQuality ?? .unavailable,
+                cellDeltaMillivolts: slice.reduce(0) { $0 + $1.cellDeltaMillivolts } / count
             ))
             index = end
         }

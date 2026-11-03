@@ -70,6 +70,38 @@ enum ChargePolicy {
     }
 }
 
+/// Turns a process's CPU share into watts and extra runtime.
+///
+/// `ps -o pcpu` reports 100 % per full core, so the share of the whole CPU is
+/// the percentage over `100 × cores`. Multiplying by the measured CPU power
+/// gives the process's watts. The runtime gain is the difference between the
+/// current estimate and the estimate without that load, and is only meaningful
+/// on battery — on AC the saving is wall power, so callers pass no hours.
+enum PowerAttribution {
+    struct Result: Equatable {
+        var watts: Double
+        var gainMinutes: Int
+    }
+
+    static func attribute(cpuPercent: Double, cores: Int, cpuWatts: Double,
+                          currentWatts: Double, fullCapacityHours: Double?) -> Result {
+        let coreCount = Double(max(cores, 1))
+        guard cpuWatts.isFinite, cpuWatts > 0,
+              cpuPercent.isFinite, cpuPercent > 0,
+              currentWatts.isFinite, currentWatts > 0,
+              let fullHours = fullCapacityHours, fullHours.isFinite, fullHours > 0 else {
+            return Result(watts: 0, gainMinutes: 0)
+        }
+        let share = min(1, cpuPercent / (100 * coreCount))
+        let watts = cpuWatts * share
+        // Removing the whole load cannot make the draw negative, so floor the
+        // remaining power rather than reporting an impossible runtime.
+        let reduced = fullHours * currentWatts / max(0.5, currentWatts - watts)
+        let gain = Int(((reduced - fullHours) * 60).rounded())
+        return Result(watts: watts, gainMinutes: max(0, gain))
+    }
+}
+
 struct CalibrationRun {
     var stage: CalibrationStage = .chargeToFull
     var startedAt = Date()
@@ -163,6 +195,14 @@ struct HighUsageApp: Identifiable, Equatable {
     var id: String { bundleID }
     var bundleID: String
     var name: String
+    /// CPU percentage as reported by `ps -o pcpu`, i.e. 100 = one full core.
     var energyImpact: Double
     var icon: NSImage?
+    /// Estimated watts this process is responsible for, derived from its share
+    /// of total CPU capacity and the measured CPU power. Zero when no
+    /// measurement was available, so the UI can omit the figure instead of
+    /// inventing one.
+    var estimatedWatts: Double = 0
+    /// Extra battery minutes if this process stopped, at the current draw.
+    var estimatedGainMinutes: Int = 0
 }

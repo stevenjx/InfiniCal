@@ -200,6 +200,15 @@ struct DashboardView: View {
         return tf("剩余 {p} 小时 {p} 分", "\(totalMinutes / 60)", "\(totalMinutes % 60)")
     }
 
+    /// Second line under a process name: what it costs and what closing it buys.
+    /// The minute figure is omitted on AC, where the saving is wall power rather
+    /// than battery life.
+    private func gainText(_ app: HighUsageApp) -> String {
+        let watts = String(format: "%.1f", app.estimatedWatts)
+        guard app.estimatedGainMinutes > 0 else { return tf("约 {p} W", watts) }
+        return tf("约 {p} W · 关闭可多 {p} 分钟", watts, "\(app.estimatedGainMinutes)")
+    }
+
     // MARK: - Bottom row cards
 
     private var highUsageCard: some View {
@@ -224,10 +233,18 @@ struct DashboardView: View {
                             if let icon = app.icon {
                                 Image(nsImage: icon).resizable().frame(width: 24, height: 24)
                             }
-                            Text(app.name)
-                                .font(.system(size: 12))
-                                .foregroundColor(theme.textPrimary)
-                                .lineLimit(1)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(app.name)
+                                    .font(.system(size: 12))
+                                    .foregroundColor(theme.textPrimary)
+                                    .lineLimit(1)
+                                if app.estimatedWatts > 0 {
+                                    Text(gainText(app))
+                                        .font(.system(size: 9.5))
+                                        .foregroundColor(theme.textTertiary)
+                                        .lineLimit(1)
+                                }
+                            }
                             Spacer()
                             Text(String(format: "%.1f%%", app.energyImpact))
                                 .font(.system(size: 11).monospacedDigit())

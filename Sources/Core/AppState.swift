@@ -180,6 +180,10 @@ final class AppState: ObservableObject {
     private let estimator = PowerEstimator()
     private var lastHelperSocPoll = Date.distantPast
     private var socRequestInFlight = false
+    /// CPU-only share of `soc`, used to attribute per-process wattage. Zero
+    /// when the sampler could not split the blocks, or on an Intel Mac where
+    /// the breakdown is not produced at all.
+    private(set) var socCPUWatts: Double = 0
     private var timer: Timer?
     private var taskTimer: Timer?
     private var lastAppliedLimit: Int?
@@ -1266,24 +1270,43 @@ final class AppState: ObservableObject {
         var result: [HighUsageApp] = []
         var matchedPaths = Set<String>()
 
+        // `ps` reports 100 % per full core, so a process's share of the whole
+        // CPU is its percentage over (100 × cores). Multiplying that by the
+        // measured CPU watts turns the share into watts, and subtracting them
+        // from the current draw gives the extra runtime. Only while on battery:
+        // on AC the saving is wall power, not battery life, so no minute value
+        // is claimed.
+        let cores = ProcessInfo.processInfo.activeProcessorCount
+        let fullHours = snapshot.isPluggedIn ? nil : snapshot.remainingHours(atPower: energyUseWatts)
+        func estimate(_ cpu: Double) -> PowerAttribution.Result {
+            PowerAttribution.attribute(cpuPercent: cpu, cores: cores, cpuWatts: socCPUWatts,
+                                       currentWatts: energyUseWatts, fullCapacityHours: fullHours)
+        }
+
         for app in NSWorkspace.shared.runningApplications where app.bundleIdentifier != nil {
             guard let url = app.bundleURL else { continue }
             matchedPaths.insert(url.path)
             if !showProcessesInHighUsage, app.activationPolicy != .regular { continue }
             let cpu = cpuByPath[url.path] ?? 0
             guard cpu >= threshold else { continue }
+            let attribution = estimate(cpu)
             result.append(HighUsageApp(bundleID: app.bundleIdentifier ?? url.lastPathComponent,
                                        name: app.localizedName ?? url.lastPathComponent,
                                        energyImpact: cpu,
-                                       icon: app.icon))
+                                       icon: app.icon,
+                                       estimatedWatts: attribution.watts,
+                                       estimatedGainMinutes: attribution.gainMinutes))
         }
 
         if showProcessesInHighUsage {
             for (path, cpu) in cpuByPath where !matchedPaths.contains(path) && cpu >= threshold {
+                let attribution = estimate(cpu)
                 result.append(HighUsageApp(bundleID: path,
                                            name: (path as NSString).lastPathComponent,
                                            energyImpact: cpu,
-                                           icon: nil))
+                                           icon: nil,
+                                           estimatedWatts: attribution.watts,
+                                           estimatedGainMinutes: attribution.gainMinutes))
             }
         }
 
@@ -1560,14 +1583,22 @@ final class AppState: ObservableObject {
             lastHelperSocPoll = now
             socRequestInFlight = true
             DispatchQueue.global(qos: .utility).async { [weak self] in
-                let measured = HelperClient.shared.socPower()
+                // Ask for the split first: it carries the CPU share that
+                // per-process wattage is derived from. Only fall back to the
+                // total-only command when the breakdown is unavailable, so a
+                // machine that cannot split still reports a measured total.
+                let split = HelperClient.shared.socPowerSplit()
+                let total = split?.combined ?? HelperClient.shared.socPower()
+                let cpu = split?.cpu ?? 0
                 DispatchQueue.main.async {
                     guard let self else { return }
                     self.socRequestInFlight = false
-                    if let measured {
-                        self.soc = .measured(measured)
+                    if let total {
+                        self.soc = .measured(total)
+                        self.socCPUWatts = cpu
                     } else {
                         self.soc = self.estimator.estimateSoC()
+                        self.socCPUWatts = 0
                     }
                 }
             }

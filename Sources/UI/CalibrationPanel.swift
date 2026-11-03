@@ -136,6 +136,55 @@ struct CalibrationPanel: View {
                           keyPath: \.power)
             }
             .frame(height: 110)
+            HStack(spacing: 10) {
+                scopeCard(title: t("电压"),
+                          badge: String(format: "%.2f", engine.voltage),
+                          badgeUnit: "V",
+                          tint: theme.chartBlue,
+                          domain: voltageDomain,
+                          steps: [voltageDomain.lowerBound,
+                                  (voltageDomain.lowerBound + voltageDomain.upperBound) / 2,
+                                  voltageDomain.upperBound],
+                          unit: "V",
+                          points: engine.chartPoints,
+                          keyPath: \.voltage)
+                scopeCard(title: t("电流"),
+                          badge: String(format: "%.2f", engine.signedAmperage),
+                          badgeUnit: "A",
+                          tint: theme.chartOrange,
+                          domain: currentDomain,
+                          steps: [currentDomain.lowerBound, 0, currentDomain.upperBound],
+                          unit: "A",
+                          points: engine.chartPoints,
+                          keyPath: \.amperage)
+                scopeCard(title: t("温度"),
+                          badge: String(format: "%.1f", engine.temperature),
+                          badgeUnit: "°C",
+                          tint: theme.chartGreen,
+                          domain: temperatureDomain,
+                          steps: [temperatureDomain.lowerBound,
+                                  (temperatureDomain.lowerBound + temperatureDomain.upperBound) / 2,
+                                  temperatureDomain.upperBound],
+                          unit: "°C",
+                          points: engine.chartPoints,
+                          keyPath: \.temperature)
+            }
+            .frame(height: 110)
+            if engine.cellVoltages.count >= 2 {
+                HStack(spacing: 10) {
+                    scopeCard(title: t("电芯压差"),
+                              badge: String(format: "%.1f", engine.cellDeltaMillivolts),
+                              badgeUnit: "mV",
+                              tint: theme.chartOrange,
+                              domain: 0...cellDeltaCeiling,
+                              steps: [0, cellDeltaCeiling / 2],
+                              unit: "mV",
+                              points: engine.chartPoints,
+                              keyPath: \.cellDeltaMillivolts)
+                    cellBalanceCard
+                }
+                .frame(height: 110)
+            }
             controlBar
             Card(padding: 12) {
                 HStack(spacing: 10) {
@@ -742,6 +791,87 @@ struct CalibrationPanel: View {
     }
 
     // MARK: - Scopes
+
+    // MARK: - Chart domains
+
+    /// Prefer the discharge window when there is one: it is the slice the
+    /// measurement is taken from, so the axes stay comparable between runs.
+    private var livePoints: [CalibrationSample] {
+        engine.dischargeCurve.isEmpty ? engine.chartPoints : engine.dischargeCurve
+    }
+
+    private var voltageDomain: ClosedRange<Double> {
+        let values = livePoints.map(\.voltage).filter { $0 > 0 }
+        let low = values.min() ?? 10
+        let high = values.max() ?? 13
+        let pad = max(0.3, (high - low) * 0.15)
+        return max(0, low - pad)...max(low + pad, high + pad)
+    }
+
+    /// Signed: discharge is negative, so the zero line has to be visible for
+    /// the sign of the current to mean anything.
+    private var currentDomain: ClosedRange<Double> {
+        let peak = max(1, livePoints.map { abs($0.amperage) }.max() ?? 1)
+        let bound = peak * 1.2
+        return -bound...bound
+    }
+
+    private var temperatureDomain: ClosedRange<Double> {
+        let values = livePoints.map(\.temperature).filter { $0 > 0 }
+        let low = values.min() ?? 20
+        let high = values.max() ?? 40
+        return max(0, low - 3)...max(low + 5, high + 3)
+    }
+
+    private var cellDeltaCeiling: Double {
+        let peak = livePoints.map(\.cellDeltaMillivolts).max() ?? 0
+        return max(30, (peak * 1.3).rounded(.up))
+    }
+
+    /// Per-cell voltages as thin bars, so an outlier is visible at a glance
+    /// rather than only as a single spread number.
+    private var cellBalanceCard: some View {
+        let cells = engine.cellVoltages
+        let low = cells.min() ?? 0
+        let high = cells.max() ?? 1
+        let span = max(0.001, high - low)
+        return Card(padding: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 5) {
+                    Circle().fill(theme.chartGreen).frame(width: 5, height: 5)
+                    Text(t("电芯电压"))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(theme.textPrimary)
+                    Spacer(minLength: 6)
+                    Text(tf("压差 {p} mV", String(format: "%.1f", engine.cellDeltaMillivolts)))
+                        .font(.system(size: 9.5, design: .monospaced))
+                        .foregroundColor(theme.textSecondary)
+                }
+                ForEach(Array(cells.enumerated()), id: \.offset) { index, volts in
+                    HStack(spacing: 6) {
+                        Text("C\(index + 1)")
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundColor(theme.textTertiary)
+                            .frame(width: 18, alignment: .leading)
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Capsule().fill(theme.innerControl)
+                                Capsule()
+                                    .fill(theme.chartGreen.opacity(0.85))
+                                    .frame(width: max(2, geo.size.width * CGFloat((volts - low) / span)))
+                            }
+                        }
+                        .frame(height: 4)
+                        Text(String(format: "%.3f", volts))
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundColor(theme.textSecondary)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
 
     private func scopeCard(title: String, badge: String, badgeUnit: String, tint: Color,
                            domain: ClosedRange<Double>, steps: [Double], unit: String,
@@ -1438,6 +1568,24 @@ private struct CalibrationHistorySheet: View {
                 if record.internalResistanceMilliohm > 0 {
                     value("DCIR", String(format: "%.1f mΩ", record.internalResistanceMilliohm))
                 }
+            }
+            // Measurement context: a capacity figure is only comparable with
+            // another one taken at a similar temperature and load.
+            if let conditions = record.conditions {
+                HStack(spacing: 14) {
+                    if conditions.meanTemperature > 0 {
+                        value(t("平均温度"), String(format: "%.1f °C", conditions.meanTemperature))
+                    }
+                    if conditions.meanPower > 0 {
+                        value(t("平均放电功率"), String(format: "%.1f W", conditions.meanPower))
+                    }
+                    value(t("起始电量"), "\(conditions.startPercentage)%")
+                    if let preset = conditions.preset,
+                       let name = CalibrationPreset(rawValue: preset)?.title {
+                        value(t("校准深度"), name)
+                    }
+                }
+                .padding(.top, 2)
             }
 
             if let report = record.reportFilePath, FileManager.default.fileExists(atPath: report) {

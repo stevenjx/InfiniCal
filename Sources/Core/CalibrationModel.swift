@@ -46,6 +46,11 @@ struct CalibrationSample: Identifiable {
     var displayPower: Double = 0
     var displayPowerQuality: PowerQuality = .unavailable
 
+    /// Millivolt spread between the highest and the lowest cell at this sample.
+    /// Zero when the pack exposes no per-cell voltages, so the chart can tell
+    /// "cells are balanced" apart from "this pack does not report cells".
+    var cellDeltaMillivolts: Double = 0
+
     /// Timestamps are unique inside a session, so they double as identity: a
     /// decimated rebuild of the array does not invalidate every row in the UI.
     var id: Date { timestamp }
