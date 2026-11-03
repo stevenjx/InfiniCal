@@ -1475,13 +1475,19 @@ private struct CalibrationHistorySheet: View {
 
 // MARK: - Mode picker
 
-/// Shown before a session starts. The stress mode decides how hard the pack is
-/// drained, so it is a choice the user should make deliberately rather than
-/// inherit from whatever was selected last time.
+/// Shown before a session starts. Two independent choices: how deep the cycle
+/// goes (the preset) and how hard the pack is drained (the stress mode). Both
+/// are deliberate, so neither is inherited silently from the last run.
 struct CalibrationModeSheet: View {
     @EnvironmentObject private var state: AppState
     @Environment(\.dismiss) private var dismiss
     private var theme: Theme { Theme.current }
+
+    @State private var preset = CalibrationEngine.shared.preset
+    @State private var stress = CalibrationEngine.shared.stressMode
+    /// A deep cycle is the only one that takes the pack close to empty, so it
+    /// takes a second confirmation instead of one tap.
+    @State private var confirmingDeep = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -1489,56 +1495,109 @@ struct CalibrationModeSheet: View {
                 Text(t("选择校准方式"))
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(theme.textPrimary)
-                Text(t("决定放电阶段施加多大的负载。负荷越高，放电越快，温度和噪声也越高。"))
+                Text(t("深度决定测量是否完整，负载决定放电快慢。深度越深，耗时和损耗越大。"))
                     .font(.system(size: 11))
                     .foregroundColor(theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            ForEach(DischargeStressMode.allCases) { mode in
+            ForEach(CalibrationPreset.allCases) { item in
                 Button {
-                    state.startCalibration(mode: mode)
-                    dismiss()
+                    preset = item
+                    confirmingDeep = false
                 } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: symbol(mode))
-                            .font(.system(size: 12, weight: .medium))
-                            .frame(width: 20)
-                            .foregroundColor(theme.accent)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(mode.title)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(theme.textPrimary)
-                            Text(mode.detail)
-                                .font(.system(size: 10))
-                                .foregroundColor(theme.textTertiary)
-                        }
-                        Spacer(minLength: 6)
-                        if CalibrationEngine.shared.stressMode == mode {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundColor(theme.accent)
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 9)
-                    .background(RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                    .fill(theme.innerControl))
+                    presetRow(item)
                 }
                 .buttonStyle(.plain)
             }
 
-            HStack {
+            Divider().background(theme.divider)
+
+            HStack(spacing: 7) {
+                Text(t("放电负载"))
+                    .font(.system(size: 11))
+                    .foregroundColor(theme.textSecondary)
+                ForEach(DischargeStressMode.allCases) { mode in
+                    ChipButton(title: mode.title, symbol: symbol(mode),
+                               selected: stress == mode) { stress = mode }
+                }
+                Spacer(minLength: 0)
+            }
+
+            if preset.requiresExplicitUserAction {
+                Text(t("深度校准会把电量放到约 10%，电池将在接近放空的状态下工作。非必要不建议频繁执行。"))
+                    .font(.system(size: 10))
+                    .foregroundColor(theme.chartOrange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(spacing: 10) {
                 Spacer(minLength: 0)
                 Button(t("取消")) { dismiss() }
                     .buttonStyle(.plain)
                     .font(.system(size: 12))
                     .foregroundColor(theme.textSecondary)
+                Button(confirmingDeep ? t("确认开始深度校准") : t("开始校准")) {
+                    guard !(preset.requiresExplicitUserAction && !confirmingDeep) else {
+                        confirmingDeep = true
+                        return
+                    }
+                    state.startCalibration(preset: preset, mode: stress)
+                    dismiss()
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(confirmingDeep ? theme.chartOrange : theme.accent)
             }
         }
         .padding(20)
-        .frame(width: 400)
+        .frame(width: 430)
         .background(theme.windowBackground)
+    }
+
+    private func presetRow(_ item: CalibrationPreset) -> some View {
+        let selected = preset == item
+        return HStack(spacing: 10) {
+            Image(systemName: symbol(item))
+                .font(.system(size: 12, weight: .medium))
+                .frame(width: 20)
+                .foregroundColor(selected ? theme.accent : theme.textTertiary)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(item.title)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(theme.textPrimary)
+                    Text(item.estimatedHours)
+                        .font(.system(size: 10))
+                        .foregroundColor(theme.textTertiary)
+                }
+                Text(item.detail)
+                    .font(.system(size: 10))
+                    .foregroundColor(theme.textTertiary)
+                Text(item.risk)
+                    .font(.system(size: 10))
+                    .foregroundColor(item.capsQualityAtLow || item.requiresExplicitUserAction
+                                     ? theme.chartOrange : theme.textTertiary)
+            }
+            Spacer(minLength: 6)
+            if selected {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(theme.accent)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(selected ? theme.selectedSidebar : theme.innerControl))
+    }
+
+    private func symbol(_ item: CalibrationPreset) -> String {
+        switch item {
+        case .quickCheck: return "bolt.badge.clock"
+        case .standard: return "arrow.triangle.2.circlepath"
+        case .deep: return "arrow.down.to.line"
+        }
     }
 
     private func symbol(_ mode: DischargeStressMode) -> String {

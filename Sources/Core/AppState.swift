@@ -1055,12 +1055,28 @@ final class AppState: ObservableObject {
         }
     }
 
-    func startCalibration(mode: DischargeStressMode) {
+    /// User path: the preset decides how deep the cycle goes and the stress mode
+    /// how hard the load is. Both are explicit choices, never inherited silently.
+    func startCalibration(preset: CalibrationPreset, mode: DischargeStressMode) {
+        calibrationEngine.preset = preset
         calibrationEngine.stressMode = mode
-        startCalibration()
+        calibrationEngine.dischargeTarget = preset.dischargeTarget
+        beginCalibration()
     }
 
+    /// Scheduled / automatic entry point. A deep cycle takes the pack close to
+    /// empty, so automation never runs one: it is downgraded to standard and the
+    /// downgrade is logged instead of happening invisibly.
     func startCalibration() {
+        if calibrationEngine.preset.requiresExplicitUserAction {
+            calibrationEngine.preset = .standard
+            calibrationEngine.dischargeTarget = CalibrationPreset.standard.dischargeTarget
+            log(t("校准"), t("深度校准不会自动执行，已按标准校准开始"))
+        }
+        beginCalibration()
+    }
+
+    private func beginCalibration() {
         guard !updatePreparationActive else { return }
         guard !calibrationEngine.isRunning else { return }
         // Started first: the engine refuses when the system is holding the

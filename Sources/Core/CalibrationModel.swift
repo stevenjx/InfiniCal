@@ -23,6 +23,8 @@ struct CalibrationCheckpoint: Codable, Equatable {
     var adapterControl: String?
     var chargeControl: String
     var reason: String
+    /// nil for journals written before calibration presets existed.
+    var preset: String? = nil
 }
 
 /// One 1 Hz telemetry sample taken during a calibration session.
@@ -61,7 +63,8 @@ struct CalibrationQuality: Codable, Equatable {
 
     static func evaluate(phases: Set<String>, negativeSamples: Int, positiveSamples: Int,
                          dischargeAh: Double, rechargeAh: Double, span: Int,
-                         issues: Set<String>, backend: String, completed: Bool) -> Self {
+                         issues: Set<String>, backend: String, completed: Bool,
+                         presetCapped: Bool = false) -> Self {
         let required: Set<String> = ["chargingToFull", "discharging", "rechargingToFull", "holdingAtFull", "dischargingToBuffer"]
         var reasons = issues
         if !completed || !required.isSubset(of: phases) { reasons.insert("阶段未完整完成") }
@@ -70,10 +73,14 @@ struct CalibrationQuality: Codable, Equatable {
             reasons.insert("缺少有效充放电积分")
         }
         if span < 50 { reasons.insert("测量电量跨度不足 50%") }
+        // A quick-check run measures a smaller slice on purpose; say why the
+        // grade is capped rather than implying the run went wrong.
+        if presetCapped { reasons.insert("快速检查模式，未做完整深度放电") }
         let invalid = !completed || !required.isSubset(of: phases)
             || negativeSamples < 30 || positiveSamples < 30
             || !dischargeAh.isFinite || !rechargeAh.isFinite || dischargeAh <= 0 || rechargeAh <= 0
-        let grade: Grade = invalid ? .invalid : (span < 50 || issues.contains("采样中断") ? .low : (reasons.isEmpty ? .high : .medium))
+        let grade: Grade = invalid ? .invalid
+            : (presetCapped || span < 50 || issues.contains("采样中断") ? .low : (reasons.isEmpty ? .high : .medium))
         return Self(grade: grade, reasons: reasons.sorted(), completedPhases: phases.sorted(),
                     negativeSamples: negativeSamples, positiveSamples: positiveSamples, backend: backend)
     }
@@ -98,6 +105,8 @@ struct CalibrationConditions: Codable, Equatable {
     let meanTemperature: Double
     let meanPower: Double
     let designCapacityMAh: Double
+    /// Calibration depth this record was produced with. nil on legacy records.
+    var preset: String? = nil
 
     func matches(_ other: Self) -> Bool {
         guard meanTemperature.isFinite, other.meanTemperature.isFinite,

@@ -118,6 +118,77 @@ enum DischargeStressMode: String, CaseIterable, Identifiable {
     }
 }
 
+/// How deep a calibration cycle goes.
+///
+/// This is deliberately a separate axis from `DischargeStressMode`: that one
+/// decides how hard the pack is drained, this one decides how far. A quick
+/// check can still be run with a loud load, and a deep run can be silent.
+///
+/// The depth is what makes the result trustworthy: capacity is extrapolated
+/// from the charge moved between two known percentages, so a shallow cycle
+/// measures a smaller slice and cannot stand in for a full-capacity run.
+enum CalibrationPreset: String, CaseIterable, Identifiable {
+    case quickCheck
+    case standard
+    case deep
+
+    var id: String { rawValue }
+
+    /// Where the discharge phase stops. This is the value the engine already
+    /// uses for `dischargeTarget`.
+    var dischargeTarget: Int {
+        switch self {
+        case .quickCheck: return 50
+        case .standard: return 20
+        case .deep: return 10
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .quickCheck: return t("快速检查")
+        case .standard: return t("标准校准")
+        case .deep: return t("深度校准")
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .quickCheck: return t("放电到约 50%，只做初步排查")
+        case .standard: return t("放电到约 20% 后复充，适合日常维护")
+        case .deep: return t("放电到约 10% 后复充，测量最完整")
+        }
+    }
+
+    /// Rough wall-clock estimate. The real duration depends on pack size and
+    /// the stress mode, so this is stated as a range rather than a promise.
+    var estimatedHours: String {
+        switch self {
+        case .quickCheck: return t("约 1–2 小时")
+        case .standard: return t("约 3–5 小时")
+        case .deep: return t("约 5–8 小时")
+        }
+    }
+
+    var risk: String {
+        switch self {
+        case .quickCheck: return t("风险最低，但结果只作参考")
+        case .standard: return t("需要完整一次充放电循环")
+        case .deep: return t("接近放空，损耗与发热最大，非必要不建议频繁执行")
+        }
+    }
+
+    /// A shallow cycle cannot describe the whole pack, so its result is never
+    /// allowed to reach the medium/high grades that feed the health average.
+    var capsQualityAtLow: Bool { self == .quickCheck }
+
+    /// A deep cycle is the only one that takes the pack close to empty, so it
+    /// must never start without the user saying so — schedules and catch-up
+    /// runs downgrade it. Resuming an interrupted session keeps its own depth,
+    /// because the user already chose it.
+    var requiresExplicitUserAction: Bool { self == .deep }
+}
+
 // MARK: - Engine
 
 final class CalibrationEngine: ObservableObject {
@@ -257,6 +328,11 @@ final class CalibrationEngine: ObservableObject {
     @Published var dischargeTarget: Int = 10 {
         didSet { UserDefaults.standard.set(dischargeTarget, forKey: Keys.dischargeTarget) }
     }
+    /// Calibration depth. Kept separate from `stressMode`: the user picks how
+    /// deep to cycle, and independently how hard to load the pack.
+    @Published var preset: CalibrationPreset = .standard {
+        didSet { UserDefaults.standard.set(preset.rawValue, forKey: Keys.preset) }
+    }
     @Published var highTemperature: Double = 45 {
         didSet { UserDefaults.standard.set(highTemperature, forKey: Keys.highTemperature) }
     }
@@ -274,6 +350,7 @@ final class CalibrationEngine: ObservableObject {
 
     private enum Keys {
         static let stressMode = "calibrationStressMode"
+        static let preset = "calibrationPreset"
         static let dischargeTarget = "calibrationDischargeTarget"
         static let highTemperature = "calibrationHighTemperature"
         static let resumeTemperature = "calibrationResumeTemperature"
@@ -322,6 +399,9 @@ final class CalibrationEngine: ObservableObject {
     /// mid-session, and the report must not describe a run by the setting that
     /// happened to be selected when it finished.
     private var sessionStressMode: DischargeStressMode = .balanced
+    /// The preset this session actually started with. The report must describe
+    /// the run by the depth it ran at, not by a setting changed afterwards.
+    private var sessionPreset: CalibrationPreset = .standard
 
     /// Consecutive ticks the pack has been held below full while on AC. macOS
     /// gives no readable flag for 「优化电池充电」 or 「充电上限」 — verified by
@@ -368,8 +448,14 @@ final class CalibrationEngine: ObservableObject {
            let mode = DischargeStressMode(rawValue: raw) {
             stressMode = mode
         }
+        if let raw = defaults.string(forKey: Keys.preset),
+           let stored = CalibrationPreset(rawValue: raw) {
+            preset = stored
+        }
         let target = defaults.integer(forKey: Keys.dischargeTarget)
-        dischargeTarget = target > 0 ? target : 10
+        // On a fresh install follow the stored preset instead of a hard-coded
+        // default, so the dialog and the control bar never disagree.
+        dischargeTarget = target > 0 ? target : preset.dischargeTarget
         let high = defaults.double(forKey: Keys.highTemperature)
         highTemperature = high > 0 ? high : 45
         let resume = defaults.double(forKey: Keys.resumeTemperature)
@@ -448,7 +534,8 @@ final class CalibrationEngine: ObservableObject {
             stressMode: sessionStressMode.rawValue,
             adapterControl: ChargeController.shared.activeAdapterKey,
             chargeControl: ChargeController.shared.capabilities.strategy.rawValue,
-            reason: reason)
+            reason: reason,
+            preset: sessionPreset.rawValue)
         do {
             defaults.set(try JSONEncoder().encode(checkpoint), forKey: checkpointKey)
             lastCheckpointAt = now
@@ -514,6 +601,9 @@ final class CalibrationEngine: ObservableObject {
         pendingRecovery = nil
         dischargeTarget = checkpoint.targetPercentage
         stressMode = DischargeStressMode(rawValue: checkpoint.stressMode) ?? .silent
+        // Journals written before presets existed fall back to standard; the
+        // stored depth is already carried by targetPercentage either way.
+        preset = checkpoint.preset.flatMap(CalibrationPreset.init(rawValue:)) ?? .standard
         if start() {
             sessionRestoreLimit = checkpoint.restoreLimit
             saveCheckpoint(reason: "restartedAfterInterruption")
@@ -561,6 +651,7 @@ final class CalibrationEngine: ObservableObject {
         sessionStart = Date()
         sessionRestoreLimit = max(1, min(100, defaults.object(forKey: "chargeVal") as? Int ?? storageLevel))
         sessionStressMode = stressMode
+        sessionPreset = preset
         saveCheckpoint(reason: "preparing")
         guard recoveryError == nil else { return false }
         // Fresh key table: the log below is what identifies this machine's
@@ -631,6 +722,7 @@ final class CalibrationEngine: ObservableObject {
         processTally.removeAll()
         processSamples = 0
         sessionStressMode = stressMode
+        sessionPreset = preset
 
         enableSleepBlock()
         // The run heats the SoC on purpose; the fans follow 风扇控制's curve for
@@ -1148,7 +1240,7 @@ final class CalibrationEngine: ObservableObject {
             positiveSamples: positiveSamples, dischargeAh: dischargeEnergyAh,
             rechargeAh: rechargeEnergyAh, span: dischargeStartPercentage - dischargeTarget,
             issues: issues, backend: ChargeController.shared.capabilities.strategy.rawValue,
-            completed: completed)
+            completed: completed, presetCapped: sessionPreset.capsQualityAtLow)
     }
 
     private func finish() {
@@ -1195,7 +1287,8 @@ final class CalibrationEngine: ObservableObject {
                                            stressMode: sessionStressMode.rawValue, target: dischargeTarget,
                                            startPercentage: dischargeStartPercentage,
                                            meanTemperature: dischargeCurve.isEmpty ? 0 : dischargeCurve.reduce(0) { $0 + $1.temperature } / Double(dischargeCurve.count),
-                                           meanPower: dischargeAveragePower, designCapacityMAh: designCapacityMAh))
+                                           meanPower: dischargeAveragePower, designCapacityMAh: designCapacityMAh,
+                                           preset: sessionPreset.rawValue))
 
         lastCompletedRecord = record
         if autoExport {

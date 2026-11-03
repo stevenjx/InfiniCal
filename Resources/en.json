@@ -739,5 +739,22 @@
  "安装前会自动恢复风扇与充电控制并取消睡眠断言；校准进行中则拒绝更新。": "Fans and charge control are restored, and sleep assertions released, before installing. Updates are refused while a calibration runs.",
  "当前已是最新稳定版本（{p} 检查）。": "Up to date (checked {p}).",
  "发现新版本 {p}。": "New version {p} found.",
- "立即更新": "Update now"
+ "立即更新": "Update now",
+ "快速检查": "Quick check",
+ "标准校准": "Standard calibration",
+ "深度校准": "Deep calibration",
+ "放电到约 50%，只做初步排查": "Discharge to about 50% — a first look only",
+ "放电到约 20% 后复充，适合日常维护": "Discharge to about 20% then recharge — routine maintenance",
+ "放电到约 10% 后复充，测量最完整": "Discharge to about 10% then recharge — the most complete measurement",
+ "约 1–2 小时": "about 1–2 h",
+ "约 3–5 小时": "about 3–5 h",
+ "约 5–8 小时": "about 5–8 h",
+ "风险最低，但结果只作参考": "Lowest risk, but the result is indicative only",
+ "需要完整一次充放电循环": "Needs one full charge and discharge cycle",
+ "接近放空，损耗与发热最大，非必要不建议频繁执行": "Runs close to empty: the most wear and heat, so avoid repeating it unnecessarily",
+ "深度决定测量是否完整，负载决定放电快慢。深度越深，耗时和损耗越大。": "Depth decides how complete the measurement is; load decides how fast it drains. Deeper runs take longer and cost more wear.",
+ "深度校准会把电量放到约 10%，电池将在接近放空的状态下工作。非必要不建议频繁执行。": "Deep calibration drains to about 10%, so the pack works close to empty. Avoid running it often unless you need a full measurement.",
+ "确认开始深度校准": "Confirm deep calibration",
+ "深度校准不会自动执行，已按标准校准开始": "Deep calibration never starts automatically — started a standard calibration instead",
+ "快速检查模式，未做完整深度放电": "Quick check mode: no full-depth discharge was performed"
 }

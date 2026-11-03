@@ -254,6 +254,8 @@ check(updateHelper.refreshes == updateCharge.scans, "每次尝试都刷新安装
 print("PASS update retry/cancellation transitions and fan persistence (no hardware)")
 '''
     swift += (ROOT / "Sources/Core/CalibrationMath.swift").read_text()
+    engine = (ROOT / "Sources/Core/CalibrationEngine.swift").read_text()
+    swift += engine[engine.index("enum CalibrationPreset:"):engine.index("\n// MARK: - Engine")]
     history = (ROOT / "Sources/Core/HistoryStore.swift").read_text()
     alerts = (ROOT / "Sources/Core/AnomalyAlerts.swift").read_text()
     swift += alerts[alerts.index("struct AnomalyRule {"):alerts.index("struct AnomalyEvidence:")]
@@ -400,6 +402,37 @@ check(quality(false, 80, []).grade == .invalid, "incomplete cycle")
 check(quality(true, 80, [], 0).grade == .invalid, "no current")
 check(quality(true, 20, []).grade == .low, "narrow span")
 check(!quality(true, 20, []).eligibleForAggregation, "low grade isolation")
+// P2-02 calibration presets: depth is a separate axis from load intensity.
+check(CalibrationPreset.quickCheck.dischargeTarget == 50, "quick check stops at 50%")
+check(CalibrationPreset.standard.dischargeTarget == 20, "standard stops at 20%")
+check(CalibrationPreset.deep.dischargeTarget == 10, "deep stops at 10%")
+check(CalibrationPreset.quickCheck.capsQualityAtLow, "quick check caps quality")
+check(!CalibrationPreset.standard.capsQualityAtLow && !CalibrationPreset.deep.capsQualityAtLow,
+      "only the quick check is capped")
+check(CalibrationPreset.deep.requiresExplicitUserAction, "deep never starts implicitly")
+check(!CalibrationPreset.standard.requiresExplicitUserAction
+      && !CalibrationPreset.quickCheck.requiresExplicitUserAction,
+      "standard and quick may start from automation")
+let capped = CalibrationQuality.evaluate(phases: phases, negativeSamples: 100, positiveSamples: 100,
+    dischargeAh: 3, rechargeAh: 3.1, span: 80, issues: [], backend: "mock",
+    completed: true, presetCapped: true)
+check(capped.grade == .low, "quick check cannot grade above low")
+check(capped.reasons.contains("快速检查模式，未做完整深度放电"), "quick check explains the cap")
+check(!capped.eligibleForAggregation, "quick check stays out of the health average")
+let uncapped = CalibrationQuality.evaluate(phases: phases, negativeSamples: 100, positiveSamples: 100,
+    dischargeAh: 3, rechargeAh: 3.1, span: 80, issues: [], backend: "mock", completed: true)
+check(uncapped.grade == .high, "full depth is unaffected by the cap")
+let cpPreset = CalibrationCheckpoint(sessionID: UUID(), phase: "discharging", startedAt: Date(),
+    lastSampleAt: Date(), targetPercentage: 20, restoreLimit: 80, stressMode: "balanced",
+    adapterControl: nil, chargeControl: "bclm", reason: "test", preset: "quickCheck")
+let cpBytes = try JSONEncoder().encode(cpPreset)
+check(try JSONDecoder().decode(CalibrationCheckpoint.self, from: cpBytes).preset == "quickCheck",
+      "preset survives the recovery journal")
+let cpLegacy = CalibrationCheckpoint(sessionID: UUID(), phase: "idle", startedAt: Date(),
+    lastSampleAt: Date(), targetPercentage: 20, restoreLimit: 80, stressMode: "silent",
+    adapterControl: nil, chargeControl: "bclm", reason: "legacy")
+check(try JSONDecoder().decode(CalibrationCheckpoint.self,
+      from: try JSONEncoder().encode(cpLegacy)).preset == nil, "legacy journal without preset still decodes")
 check(quality(true, 80, ["发生过热保护"]).grade == .medium, "thermal event")
 let legacyData = try JSONEncoder().encode(CalibrationRecord())
 let legacy = try JSONDecoder().decode(CalibrationRecord.self, from: legacyData)
