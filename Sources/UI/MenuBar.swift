@@ -247,7 +247,7 @@ struct MenuBarPanel: View {
         .sheet(isPresented: $showUpdates.value) { UpdateSheet() }
         .onAppear {
             fans.beginMonitoring()
-            Task { @MainActor in UpdateChecker.shared.check(manual: false) }
+            Task { @MainActor in SparkleUpdater.shared.checkInBackground() }
         }
         .onDisappear { fans.endMonitoring() }
     }

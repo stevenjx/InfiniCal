@@ -7,7 +7,7 @@ import SwiftUI
 
 struct RootView: View {
     @EnvironmentObject private var state: AppState
-    @ObservedObject private var updater = UpdateChecker.shared
+    @ObservedObject private var updater = SparkleUpdater.shared
     @StateObject private var showingUpdates = UIFlag()
     private var theme: Theme { Theme.current }
 
@@ -71,21 +71,16 @@ struct RootView: View {
 
             Spacer(minLength: 0)
 
-            if let release = updater.release,
-               updater.status == .available || updater.status == .noPackage {
+            if let version = updater.availableVersion {
                 VStack(alignment: .leading, spacing: 6) {
                     Button { showingUpdates.value = true } label: {
-                        Label(tf("发现新版本 {p}", release.tag), systemImage: "arrow.down.circle.fill")
+                        Label(tf("发现新版本 {p}", version), systemImage: "arrow.down.circle.fill")
                             .font(.system(size: 11, weight: .medium))
                     }
                     .buttonStyle(.plain).foregroundColor(theme.accent)
                     .sheet(isPresented: $showingUpdates.value) { UpdateSheet() }
-                    HStack(spacing: 10) {
-                        if let url = release.downloadURL {
-                            Button(t("下载更新")) { NSWorkspace.shared.open(url) }
-                        }
-                        Button(t("发布页")) { NSWorkspace.shared.open(release.pageURL) }
-                    }.buttonStyle(.plain).font(.system(size: 10)).foregroundColor(theme.textSecondary)
+                    Button(t("立即更新")) { updater.checkForUpdates() }
+                        .buttonStyle(.plain).font(.system(size: 10)).foregroundColor(theme.textSecondary)
                 }
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)

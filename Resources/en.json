@@ -728,5 +728,16 @@
  "放电请求已发送，等待检测到实际电池放电电流": "Discharge requested; waiting for verified battery discharge current",
  "放电指令已下发，但 60 秒内仍未测到放电电流。放电指令保持生效，也可以拔掉电源适配器让它立即开始。": "The discharge command was sent but no discharge current appeared within 60 s. It stays armed; unplugging the adapter makes it start immediately.",
  "接电状态下 60 秒仍未测到放电电流（已尝试：{p}）。放电指令保持生效，若拔掉电源适配器会立即继续。": "No discharge current within 60 s while on AC (tried: {p}). The command stays armed and resumes immediately if the adapter is unplugged.",
- "电池温度 %.1f°C 超过上限 %d°C；此机型最低只能把充电上限设到 %d%%，无法立即暂停充电": "Battery at %.1f°C is above the %d°C limit; this Mac's charge limit cannot go below %d%%, so charging cannot be paused"
+ "电池温度 %.1f°C 超过上限 %d°C；此机型最低只能把充电上限设到 %d%%，无法立即暂停充电": "Battery at %.1f°C is above the %d°C limit; this Mac's charge limit cannot go below %d%%, so charging cannot be paused",
+ "校准或恢复处理中，请先结束校准并完成安全清理后再更新。": "A calibration or recovery is in progress. Finish the calibration and complete the safe cleanup before updating.",
+ "自动检查更新": "Check for updates automatically",
+ "Sparkle 会按系统节奏在后台查询 appcast；发现新版本时提示你确认后才会下载。": "Sparkle checks the appcast in the background on its own schedule. It only downloads after you confirm.",
+ "启用后，Sparkle 会按系统节奏在后台查询 appcast；发现新版本时提示你确认后才会下载。": "When on, Sparkle checks the appcast in the background on its own schedule. It only downloads after you confirm.",
+ "下载与安装由 Sparkle 完成：它会校验更新包的 EdDSA 签名，替换应用后自动重启。": "Sparkle handles download and install: it verifies the update's EdDSA signature, replaces the app, then relaunches.",
+ "上次检查：{p}": "Last checked: {p}",
+ "校准正在运行：此时不会下载或安装更新，请先结束校准。": "A calibration is running: no update will be downloaded or installed. Finish the calibration first.",
+ "安装前会自动恢复风扇与充电控制并取消睡眠断言；校准进行中则拒绝更新。": "Fans and charge control are restored, and sleep assertions released, before installing. Updates are refused while a calibration runs.",
+ "当前已是最新稳定版本（{p} 检查）。": "Up to date (checked {p}).",
+ "发现新版本 {p}。": "New version {p} found.",
+ "立即更新": "Update now"
 }

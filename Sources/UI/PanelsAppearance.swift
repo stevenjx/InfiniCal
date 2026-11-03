@@ -8,7 +8,7 @@ struct OtherView: View {
     @EnvironmentObject private var state: AppState
     @StateObject private var showingDiagnostics = UIFlag()
     @StateObject private var showingUpdates = UIFlag()
-    @ObservedObject private var updater = UpdateChecker.shared
+    @ObservedObject private var updater = SparkleUpdater.shared
     private var theme: Theme { Theme.current }
 
     var body: some View {
@@ -18,7 +18,7 @@ struct OtherView: View {
                     Button(t("硬件兼容性诊断")) { showingDiagnostics.value = true }
                         .sheet(isPresented: $showingDiagnostics.value) { HardwareDiagnosticsView() }
                     Button(t("检查更新")) {
-                        updater.check()
+                        updater.checkForUpdates()
                         showingUpdates.value = true
                     }
                     .sheet(isPresented: $showingUpdates.value) { UpdateSheet() }
@@ -84,9 +84,9 @@ struct OtherView: View {
                                   isOn: $state.launchAtLogin)
                         Divider().background(theme.divider)
                         ToggleRow(symbol: "arrow.triangle.2.circlepath",
-                                  title: t("自动检查更新（每 24 小时）"),
-                                  help: t("默认关闭；启用后仅向 GitHub 查询版本，不会自动下载或安装。"),
-                                  isOn: $updater.autoCheck)
+                                  title: t("自动检查更新"),
+                                  help: t("启用后，Sparkle 会按系统节奏在后台查询 appcast；发现新版本时提示你确认后才会下载。"),
+                                  isOn: $updater.automaticallyChecks)
                     }
                 }
 

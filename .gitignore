@@ -27,6 +27,8 @@ Fix/
 
 # Release artifacts
 dist/
+appcast.xml
+old_updates/
 
 # SMC snapshots taken while investigating discharge (contain device serial numbers)
 logs/

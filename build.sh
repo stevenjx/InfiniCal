@@ -22,7 +22,9 @@ python3 "$ROOT/Tools/quality_gate.py" test
 
 # Only clean our own products; keep Xcode DerivedData (build/xcode) intact.
 rm -rf "$APP" "$BUILD/obj"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Library/Helper" "$BUILD/obj"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Library/Helper" "$APP/Contents/Frameworks" "$BUILD/obj"
+
+SPARKLE="$ROOT/Vendor/Sparkle.framework"
 
 SOURCES=(
   "$ROOT/Sources/Core/SMC.swift"
@@ -42,7 +44,7 @@ SOURCES=(
   "$ROOT/Sources/Core/ProcessSampler.swift"
   "$ROOT/Sources/Core/HIDThermal.swift"
   "$ROOT/Sources/Core/HistoryStore.swift"
-  "$ROOT/Sources/Core/UpdateChecker.swift"
+  "$ROOT/Sources/Core/SparkleUpdater.swift"
   "$ROOT/Sources/UI/UpdatePanel.swift"
   "$ROOT/Sources/Core/Notifier.swift"
   "$ROOT/Sources/Core/AnomalyAlerts.swift"
@@ -78,7 +80,10 @@ build_arch() {
   local arch="$1"
   echo "==> building $arch"
   "$SWIFTC" -O -swift-version 5 -sdk "$SDK" -target "$arch-apple-macos$MIN" \
-    -module-name InfiniCal -o "$BUILD/obj/InfiniCal-$arch" "${SOURCES[@]}"
+    -module-name InfiniCal -o "$BUILD/obj/InfiniCal-$arch" \
+    -F "$ROOT/Vendor" -framework Sparkle \
+    -Xlinker -rpath -Xlinker "@executable_path/../Frameworks" \
+    "${SOURCES[@]}"
   "$SWIFTC" -O -swift-version 5 -sdk "$SDK" -target "$arch-apple-macos$MIN" \
     -module-name InfiniCalHelper -o "$BUILD/obj/helper-$arch" "${HELPER_SOURCES[@]}"
 }
@@ -95,11 +100,22 @@ if [ -f "$ROOT/Resources/AppIcon.icns" ]; then
 fi
 cp "$ROOT/Resources/en.json" "$APP/Contents/Resources/en.json"
 
+# Sparkle ships as an already-signed framework; copy it verbatim and keep its
+# XPC services intact. Re-signing with --deep would break Installer.xpc.
+ditto "$SPARKLE" "$APP/Contents/Frameworks/Sparkle.framework"
+
 chmod +x "$APP/Contents/MacOS/InfiniCal" "$APP/Contents/Library/Helper/com.infinitycomputer.infinical.helper"
 
-# Ad-hoc signature so the app can run locally (replace with a Developer ID for distribution).
+# Ad-hoc signature so the app can run locally (replace with a Developer ID for
+# distribution). Sign inside-out and never with --deep: Sparkle's Installer and
+# Downloader XPC services carry their own signature and entitlements.
 codesign --force --sign - --timestamp=none "$APP/Contents/Library/Helper/com.infinitycomputer.infinical.helper"
-codesign --force --deep --sign - "$APP"
+codesign --force --sign - --timestamp=none "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Installer.xpc"
+codesign --force --sign - --timestamp=none "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Downloader.xpc"
+codesign --force --sign - --timestamp=none "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/Autoupdate"
+codesign --force --sign - --timestamp=none "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/Updater.app"
+codesign --force --sign - --timestamp=none "$APP/Contents/Frameworks/Sparkle.framework"
+codesign --force --sign - --timestamp=none "$APP"
 python3 "$ROOT/Tools/quality_gate.py" artifact
 
 echo "==> built $APP"

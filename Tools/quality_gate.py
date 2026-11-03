@@ -56,6 +56,19 @@ def source_gate():
     for key, value in translations.items():
         assert isinstance(value, str), "Non-string translation"
         assert key.count("{p}") == value.count("{p}"), "Placeholder drift: " + key
+    # Sparkle wiring: the feed must be HTTPS, the public key must be a 32-byte
+    # base64 Ed25519 key, and the framework must be vendored for both builders.
+    feed = info["SUFeedURL"]
+    assert feed.startswith("https://"), "SUFeedURL must use HTTPS"
+    assert "appcast" in feed, "SUFeedURL should point at an appcast"
+    key = info["SUPublicEDKey"]
+    assert info.get("SUEnableAutomaticChecks") is False, "Auto checks must default off"
+    assert info.get("SUAllowsAutomaticUpdates") is False, "Silent installs must stay off"
+    import base64
+    assert len(base64.b64decode(key)) == 32, "SUPublicEDKey must be a 32-byte Ed25519 key"
+    assert (ROOT / "Vendor/Sparkle.framework").is_dir(), "Sparkle.framework not vendored"
+    for builder in ("build.sh", "Tools/generate_xcodeproj.py"):
+        assert "Sparkle" in (ROOT / builder).read_text(), builder + " does not link Sparkle"
     run("git", "-C", ROOT, "diff", "--check")
     print("PASS source/version/localization gate", flush=True)
 
@@ -242,8 +255,6 @@ print("PASS update retry/cancellation transitions and fan persistence (no hardwa
 '''
     swift += (ROOT / "Sources/Core/CalibrationMath.swift").read_text()
     history = (ROOT / "Sources/Core/HistoryStore.swift").read_text()
-    updater = (ROOT / "Sources/Core/UpdateChecker.swift").read_text()
-    swift += updater[updater.index("struct UpdateVersion:"):updater.index("private final class UpdateRedirectPolicy")]
     alerts = (ROOT / "Sources/Core/AnomalyAlerts.swift").read_text()
     swift += alerts[alerts.index("struct AnomalyRule {"):alerts.index("struct AnomalyEvidence:")]
     swift += history[history.index("struct DailyStat:"):history.index("final class DailyHistory:")]
@@ -430,10 +441,6 @@ for current in [0.5, 0.0, -0.01, Double.nan, Double.infinity] {
 check(ControlSafety.loadAllowed(running: true, dischargePhase: true, current: -1, failed: false, waiting: false, hot: false), "confirmed current")
 check(!ControlSafety.loadAllowed(running: true, dischargePhase: true, current: -1, failed: true, waiting: false, hot: false), "failure removes load permission")
 check(!ControlSafety.loadAllowed(running: false, dischargePhase: true, current: -1, failed: false, waiting: false, hot: false), "stopped session")
-check(UpdateVersion("1.0.12")! > UpdateVersion("1.0.9")!, "numeric version comparison")
-check(UpdateVersion("v1.2.0")! == UpdateVersion("1.2")!, "trailing zeros")
-check(UpdateVersion("1.2-beta") == nil && UpdateVersion("1..2") == nil, "reject malformed versions")
-check(UpdateVersion("1.999999999999999999999")! > UpdateVersion("1.9")!, "no integer overflow")
 var restoredFans: [Int] = []
 let partialFanFailure = FanRecovery.restore(count: 2) { index in
     restoredFans.append(index)
@@ -484,6 +491,18 @@ def artifact_gate(dmg):
         assert {"arm64", "x86_64"}.issubset(arches), "Missing architecture: " + str(binary)
         run("codesign", "--verify", "--strict", binary)
     run("codesign", "--verify", "--deep", "--strict", app)
+    # Sparkle must be embedded where the rpath expects it, and its XPC services
+    # must survive signing — codesign --deep on the bundle breaks them.
+    sparkle = app / "Contents/Frameworks/Sparkle.framework"
+    assert sparkle.is_dir(), "Sparkle.framework not embedded in the app"
+    for xpc in ("Installer.xpc", "Downloader.xpc"):
+        assert (sparkle / "Versions/B/XPCServices" / xpc).is_dir(), "missing XPC service: " + xpc
+    rpaths = subprocess.check_output(
+        ["otool", "-l", str(app / "Contents/MacOS/InfiniCal")], text=True)
+    assert "@executable_path/../Frameworks" in rpaths, "missing framework rpath"
+    linked = subprocess.check_output(
+        ["otool", "-L", str(app / "Contents/MacOS/InfiniCal")], text=True)
+    assert "@rpath/Sparkle.framework" in linked, "app does not link Sparkle"
     assert (app / "Contents/Resources/en.json").read_bytes() == (ROOT / "Resources/en.json").read_bytes(), "Stale localization"
     if dmg:
         image = Path(dmg).resolve()

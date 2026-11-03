@@ -45,7 +45,7 @@ APP_SOURCES = [
     "Sources/Core/ProcessSampler.swift",
     "Sources/Core/HIDThermal.swift",
     "Sources/Core/HistoryStore.swift",
-    "Sources/Core/UpdateChecker.swift",
+    "Sources/Core/SparkleUpdater.swift",
     "Sources/UI/UpdatePanel.swift",
     "Sources/Core/Notifier.swift",
     "Sources/Core/AnomalyAlerts.swift",
@@ -79,8 +79,9 @@ HELPER_SOURCES = [
 
 RESOURCES = ["Resources/AppIcon.icns", "Resources/en.json"]
 PLIST = "Resources/Info.plist"
+SPARKLE_FRAMEWORK = "Vendor/Sparkle.framework"
 
-for path in APP_SOURCES + HELPER_SOURCES + RESOURCES + [PLIST]:
+for path in APP_SOURCES + HELPER_SOURCES + RESOURCES + [PLIST, SPARKLE_FRAMEWORK]:
     assert os.path.exists(os.path.join(ROOT, path)), path
 
 APP_PRODUCT = uid("product-app")
@@ -101,6 +102,7 @@ APP_SOURCES_PHASE = uid("phase-app-sources")
 APP_RESOURCES_PHASE = uid("phase-app-resources")
 APP_FRAMEWORKS_PHASE = uid("phase-app-frameworks")
 APP_COPY_PHASE = uid("phase-app-copy")
+APP_EMBED_FRAMEWORKS_PHASE = uid("phase-app-embed-frameworks")
 HELPER_SOURCES_PHASE = uid("phase-helper-sources")
 HELPER_FRAMEWORKS_PHASE = uid("phase-helper-frameworks")
 
@@ -145,6 +147,11 @@ file_ref_lines.append(
     f'\t\t{HELPER_PRODUCT_REF} /* {HELPER_PRODUCT} */ = {{isa = PBXFileReference; explicitFileType = '
     f'"compiled.mach-o.executable"; includeInIndex = 0; path = {HELPER_PRODUCT}; sourceTree = BUILT_PRODUCTS_DIR; }};'
 )
+SPARKLE_REF = uid("file-" + SPARKLE_FRAMEWORK)
+file_ref_lines.append(
+    f'\t\t{SPARKLE_REF} /* Sparkle.framework */ = {{isa = PBXFileReference; lastKnownFileType = wrapper.framework; '
+    f'name = Sparkle.framework; path = {SPARKLE_FRAMEWORK}; sourceTree = "<group>"; }};'
+)
 
 # ---------------------------------------------------------------- build files
 
@@ -175,6 +182,16 @@ build_file_lines.append(
     f'\t\t{EMBED_BUILD_FILE} /* {HELPER_PRODUCT} in Embed Helper */ = {{isa = PBXBuildFile; '
     f'fileRef = {HELPER_PRODUCT_REF} /* {HELPER_PRODUCT} */; settings = {{ATTRIBUTES = (CodeSignOnCopy, ); }}; }};'
 )
+SPARKLE_LINK_FILE = uid("build-link-sparkle")
+build_file_lines.append(
+    f'\t\t{SPARKLE_LINK_FILE} /* Sparkle.framework in Frameworks */ = {{isa = PBXBuildFile; '
+    f'fileRef = {SPARKLE_REF} /* Sparkle.framework */; }};'
+)
+SPARKLE_EMBED_FILE = uid("build-embed-sparkle")
+build_file_lines.append(
+    f'\t\t{SPARKLE_EMBED_FILE} /* Sparkle.framework in Embed Frameworks */ = {{isa = PBXBuildFile; '
+    f'fileRef = {SPARKLE_REF} /* Sparkle.framework */; settings = {{ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }}; }};'
+)
 
 # ---------------------------------------------------------------- groups
 
@@ -202,6 +219,7 @@ group_lines = [
 \t\t\t\t{SOURCES_GROUP} /* Sources */,
 \t\t\t\t{HELPER_GROUP} /* Helper */,
 \t\t\t\t{RESOURCES_GROUP} /* Resources */,
+\t\t\t\t{SPARKLE_REF} /* Sparkle.framework */,
 \t\t\t\t{PRODUCTS_GROUP} /* Products */,
 \t\t\t);
 \t\t\tsourceTree = "<group>";
@@ -290,6 +308,7 @@ phase_lines = [
 \t\t\tisa = PBXFrameworksBuildPhase;
 \t\t\tbuildActionMask = 2147483647;
 \t\t\tfiles = (
+\t\t\t\t{SPARKLE_LINK_FILE} /* Sparkle.framework in Frameworks */,
 \t\t\t);
 \t\t\trunOnlyForDeploymentPostprocessing = 0;
 \t\t}};''',
@@ -302,6 +321,17 @@ phase_lines = [
 \t\t\t\t{EMBED_BUILD_FILE} /* {HELPER_PRODUCT} in Embed Helper */,
 \t\t\t);
 \t\t\tname = "Embed Helper";
+\t\t\trunOnlyForDeploymentPostprocessing = 0;
+\t\t}};''',
+    f'''\t\t{APP_EMBED_FRAMEWORKS_PHASE} /* Embed Frameworks */ = {{
+\t\t\tisa = PBXCopyFilesBuildPhase;
+\t\t\tbuildActionMask = 2147483647;
+\t\t\tdstPath = "";
+\t\t\tdstSubfolderSpec = 10;
+\t\t\tfiles = (
+\t\t\t\t{SPARKLE_EMBED_FILE} /* Sparkle.framework in Embed Frameworks */,
+\t\t\t);
+\t\t\tname = "Embed Frameworks";
 \t\t\trunOnlyForDeploymentPostprocessing = 0;
 \t\t}};''',
     f'''\t\t{HELPER_SOURCES_PHASE} /* Sources */ = {{
@@ -331,6 +361,7 @@ target_lines = [
 \t\t\t\t{APP_SOURCES_PHASE} /* Sources */,
 \t\t\t\t{APP_FRAMEWORKS_PHASE} /* Frameworks */,
 \t\t\t\t{APP_RESOURCES_PHASE} /* Resources */,
+\t\t\t\t{APP_EMBED_FRAMEWORKS_PHASE} /* Embed Frameworks */,
 \t\t\t\t{APP_COPY_PHASE} /* Embed Helper */,
 \t\t\t);
 \t\t\tbuildRules = (
@@ -454,15 +485,19 @@ app_common = '''\t\t\t\tMACOSX_DEPLOYMENT_TARGET = 12.0;
 \t\t\t\t);
 \t\t\t\tASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
 \t\t\t\tCOMBINE_HIDPI_IMAGES = YES;
-\t\t\t\tCURRENT_PROJECT_VERSION = 19;
+\t\t\t\tCURRENT_PROJECT_VERSION = 20;
 \t\t\t\tENABLE_PREVIEWS = YES;
 \t\t\t\tGENERATE_INFOPLIST_FILE = NO;
 \t\t\t\tINFOPLIST_FILE = Resources/Info.plist;
+\t\t\t\tFRAMEWORK_SEARCH_PATHS = (
+\t\t\t\t\t"$(inherited)",
+\t\t\t\t\t"$(SRCROOT)/Vendor",
+\t\t\t\t);
 \t\t\t\tLD_RUNPATH_SEARCH_PATHS = (
 \t\t\t\t\t"$(inherited)",
 \t\t\t\t\t"@executable_path/../Frameworks",
 \t\t\t\t);
-\t\t\t\tMARKETING_VERSION = 1.0.14;
+\t\t\t\tMARKETING_VERSION = 1.0.15;
 \t\t\t\tPRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical;
 \t\t\t\tPRODUCT_NAME = "$(TARGET_NAME)";
 \t\t\t\tSWIFT_EMIT_LOC_STRINGS = NO;
@@ -473,9 +508,9 @@ helper_common = '''\t\t\t\tMACOSX_DEPLOYMENT_TARGET = 12.0;
 \t\t\t\t\tarm64,
 \t\t\t\t\tx86_64,
 \t\t\t\t);
-\t\t\t\tCURRENT_PROJECT_VERSION = 19;
+\t\t\t\tCURRENT_PROJECT_VERSION = 20;
 \t\t\t\tGENERATE_INFOPLIST_FILE = NO;
-\t\t\t\tMARKETING_VERSION = 1.0.14;
+\t\t\t\tMARKETING_VERSION = 1.0.15;
 \t\t\t\tPRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical.helper;
 \t\t\t\tPRODUCT_NAME = com.infinitycomputer.infinical.helper;
 \t\t\t\tSKIP_INSTALL = YES;

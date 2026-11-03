@@ -24,7 +24,7 @@
 		1A6CA566A237EA8D40ACB7CB /* ProcessSampler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E8F1A7ED04D1422CC51A0D5 /* ProcessSampler.swift */; };
 		6C348952EAA151E9342BFC11 /* HIDThermal.swift in Sources */ = {isa = PBXBuildFile; fileRef = B76742D00A659F9DB7EDC770 /* HIDThermal.swift */; };
 		85D163081A208A1E836F56DA /* HistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C509D83CBC83A13CF4407D84 /* HistoryStore.swift */; };
-		896F5B9621A9F69D848E0570 /* UpdateChecker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48BB0DFD6037E386E1B55ACD /* UpdateChecker.swift */; };
+		20E99C974B27C6F327C19D4B /* SparkleUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2148970513382B2D5E272D50 /* SparkleUpdater.swift */; };
 		CA7B2E903228E86F220A7AA1 /* UpdatePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA41B8B1FC1FEB4BCA29BF00 /* UpdatePanel.swift */; };
 		4679ED6D469B3C728D05C8BC /* Notifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82BE2237B9BA6EC865EF74E4 /* Notifier.swift */; };
 		5734B7106079282AD7CCAE0E /* AnomalyAlerts.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDC381DEFC38BD86762D8824 /* AnomalyAlerts.swift */; };
@@ -54,6 +54,8 @@
 		50FB808196ACFD226781A793 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = 9FF2190CE265D16110159B6D /* AppIcon.icns */; };
 		999C614FC925983D38F305DE /* en.json in Resources */ = {isa = PBXBuildFile; fileRef = 3025FE56B87CDBD5AB645640 /* en.json */; };
 		315834012E6134EFA36D8265 /* com.infinitycomputer.infinical.helper in Embed Helper */ = {isa = PBXBuildFile; fileRef = 0F7D67FD84CB79CE174243AB /* com.infinitycomputer.infinical.helper */; settings = {ATTRIBUTES = (CodeSignOnCopy, ); }; };
+		6F1D255E8FBE5A8EBB50863A /* Sparkle.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 245B0864D25EFEDB4E36799C /* Sparkle.framework */; };
+		EC928FC286B9194355015E88 /* Sparkle.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 245B0864D25EFEDB4E36799C /* Sparkle.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -98,7 +100,7 @@
 		1E8F1A7ED04D1422CC51A0D5 /* ProcessSampler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessSampler.swift; sourceTree = "<group>"; };
 		B76742D00A659F9DB7EDC770 /* HIDThermal.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HIDThermal.swift; sourceTree = "<group>"; };
 		C509D83CBC83A13CF4407D84 /* HistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryStore.swift; sourceTree = "<group>"; };
-		48BB0DFD6037E386E1B55ACD /* UpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateChecker.swift; sourceTree = "<group>"; };
+		2148970513382B2D5E272D50 /* SparkleUpdater.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparkleUpdater.swift; sourceTree = "<group>"; };
 		EA41B8B1FC1FEB4BCA29BF00 /* UpdatePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdatePanel.swift; sourceTree = "<group>"; };
 		82BE2237B9BA6EC865EF74E4 /* Notifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notifier.swift; sourceTree = "<group>"; };
 		DDC381DEFC38BD86762D8824 /* AnomalyAlerts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnomalyAlerts.swift; sourceTree = "<group>"; };
@@ -130,6 +132,7 @@
 		DF1D1216455F649ABC5FC56B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		571CD3829D85311D5626CD79 /* InfiniCal.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = InfiniCal.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		0F7D67FD84CB79CE174243AB /* com.infinitycomputer.infinical.helper */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = com.infinitycomputer.infinical.helper; sourceTree = BUILT_PRODUCTS_DIR; };
+		245B0864D25EFEDB4E36799C /* Sparkle.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Sparkle.framework; path = Vendor/Sparkle.framework; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -137,13 +140,17 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				6F1D255E8FBE5A8EBB50863A /* Sparkle.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		475CCCF90DB9523B9770BCF4 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
+		A7FDFD0B20D35F4C7E0D88FD /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				63935B71979FAFCB682B3DC1 /* L10n.swift in Sources */,
+				1A7C51B4F0F84BBE9239A3F3 /* SMC.swift in Sources */,
+				4AA0B4BE62B11F395A28448D /* main.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -156,6 +163,7 @@
 				594062CEF85BC56A7C7D2674 /* Sources */,
 				111244A94A64BD1C25E4F3C9 /* Helper */,
 				D3A1D7DE1CAC7DE87512B7E2 /* Resources */,
+				245B0864D25EFEDB4E36799C /* Sparkle.framework */,
 				CC0F68FE2D81F9614883F277 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -199,7 +207,7 @@
 				1E8F1A7ED04D1422CC51A0D5 /* ProcessSampler.swift */,
 				B76742D00A659F9DB7EDC770 /* HIDThermal.swift */,
 				C509D83CBC83A13CF4407D84 /* HistoryStore.swift */,
-				48BB0DFD6037E386E1B55ACD /* UpdateChecker.swift */,
+				2148970513382B2D5E272D50 /* SparkleUpdater.swift */,
 				82BE2237B9BA6EC865EF74E4 /* Notifier.swift */,
 				DDC381DEFC38BD86762D8824 /* AnomalyAlerts.swift */,
 				47148AED6335858B49C9DC9F /* SleepControl.swift */,
@@ -261,6 +269,7 @@
 				6F2AC85242E106CDBA05FA27 /* Sources */,
 				1C0BD0E8D32FBBB7D9A267A4 /* Frameworks */,
 				F78B3D85826E089D77514644 /* Resources */,
+				BDCA5832ABF38861D0B8A28B /* Embed Frameworks */,
 				6C74901BC4DE67A18C5A4B84 /* Embed Helper */,
 			);
 			buildRules = (
@@ -361,7 +370,7 @@
 				1A6CA566A237EA8D40ACB7CB /* ProcessSampler.swift in Sources */,
 				6C348952EAA151E9342BFC11 /* HIDThermal.swift in Sources */,
 				85D163081A208A1E836F56DA /* HistoryStore.swift in Sources */,
-				896F5B9621A9F69D848E0570 /* UpdateChecker.swift in Sources */,
+				20E99C974B27C6F327C19D4B /* SparkleUpdater.swift in Sources */,
 				CA7B2E903228E86F220A7AA1 /* UpdatePanel.swift in Sources */,
 				4679ED6D469B3C728D05C8BC /* Notifier.swift in Sources */,
 				5734B7106079282AD7CCAE0E /* AnomalyAlerts.swift in Sources */,
@@ -388,14 +397,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		A7FDFD0B20D35F4C7E0D88FD /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
+		BDCA5832ABF38861D0B8A28B /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
 			files = (
-				63935B71979FAFCB682B3DC1 /* L10n.swift in Sources */,
-				1A7C51B4F0F84BBE9239A3F3 /* SMC.swift in Sources */,
-				4AA0B4BE62B11F395A28448D /* main.swift in Sources */,
+				EC928FC286B9194355015E88 /* Sparkle.framework in Embed Frameworks */,
 			);
+			name = "Embed Frameworks";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
@@ -478,15 +488,19 @@
 				);
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 19;
+				CURRENT_PROJECT_VERSION = 20;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Resources/Info.plist;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/Vendor",
+				);
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.14;
+				MARKETING_VERSION = 1.0.15;
 				PRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -503,15 +517,19 @@
 				);
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 19;
+				CURRENT_PROJECT_VERSION = 20;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Resources/Info.plist;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/Vendor",
+				);
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.14;
+				MARKETING_VERSION = 1.0.15;
 				PRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -526,9 +544,9 @@
 					arm64,
 					x86_64,
 				);
-				CURRENT_PROJECT_VERSION = 19;
+				CURRENT_PROJECT_VERSION = 20;
 				GENERATE_INFOPLIST_FILE = NO;
-				MARKETING_VERSION = 1.0.14;
+				MARKETING_VERSION = 1.0.15;
 				PRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical.helper;
 				PRODUCT_NAME = com.infinitycomputer.infinical.helper;
 				SKIP_INSTALL = YES;
@@ -543,9 +561,9 @@
 					arm64,
 					x86_64,
 				);
-				CURRENT_PROJECT_VERSION = 19;
+				CURRENT_PROJECT_VERSION = 20;
 				GENERATE_INFOPLIST_FILE = NO;
-				MARKETING_VERSION = 1.0.14;
+				MARKETING_VERSION = 1.0.15;
 				PRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical.helper;
 				PRODUCT_NAME = com.infinitycomputer.infinical.helper;
 				SKIP_INSTALL = YES;
