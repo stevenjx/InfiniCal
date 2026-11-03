@@ -28,12 +28,4 @@ enum PowerFormat {
         if magnitude < 0.05 { return "+0.0 W" }
         return String(format: "%@%.1f W", value >= 0 ? "+" : "-", magnitude)
     }
-
-    /// Watt string for a reading. The quality is deliberately NOT encoded in the
-    /// text any more: an "≈" in front of roughly half the numbers was noise. The
-    /// measured/estimated distinction lives in the tooltip and the data-source card.
-    static func watts(_ value: Double?, quality: PowerQuality) -> String {
-        _ = quality
-        return watts(value)
-    }
 }

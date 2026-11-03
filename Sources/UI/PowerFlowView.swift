@@ -414,7 +414,7 @@ struct PowerFlowView: View {
             // Fall back to the live value when the throttled snapshot still holds 0
             // for a branch that just appeared; otherwise it prints "—" for a second.
             let shown = ticker.shownSinks[sink.id] ?? 0
-            let text = PowerFormat.watts(shown > 0.05 ? shown : values[index], quality: sink.quality)
+            let text = PowerFormat.watts(shown > 0.05 ? shown : values[index])
 
             placed.append(Placed(sink: sink,
                                  startTop: startTop, startBottom: startBottom,

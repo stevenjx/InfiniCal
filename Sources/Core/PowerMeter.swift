@@ -59,7 +59,7 @@ final class PowerMeter {
             }
         }
 
-        if let keys = cachedKeys {
+        if cachedKeys != nil {
             var values: [Double] = []
             if let v = try? SMC.shared.readDouble("PSTR"), v > 0.01, v < 200 {
                 values.append(v)
@@ -69,11 +69,6 @@ final class PowerMeter {
             }
             if let latest = values.first {
                 warmup += 1
-                // PSTR is only rewritten once per ~4 s, so within the first second
-                // we may see the same value repeatedly and a "median" of identical
-                // samples is just that value. Nothing to compensate for: the value
-                // is the newest firmware sample, the display ramps via the view's
-                // own smoothing.
                 // PSTR is only rewritten once per ~4 s, so within the first second
                 // we may see the same value repeatedly and a "median" of identical
                 // samples is just that value. Nothing to compensate for: the value
@@ -96,7 +91,6 @@ final class PowerMeter {
                 reading.isLive = warmup >= 8
                 return reading
             }
-            _ = keys
         }
 
         // Intel / older SMC: no PSTR. The 60 s snapshot is all we have.

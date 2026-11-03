@@ -352,7 +352,7 @@
  "名称": "Name",
  "后台仪表板更新": "Update dashboard in background",
  "启动校准模式": "Start calibration",
- "启用后，AIBattery 会自动运行 MacBook 处于睡眠或关机状态时未执行的任务。": "When on, InfiniCal runs tasks that came due while the Mac was asleep or the app was closed.",
+ "启用后，InfiniCal 会自动运行 MacBook 处于睡眠或关机状态时未执行的任务。": "When on, InfiniCal runs tasks that came due while the Mac was asleep or the app was closed.",
  "周": "Week",
  "周一早晨充满": "Monday morning top-up",
  "周末充满": "Weekend top-up",

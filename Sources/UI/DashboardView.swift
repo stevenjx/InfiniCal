@@ -324,7 +324,7 @@ private struct PowerFlowCard: View {
 
     private func reading(_ value: PowerReading, _ watts: Double?) -> String {
         guard let raw = value.watts else { return "--" }
-        return PowerFormat.watts(watts ?? raw, quality: value.quality)
+        return PowerFormat.watts(watts ?? raw)
     }
 }
 

@@ -102,7 +102,7 @@ struct ScheduleView: View {
 
                 ToggleRow(symbol: "arrow.triangle.2.circlepath",
                           title: t("自动补做未完成的任务"),
-                          help: t("启用后，AIBattery 会自动运行 MacBook 处于睡眠或关机状态时未执行的任务。"),
+                          help: t("启用后，InfiniCal 会自动运行 MacBook 处于睡眠或关机状态时未执行的任务。"),
                           isOn: $state.startTasksAfterDue)
 
                 HStack(spacing: 10) {
