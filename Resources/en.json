@@ -764,5 +764,17 @@
  "约 {p} W · 关闭可多 {p} 分钟": "about {p} W · closing it adds {p} min",
  "平均放电功率": "Mean discharge power",
  "起始电量": "Start level",
- "校准深度": "Calibration depth"
+ "校准深度": "Calibration depth",
+ "最近的控制结果": "Recent control results",
+ "已请求": "Requested",
+ "已接受": "Accepted",
+ "已回读确认": "Read back",
+ "已生效": "In effect",
+ "失败": "Failed",
+ "已过期": "Expired",
+ "已恢复": "Restored",
+ "“已回读确认”表示读回值与目标一致；“已接受”只表示写入未报错，硬件是否照做未知。": "\"Read back\" means the value the hardware reported matches the target; \"accepted\" only means the write did not error, so whether the hardware complied is unknown.",
+ "系统拒绝了防睡眠断言": "The system refused the sleep-prevention assertion",
+ "系统拒绝了防息屏断言": "The system refused the display-sleep assertion",
+ "锁屏调用已交给系统，无法回读结果": "Handed the lock request to the system; the result cannot be read back"
 }

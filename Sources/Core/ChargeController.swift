@@ -426,10 +426,11 @@ final class ChargeController {
     static let shared = ChargeController()
 
     private(set) var capabilities = ChargeCapabilities()
-    private(set) var lastControlEvidence: ControlEvidence?
 
+    /// Every charge and adapter request goes through the shared journal, so the
+    /// diagnostics page describes it the same way it describes fans and sleep.
     private func recordControl(_ evidence: ControlEvidence) {
-        lastControlEvidence = evidence
+        ControlJournal.shared.record(evidence)
     }
 
     private func backendName() -> String { capabilities.strategy.rawValue }

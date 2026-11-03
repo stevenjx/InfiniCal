@@ -89,10 +89,15 @@ struct HardwareDiagnosticReport: Codable {
             add("sensor-\(key)", key, valid ? "已读取" : "未检测到有效读数",
                 valid ? String(format: "%.1f °C", value!) : "--")
         }
-        // The existing control evidence can only prove a request, not physical effect.
-        if let evidence = ChargeController.shared.lastControlEvidence {
-            add("last-control", "最近控制请求", "仅供诊断，不代表硬件验证",
-                "\(evidence.operation) / \(evidence.backend) / \(evidence.phase.rawValue)")
+        // Control evidence describes what was asked of the hardware and what came
+        // back. It never claims a physical effect the read-back did not show.
+        for (index, evidence) in ControlJournal.shared.entries.prefix(12).enumerated() {
+            var detail = evidence.backend
+            if let target = evidence.target { detail += " · 目标 \(target)" }
+            if let observed = evidence.observed { detail += " · 回读 \(observed)" }
+            if let extra = evidence.detail { detail += " · \(extra)" }
+            add("control-\(index)-\(evidence.operation)", evidence.operation,
+                evidence.phase.label, detail)
         }
         return HardwareDiagnosticReport(generatedAt: Date(),
             appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "--",
@@ -115,7 +120,15 @@ final class HardwareDiagnosticsState: ObservableObject {
 struct HardwareDiagnosticsView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var data = HardwareDiagnosticsState()
+    @ObservedObject private var journal = ControlJournal.shared
     private var theme: Theme { Theme.current }
+
+    private static let time: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter
+    }()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -130,6 +143,37 @@ struct HardwareDiagnosticsView: View {
             Text(t("只读探测，不试写硬件。候选可用不等于实机验证；传感器列表并非完整清单。"))
                 .font(.system(size: 11)).foregroundColor(theme.textSecondary)
             if data.busy { ProgressView() }
+            if !journal.entries.isEmpty {
+                Text(t("最近的控制结果"))
+                    .font(.system(size: 12, weight: .semibold))
+                VStack(spacing: 4) {
+                    ForEach(Array(journal.entries.prefix(6).enumerated()), id: \.offset) { _, entry in
+                        HStack(spacing: 8) {
+                            Text(entry.operation)
+                                .font(.system(size: 10, design: .monospaced))
+                                .foregroundColor(theme.textSecondary)
+                                .frame(width: 108, alignment: .leading)
+                            Text(t(entry.phase.label))
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(color(for: entry.phase))
+                                .frame(width: 74, alignment: .leading)
+                            Text(entry.target ?? "--")
+                                .font(.system(size: 10))
+                                .foregroundColor(theme.textTertiary)
+                                .lineLimit(1)
+                            Spacer(minLength: 0)
+                            Text(Self.time.string(from: entry.date))
+                                .font(.system(size: 9, design: .monospaced))
+                                .foregroundColor(theme.textTertiary)
+                        }
+                    }
+                }
+                .padding(8)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(theme.innerControl))
+                Text(t("“已回读确认”表示读回值与目标一致；“已接受”只表示写入未报错，硬件是否照做未知。"))
+                    .font(.system(size: 10)).foregroundColor(theme.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if let report = data.report {
                 Text("\(report.model) · \(report.architecture) · InfiniCal \(report.appVersion)")
                 Text(report.operatingSystem).font(.system(size: 11))
@@ -155,6 +199,15 @@ struct HardwareDiagnosticsView: View {
         .padding(20).frame(width: 700, height: 620)
         .background(theme.windowBackground)
         .onAppear { refresh() }
+    }
+
+    private func color(for phase: ControlPhase) -> Color {
+        switch phase {
+        case .verified, .active, .restored: return theme.chartGreen
+        case .accepted: return theme.chartBlue
+        case .requested: return theme.textSecondary
+        case .failed, .expired: return theme.chartOrange
+        }
     }
 
     private func refresh() {

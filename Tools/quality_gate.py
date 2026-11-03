@@ -514,6 +514,52 @@ var unknownFanWrites = 0
 check(!FanRecovery.restore(count: nil) { _ in unknownFanWrites += 1 }.isEmpty && unknownFanWrites == 0, "unknown count is not fanless")
 check(FanRecovery.restore(count: 0) { _ in fatalError("fanless write") }.isEmpty, "confirmed fanless")
 check(!FanRecovery.restore(count: 9) { _ in fatalError("invalid count write") }.isEmpty, "invalid fan count")
+// P0-01 unified control journal: one place for charge, fan and sleep results.
+let journal = ControlJournal.shared
+journal.clear()
+let stamp = Date(timeIntervalSince1970: 1_000)
+journal.record(ControlEvidence(operation: "fan.mode", backend: "smc", phase: .accepted,
+                               target: "F0 2000 rpm", observed: "Md=manual", date: stamp))
+check(journal.entries.count == 1, "journal records a control result")
+check(journal.latest("fan.mode")?.phase == .accepted, "latest returns the newest entry")
+// A held ceiling is rewritten every 400 ms; the same state must not repeat.
+journal.record(ControlEvidence(operation: "fan.mode", backend: "smc", phase: .accepted,
+                               target: "F0 2000 rpm", observed: "Md=manual",
+                               date: stamp.addingTimeInterval(1)))
+check(journal.entries.count == 1, "identical state collapses instead of flooding")
+// A phase change is new information and must be kept.
+journal.record(ControlEvidence(operation: "fan.mode", backend: "smc", phase: .verified,
+                               target: "F0 2000 rpm", observed: "Md=manual", date: stamp.addingTimeInterval(2)))
+check(journal.entries.count == 2, "phase change appends a new entry")
+check(journal.entries.first?.phase == .verified, "newest entry is first")
+// A new target is also new information.
+journal.record(ControlEvidence(operation: "fan.mode", backend: "smc", phase: .verified,
+                               target: "F0 3000 rpm", observed: "Md=manual", date: stamp.addingTimeInterval(3)))
+check(journal.entries.count == 3, "target change appends a new entry")
+// Sleep and charge write to the same journal, so one question has one answer.
+journal.record(ControlEvidence(operation: "sleep.system", backend: "iokit", phase: .verified,
+                               target: "prevent idle sleep", date: stamp.addingTimeInterval(4)))
+journal.record(ControlEvidence(operation: "chargeLimit", backend: "bclm", phase: .failed,
+                               target: "80%", detail: "read-back 95%", date: stamp.addingTimeInterval(5)))
+check(journal.entries.count == 5, "all controllers share one journal")
+check(journal.latest("chargeLimit")?.phase == .failed, "a failed write stays failed")
+check(journal.latest("sleep.system")?.backend == "iokit", "sleep results keep their backend")
+// Bounded: hardware control runs at up to 2.5 Hz, so the log cannot grow forever.
+journal.clear()
+for index in 0..<80 {
+    journal.record(ControlEvidence(operation: "pulse", backend: "smc", phase: .accepted,
+                                   target: "t\\(index)", date: stamp.addingTimeInterval(Double(index))))
+}
+check(journal.entries.count == 60, "journal is bounded")
+check(journal.entries.first?.target == "t79", "bound keeps the newest entries")
+check(journal.entries.last?.target == "t20", "bound drops the oldest entries")
+journal.clear()
+check(journal.entries.isEmpty, "clear empties the journal")
+// Every phase has distinct wording: the UI must never show a raw case name.
+let phaseLabels = [ControlPhase.requested, .accepted, .verified, .active,
+                   .failed, .expired, .restored].map { $0.label }
+check(Set(phaseLabels).count == phaseLabels.count, "each phase has its own label")
+check(!phaseLabels.contains("requested"), "labels are human wording, not case names")
 var gate = AnomalyGate()
 let rule = AnomalyRule(id: "test", title: "test", duration: 5, cooldown: 20)
 gate.beginSample(at: anchor)

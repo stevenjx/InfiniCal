@@ -504,22 +504,37 @@ final class FanController: ObservableObject {
     }
 
     private func applyAuto(index: Int) {
+        var phase = ControlPhase.accepted
+        var detail: String?
         do {
             try writeMode(index: index, manual: false)
             lastError = nil
         } catch {
             lastError = error.localizedDescription
+            phase = .failed
+            detail = error.localizedDescription
         }
         refresh()
+        // A write that returned without throwing is only "accepted". Reading the
+        // fan back is what turns it into "verified", and only when the SMC
+        // actually reports the fan out of manual mode.
+        if phase != .failed, let after = fan(index) {
+            phase = after.isManual ? .accepted : .verified
+        }
+        recordFanControl(index: index, phase: phase, target: "auto", detail: detail)
     }
 
     private func applyFixed(index: Int, rpm: Int) {
         guard !updateSuspended else { return }
         guard let fan = fan(index), fan.canControl else {
             lastError = t("此机型未暴露可写的风扇控制键")
+            recordFanControl(index: index, phase: .failed, target: "\(rpm) rpm",
+                             detail: lastError)
             return
         }
         let clamped = min(max(rpm, fan.minRPM), fan.maxRPM)
+        var phase = ControlPhase.accepted
+        var detail: String?
         do {
             // Mode first, then target: the SMC only honours F{n}Tg once the fan is
             // out of automatic mode.
@@ -528,8 +543,26 @@ final class FanController: ObservableObject {
             lastError = nil
         } catch {
             lastError = error.localizedDescription
+            phase = .failed
+            detail = error.localizedDescription
         }
         refresh()
+        if phase != .failed, let after = self.fan(index) {
+            // Both halves have to agree: still ours, and the target RPM landed.
+            let matchesTarget = abs(after.targetRPM - clamped) <= max(20, clamped / 20)
+            phase = (after.isManual && matchesTarget) ? .verified : .accepted
+        }
+        recordFanControl(index: index, phase: phase, target: "\(clamped) rpm", detail: detail)
+    }
+
+    /// One entry per fan action, so the journal answers "asked for, accepted,
+    /// confirmed" without three rows per slider tick.
+    private func recordFanControl(index: Int, phase: ControlPhase, target: String, detail: String?) {
+        let after = fan(index)
+        let observed = after.map { "Md=\($0.isManual ? "manual" : "auto") Tg=\($0.targetRPM)" }
+        ControlJournal.shared.record(ControlEvidence(operation: "fan.mode", backend: "smc",
+                                                     phase: phase, target: "F\(index) \(target)",
+                                                     observed: observed, detail: detail))
     }
 
     private func writeMode(index: Int, manual: Bool) throws {
@@ -739,6 +772,12 @@ final class FanController: ObservableObject {
             failures[0] = t("无法确认风扇状态，请重试安全清理")
         }
         lastError = failures.isEmpty ? nil : failures.joined(separator: "; ")
+        ControlJournal.shared.record(ControlEvidence(
+            operation: "fan.restore", backend: "smc",
+            phase: failures.isEmpty ? .restored : .failed,
+            target: count.map { "\($0) fan(s)" } ?? "unknown count",
+            observed: failures.isEmpty ? "Md/FS! reports automatic" : nil,
+            detail: failures.isEmpty ? nil : failures.joined(separator: "; ")))
         return failures.isEmpty
     }
 
