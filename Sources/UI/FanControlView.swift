@@ -19,7 +19,7 @@ struct FanControlPage: View {
             if controller.hasFans {
                 // Side by side: a two-fan machine fits both in one row, and
                 // a single fan simply fills the width.
-                HStack(alignment: .top, spacing: 10) {
+                HStack(alignment: .top, spacing: Spacing.m) {
                     ForEach(controller.fans) { fan in
                         FanCard(fan: fan, controller: controller)
                             .frame(maxWidth: .infinity)
@@ -29,8 +29,14 @@ struct FanControlPage: View {
                 noFanCard
             }
 
+            // Stacked, not side by side. Measured on this 1080×720 window: the
+            // two cards are 164 and 179 pt tall, so a two-column row ends at
+            // y 478 and leaves 218 pt of empty page below it — 130 pt more than
+            // the layout it replaced. Stacked, the page ends at 684 with 12 pt
+            // to spare, and the fan cards grew by 59 pt to get there.
             temperatureCard
             curveCard
+
             presetRow
 
             if !state.helperInstalled {
@@ -40,7 +46,7 @@ struct FanControlPage: View {
             if let error = controller.lastError {
                 Text(error)
                     .font(Typography.caption)
-                    .foregroundColor(.red.opacity(0.85))
+                    .foregroundColor(theme.danger)
             }
         }
         .onAppear { controller.beginMonitoring() }
@@ -49,7 +55,7 @@ struct FanControlPage: View {
 
     private var statusPill: some View {
         let manual = controller.isAnyManual || controller.curveEnabled
-        return HStack(spacing: 5) {
+        return HStack(spacing: Spacing.xs) {
             Image(systemName: manual ? "hand.raised.fill" : "gearshape.2.fill")
                 .font(Glyph.inline.weight(.bold))
             Text(manual ? t("手动控制") : t("系统自动"))
@@ -72,7 +78,7 @@ struct FanControlPage: View {
 
     private var helperNotice: some View {
         Card(padding: .compact) {
-            HStack(spacing: 8) {
+            HStack(spacing: Spacing.s) {
                 Image(systemName: "lock.shield")
                     .font(Glyph.row)
                     .foregroundColor(theme.textSecondary)
@@ -97,7 +103,7 @@ struct FanControlPage: View {
 
     private var temperatureCard: some View {
         Card {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: Spacing.m) {
                 CardHeader(title: t("温度"), symbol: "thermometer.medium", tint: theme.chartBlue) {
                     Text(t("1 Hz 实时"))
                         .font(Typography.micro)
@@ -109,15 +115,17 @@ struct FanControlPage: View {
                         .font(Typography.caption)
                         .foregroundColor(theme.textSecondary)
                 } else {
-                    ForEach(controller.sensors) { sensor in
-                        temperatureRow(sensor)
+                    VStack(alignment: .leading, spacing: Spacing.s) {
+                        ForEach(controller.sensors) { sensor in
+                            temperatureRow(sensor)
+                        }
                     }
                 }
 
                 Button {
                     withAnimation(.easeInOut(duration: 0.15)) { showAllSensors.value.toggle() }
                 } label: {
-                    HStack(spacing: 5) {
+                    HStack(spacing: Spacing.xs) {
                         Image(systemName: showAllSensors.value ? "chevron.down" : "chevron.right")
                             .font(Glyph.inline.weight(.semibold))
                         Text(showAllSensors.value ? t("收起全部传感器") : t("显示全部传感器"))
@@ -134,21 +142,20 @@ struct FanControlPage: View {
                             .font(Typography.caption)
                             .foregroundColor(theme.textTertiary)
                     } else {
-                        VStack(spacing: 3) {
+                        VStack(spacing: Spacing.xxs) {
                             ForEach(all) { sensor in
-                                HStack(spacing: 6) {
+                                HStack(spacing: Spacing.xs) {
                                     Text(sensor.name)
                                         .font(Typography.caption.monospaced())
                                         .foregroundColor(theme.textSecondary)
                                         .lineLimit(1)
-                                    Spacer(minLength: 6)
+                                    Spacer(minLength: Spacing.xs)
                                     Text(String(format: "%.1f °C", sensor.celsius))
-                                        .font(Typography.micro.monospaced())
+                                        .font(Typography.micro.monospacedDigit())
                                         .foregroundColor(theme.textPrimary)
                                 }
                             }
                         }
-                        .padding(.top, 2)
                     }
                 }
             }
@@ -157,20 +164,21 @@ struct FanControlPage: View {
 
     private func temperatureRow(_ sensor: ThermalReading) -> some View {
         let fraction = min(1, max(0, (sensor.celsius - 20) / 80))
-        let tint: Color = sensor.celsius >= 90 ? .red : (sensor.celsius >= 75 ? theme.chartOrange : theme.chartBlue)
-        return VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
+        let tint: Color = sensor.celsius >= 90 ? theme.danger
+            : (sensor.celsius >= 75 ? theme.warning : theme.chartBlue)
+        return VStack(alignment: .leading, spacing: Spacing.xs) {
+            HStack(alignment: .firstTextBaseline, spacing: Spacing.xs) {
                 Text(sensor.name)
                     .font(Typography.headline)
                     .foregroundColor(theme.textPrimary)
                 Text(sensor.source)
                     .font(Typography.micro)
                     .foregroundColor(theme.textTertiary)
-                Spacer()
+                    .lineLimit(1)
+                Spacer(minLength: Spacing.xs)
                 Text(String(format: "%.1f", sensor.celsius))
-                    .font(Typography.headline)
+                    .font(Typography.headline.monospacedDigit())
                     .foregroundColor(tint)
-                    .monospacedDigit()
                 Text("°C")
                     .font(Typography.micro)
                     .foregroundColor(theme.textSecondary)
@@ -189,90 +197,94 @@ struct FanControlPage: View {
     // MARK: - Curve
 
     private var curveCard: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 10) {
+        let enabled = controller.curveEnabled
+        return Card {
+            VStack(alignment: .leading, spacing: Spacing.m) {
                 CardHeader(title: t("温度曲线"), symbol: "chart.line.uptrend.xyaxis",
                            tint: theme.chartPurple,
                            help: t("按选定传感器温度分三段调整转速：低于起始温度保持最低转速，中点给一个中间转速，达到满载温度时全速。每秒更新一次，温度变化小于 1°C 时不重写，转速每秒最多变化 150 RPM。")) {
-                    Toggle("", isOn: Binding(get: { controller.curveEnabled }, set: { controller.setCurveEnabled($0) }))
-                        .labelsHidden()
-                        .toggleStyle(.switch)
-                        .tint(theme.accent)
-                        .scaleEffect(0.78)
-                        .frame(width: 40, height: 20)
-                        .disabled(!controller.hasFans)
-                }
-
-                HStack(spacing: 10) {
-                    Text(t("传感器"))
-                        .font(Typography.caption)
-                        .foregroundColor(theme.textSecondary)
-                    Picker("", selection: Binding(get: { controller.curveSensorKey },
-                                                  set: { controller.setCurveSensor($0) })) {
-                        ForEach(curveSensorOptions, id: \.key) { option in
-                            Text(option.name).tag(option.key)
-                        }
+                    HStack(spacing: Spacing.s) {
+                        if !enabled { OffBadge(text: t("已关闭")) }
+                        Toggle("", isOn: Binding(get: { controller.curveEnabled },
+                                                 set: { controller.setCurveEnabled($0) }))
+                            .labelsHidden()
+                            .toggleStyle(.switch)
+                            .tint(theme.accent)
+                            .scaleEffect(0.78)
+                            .frame(width: 40, height: 20)
+                            .disabled(!controller.hasFans)
                     }
-                    .labelsHidden()
-                    .frame(width: 120)
-                    .disabled(!controller.curveEnabled)
-
-                    Text(t("起始"))
-                        .font(Typography.caption)
-                        .foregroundColor(theme.textSecondary)
-                    ValueStepper(value: Binding(get: { Int(controller.curveStartTemperature) },
-                                                set: { controller.curveStartTemperature = Double($0) }),
-                                 range: 30...80, step: 1, suffix: "°C")
-                        .frame(width: 96)
-                        .disabled(!controller.curveEnabled)
-
-                    Text(t("满载"))
-                        .font(Typography.caption)
-                        .foregroundColor(theme.textSecondary)
-                    ValueStepper(value: Binding(get: { Int(controller.curvePeakTemperature) },
-                                                set: { controller.curvePeakTemperature = Double($0) }),
-                                 range: 50...105, step: 1, suffix: "°C")
-                        .frame(width: 96)
-                        .disabled(!controller.curveEnabled)
-
-                    Spacer(minLength: 0)
                 }
-                .opacity(controller.hasFans ? 1 : 0.5)
 
-                HStack(spacing: 10) {
-                    Text(t("中点"))
-                        .font(Typography.caption)
-                        .foregroundColor(theme.textSecondary)
-                    ValueStepper(value: Binding(get: { Int(controller.curveMidTemperature) },
-                                                set: { controller.curveMidTemperature = Double($0) }),
-                                 range: 40...100, step: 1, suffix: "°C")
-                        .frame(width: 96)
-                        .disabled(!controller.curveEnabled)
+                // Two rows of three, as before: at full width a stacked form
+                // would leave 400 pt of nothing beside each control.
+                VStack(alignment: .leading, spacing: Spacing.s) {
+                    HStack(spacing: Spacing.s) {
+                        curveLabel(t("传感器"))
+                        Picker("", selection: Binding(get: { controller.curveSensorKey },
+                                                      set: { controller.setCurveSensor($0) })) {
+                            ForEach(curveSensorOptions, id: \.key) { option in
+                                Text(option.name).tag(option.key)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 120)
 
-                    Text(t("转速"))
-                        .font(Typography.caption)
-                        .foregroundColor(theme.textSecondary)
-                    ValueStepper(value: Binding(get: { Int(controller.curveMidPercent) },
-                                                set: { controller.curveMidPercent = Double($0) }),
-                                 range: 0...100, step: 5, suffix: "%")
-                        .frame(width: 96)
-                        .disabled(!controller.curveEnabled)
+                        curveLabel(t("起始"))
+                        ValueStepper(value: Binding(get: { Int(controller.curveStartTemperature) },
+                                                    set: { controller.curveStartTemperature = Double($0) }),
+                                     range: 30...80, step: 1, suffix: "°C")
+                            .frame(width: 96)
 
-                    Spacer(minLength: 0)
+                        curveLabel(t("满载"))
+                        ValueStepper(value: Binding(get: { Int(controller.curvePeakTemperature) },
+                                                    set: { controller.curvePeakTemperature = Double($0) }),
+                                     range: 50...105, step: 1, suffix: "°C")
+                            .frame(width: 96)
 
-                    Text(t("三段折线：起始 → 中点 → 满载"))
-                        .font(Typography.micro)
-                        .foregroundColor(theme.textTertiary)
+                        Spacer(minLength: 0)
+                    }
+
+                    HStack(spacing: Spacing.s) {
+                        curveLabel(t("中点"))
+                        ValueStepper(value: Binding(get: { Int(controller.curveMidTemperature) },
+                                                    set: { controller.curveMidTemperature = Double($0) }),
+                                     range: 40...100, step: 1, suffix: "°C")
+                            .frame(width: 96)
+
+                        curveLabel(t("转速"))
+                        ValueStepper(value: Binding(get: { Int(controller.curveMidPercent) },
+                                                    set: { controller.curveMidPercent = Double($0) }),
+                                     range: 0...100, step: 5, suffix: "%")
+                            .frame(width: 96)
+
+                        Spacer(minLength: 0)
+                    }
                 }
-                .opacity(controller.hasFans ? 1 : 0.5)
+                .opacity(enabled ? 1 : 0.35)
+                .disabled(!enabled)
 
-                if controller.curveEnabled, let current = curveCurrentTemperature {
-                    Text(tf("当前 {p}°C → {p}", String(format: "%.1f", current), curveTargetText))
-                        .font(Typography.caption.monospaced())
-                        .foregroundColor(theme.textTertiary)
-                }
+                // One line that is always present, so toggling the curve does
+                // not change the card's height.
+                Text(curveFooter)
+                    .font(Typography.caption)
+                    .foregroundColor(enabled ? theme.chartPurple : theme.textTertiary)
+                    .lineLimit(1)
             }
         }
+    }
+
+    private func curveLabel(_ text: String) -> some View {
+        Text(text)
+            .font(Typography.label)
+            .foregroundColor(theme.textSecondary)
+            .frame(width: 40, alignment: .leading)
+    }
+
+    private var curveFooter: String {
+        guard controller.curveEnabled else { return t("三段折线：起始 → 中点 → 满载") }
+        guard let current = curveCurrentTemperature else { return t("等待传感器读数") }
+        return tf("当前 {p}°C → {p}", String(format: "%.1f", current), curveTargetText)
     }
 
     private var curveSensorOptions: [ThermalReading] {
@@ -292,7 +304,7 @@ struct FanControlPage: View {
     // MARK: - Presets
 
     private var presetRow: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: Spacing.s) {
             Text(t("预设"))
                 .font(Typography.caption)
                 .foregroundColor(theme.textSecondary)
@@ -310,7 +322,7 @@ struct FanControlPage: View {
                 }
             }
 
-            Spacer(minLength: 8)
+            Spacer(minLength: Spacing.s)
 
             SmallActionButton(title: t("保存当前"), symbol: "plus") {
                 savePreset()
@@ -327,6 +339,60 @@ struct FanControlPage: View {
     }
 }
 
+// MARK: - Badges
+
+/// A state label inside a card: neutral grey, because "已关闭" is an absence
+/// rather than a warning. The page's own status pill is a different weight —
+/// it reports what the app is doing, not what one card is not.
+private struct OffBadge: View {
+    private var theme: Theme { Theme.current }
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(Typography.micro)
+            .foregroundColor(theme.textTertiary)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(Capsule().fill(theme.innerControl))
+    }
+}
+
+// MARK: - Speed ring
+
+/// The fan's current speed as an arc, with the same fan icon in the middle that
+/// the card used to draw at 18 pt. The arc is the at-a-glance reading; the
+/// figure beside it is the exact one.
+///
+/// A stopped fan draws no arc at all rather than a minimum sliver: on this
+/// machine both fans idle at 0 RPM, and a 2 % arc would claim motion that is
+/// not happening.
+private struct SpeedRing: View {
+    private var theme: Theme { Theme.current }
+    let ratio: Double
+    let tint: Color
+    var size: CGFloat = 62
+
+    private var lineWidth: CGFloat { 6 }
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(theme.innerControl, lineWidth: lineWidth)
+            if ratio > 0.001 {
+                Circle()
+                    .trim(from: 0, to: min(1, ratio))
+                    .stroke(tint, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+            }
+            Image(systemName: "fanblades.fill")
+                .font(Glyph.block)
+                .foregroundColor(tint)
+        }
+        .frame(width: size, height: size)
+    }
+}
+
 // MARK: - Fan card
 
 private struct FanCard: View {
@@ -337,128 +403,125 @@ private struct FanCard: View {
     private var mode: FanMode { controller.modes[fan.index] ?? .auto }
     private var tint: Color { fan.isManual ? theme.chartOrange : theme.chartPurple }
 
+    /// Current speed as a share of the fan's top speed.
+    ///
+    /// Not `(current − min) / (max − min)`: this machine's floor is 2,317 RPM,
+    /// so a fan idling at 2,328 RPM would draw a 0.2 % arc — a spinning fan
+    /// that looks stopped. Zero on the ring means zero RPM.
+    private var ratio: Double {
+        guard fan.maxRPM > 0 else { return 0 }
+        return min(1, max(0, Double(fan.currentRPM) / Double(fan.maxRPM)))
+    }
+
+    /// Built as a `String` on purpose: written inline it would become a
+    /// localised key and print SMC values with grouping separators.
+    private var smcLine: String {
+        "SMC F\(fan.index)Tg = \(fan.targetRPM) · F\(fan.index)Md = \(fan.isManual ? 1 : 0)"
+    }
+
     var body: some View {
         Card {
-            VStack(alignment: .leading, spacing: 9) {
-                HStack(alignment: .center, spacing: 10) {
+            VStack(alignment: .leading, spacing: Spacing.m) {
+                HStack(spacing: Spacing.s) {
                     Image(systemName: "fanblades.fill")
-                        .font(Glyph.block)
+                        .font(Glyph.row)
                         .foregroundColor(tint)
-
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(fan.name)
-                            .font(Typography.headline)
-                            .foregroundColor(theme.textPrimary)
-                        Text("SMC F\(fan.index)Tg = \(fan.targetRPM) · F\(fan.index)Md = \(fan.isManual ? 1 : 0)")
-                            .font(Typography.micro.monospaced())
-                            .foregroundColor(theme.textTertiary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    }
-
-                    Spacer(minLength: 8)
-
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text("\(fan.currentRPM)")
-                            .font(Typography.figure.weight(.bold))
-                            .foregroundColor(theme.textPrimary)
-                            .monospacedDigit()
-                        Text("RPM")
-                            .font(Typography.micro)
-                            .foregroundColor(theme.textSecondary)
-                    }
+                    Text(fan.name)
+                        .font(Typography.headline)
+                        .foregroundColor(theme.textPrimary)
+                    Spacer(minLength: Spacing.s)
                 }
 
-                rangeBar
+                HStack(alignment: .center, spacing: Spacing.l) {
+                    // Ring on the left, its scale underneath — the two numbers
+                    // used to sit beside the RPM figure, which is what made the
+                    // top-right corner crowded.
+                    VStack(spacing: Spacing.xs) {
+                        SpeedRing(ratio: ratio, tint: tint)
+                        Text("0 – \(fan.maxRPM) RPM")
+                            .font(Typography.micro.monospacedDigit())
+                            .foregroundColor(theme.textTertiary)
+                            .fixedSize()
+                    }
 
-                if controller.curveEnabled {
-                    HStack(spacing: 6) {
-                        Image(systemName: "chart.line.uptrend.xyaxis")
-                            .font(Glyph.inline.weight(.semibold))
-                        Text(t("由温度曲线控制"))
+                    VStack(alignment: .leading, spacing: Spacing.xxs) {
+                        HStack(alignment: .firstTextBaseline, spacing: Spacing.xs) {
+                            Text("\(fan.currentRPM)")
+                                .font(Typography.display)
+                                .foregroundColor(theme.textPrimary)
+                            Text("RPM")
+                                .font(Typography.micro)
+                                .foregroundColor(theme.textSecondary)
+                        }
+                        Text(modeCaption)
                             .font(Typography.caption)
-                        Spacer(minLength: 0)
+                            .foregroundColor(theme.textTertiary)
+                            .lineLimit(1)
                     }
-                    .foregroundColor(theme.chartPurple)
-                } else {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Picker("", selection: Binding(get: { mode }, set: { controller.setMode($0, for: fan.index) })) {
-                            Text(t("自动")).tag(FanMode.auto)
-                            Text(t("自定义")).tag(FanMode.fixed)
-                            Text(t("全速")).tag(FanMode.full)
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        .frame(maxWidth: 196)
-                        .disabled(!fan.canControl)
 
-                        if mode == .fixed {
-                            HStack(spacing: 8) {
-                                Slider(value: Binding(get: { Double(controller.fixedRPM[fan.index] ?? fan.currentRPM) },
-                                                      set: { controller.setFixedRPM(Int($0.rounded()), for: fan.index) }),
-                                       in: Double(fan.minRPM)...Double(max(fan.minRPM + 1, fan.maxRPM)),
-                                       step: 50)
-                                .tint(theme.accent)
-                                Text("\(controller.fixedRPM[fan.index] ?? fan.currentRPM)")
-                                    .font(Typography.micro.weight(.semibold).monospaced())
-                                    .foregroundColor(theme.textPrimary)
-                                    .frame(width: 46, alignment: .trailing)
-                                Text("RPM")
-                                    .font(Typography.micro)
-                                    .foregroundColor(theme.textSecondary)
-                            }
-                        } else {
-                            Text(mode == .auto ? t("由系统按温度自动调节") : t("保持最大转速"))
-                                .font(Typography.caption)
-                                .foregroundColor(theme.textTertiary)
-                                .lineLimit(1)
-                        }
-                    }
+                    Spacer(minLength: 0)
+                }
+
+                if !controller.curveEnabled {
+                    controlArea
                 }
 
                 if !fan.canControl {
                     Text(t("此机型未暴露可写的风扇模式键，只能读取转速"))
-                        .font(Typography.micro)
+                        .font(Typography.caption)
                         .foregroundColor(theme.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+
+                Text(smcLine)
+                    .font(Typography.micro.monospacedDigit())
+                    .foregroundColor(theme.textTertiary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
             }
         }
     }
 
-    /// Current speed as a position inside the fan's own min…max range.
-    private var rangeBar: some View {
-        HStack(spacing: 7) {
-            Text("\(fan.minRPM)")
-                .font(Typography.micro.monospaced())
-                .foregroundColor(theme.textTertiary)
-                .frame(width: 34, alignment: .leading)
-
-            GeometryReader { geo in
-                let span = max(1, fan.maxRPM - fan.minRPM)
-                let ratio = min(1, max(0, Double(fan.currentRPM - fan.minRPM) / Double(span)))
-                let width = geo.size.width
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(theme.innerControl)
-                        .frame(height: 5)
-                        .overlay(Capsule().strokeBorder(theme.cardStroke, lineWidth: 0.5))
-                    Capsule()
-                        .fill(tint.opacity(0.9))
-                        .frame(width: max(5, width * CGFloat(ratio)), height: 5)
-                    Circle()
-                        .fill(tint)
-                        .frame(width: 8, height: 8)
-                        .overlay(Circle().strokeBorder(theme.card, lineWidth: 1.5))
-                        .offset(x: min(max(0, width * CGFloat(ratio) - 4), max(0, width - 8)))
-                }
-                .frame(height: 8)
-            }
-            .frame(height: 8)
-
-            Text("\(fan.maxRPM)")
-                .font(Typography.micro.monospaced())
-                .foregroundColor(theme.textTertiary)
-                .frame(width: 38, alignment: .trailing)
+    private var modeCaption: String {
+        if controller.curveEnabled { return t("由温度曲线控制") }
+        switch mode {
+        case .auto: return t("由系统按温度自动调节")
+        case .full: return t("保持最大转速")
+        case .fixed: return t("按设定转速运行")
         }
+    }
+
+    private var controlArea: some View {
+        VStack(alignment: .leading, spacing: Spacing.s) {
+            Picker("", selection: Binding(get: { mode }, set: { controller.setMode($0, for: fan.index) })) {
+                Text(t("自动")).tag(FanMode.auto)
+                Text(t("自定义")).tag(FanMode.fixed)
+                Text(t("全速")).tag(FanMode.full)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(maxWidth: 220)
+
+            if mode == .fixed {
+                HStack(spacing: Spacing.s) {
+                    Slider(value: Binding(get: { Double(controller.fixedRPM[fan.index] ?? fan.currentRPM) },
+                                          set: { controller.setFixedRPM(Int($0.rounded()), for: fan.index) }),
+                           in: Double(fan.minRPM)...Double(max(fan.minRPM + 1, fan.maxRPM)),
+                           step: 50)
+                    .tint(theme.accent)
+                    Text("\(controller.fixedRPM[fan.index] ?? fan.currentRPM)")
+                        .font(Typography.micro.monospacedDigit())
+                        .foregroundColor(theme.textPrimary)
+                        .frame(width: 46, alignment: .trailing)
+                    Text("RPM")
+                        .font(Typography.micro)
+                        .foregroundColor(theme.textSecondary)
+                }
+            }
+        }
+        // Read-only models keep the control on screen — hiding it would suggest
+        // the mode does not exist — but at 35 % with clicks refused.
+        .opacity(fan.canControl ? 1 : 0.35)
+        .disabled(!fan.canControl)
     }
 }

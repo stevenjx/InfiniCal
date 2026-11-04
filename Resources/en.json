@@ -875,5 +875,7 @@
  "悬停查看数值": "Hover a curve for values",
  "保护阈值 {p}°C": "Cutoff {p}°C",
  "上限 {p} RPM": "Max {p} RPM",
- "偏高": "High"
+ "偏高": "High",
+ "按设定转速运行": "Running at the set speed",
+ "等待传感器读数": "Waiting for a sensor reading"
 }
