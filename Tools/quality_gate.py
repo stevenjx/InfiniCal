@@ -35,6 +35,20 @@ def ui_lint():
     print(result.stdout.strip(), flush=True)
 
 
+def contrast():
+    """WCAG check on the palette declared in Theme.swift.
+
+    Parsed from the Swift rather than duplicated here, so editing a colour
+    cannot leave the check passing against a stale copy.
+    """
+    result = subprocess.run([sys.executable, str(ROOT / "Tools/contrast_check.py")],
+                            capture_output=True, text=True)
+    if result.returncode != 0:
+        sys.stderr.write(result.stderr or result.stdout)
+        raise SystemExit("contrast check failed")
+    print(result.stdout.strip().splitlines()[-1], flush=True)
+
+
 def source_gate():
     with (ROOT / "Resources/Info.plist").open("rb") as f:
         info = plistlib.load(f)
@@ -86,6 +100,7 @@ def source_gate():
         assert "Sparkle" in (ROOT / builder).read_text(), builder + " does not link Sparkle"
     run("git", "-C", ROOT, "diff", "--check")
     ui_lint()
+    contrast()
     print("PASS source/version/localization gate", flush=True)
 
 

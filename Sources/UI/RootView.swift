@@ -77,7 +77,7 @@ struct RootView: View {
                         Label(tf("发现新版本 {p}", version), systemImage: "arrow.down.circle.fill")
                             .font(Typography.label)
                     }
-                    .buttonStyle(.plain).foregroundColor(theme.accent)
+                    .buttonStyle(.plain).foregroundColor(theme.info)
                     .sheet(isPresented: $showingUpdates.value) { UpdateSheet() }
                     Button(t("立即更新")) { updater.checkForUpdates() }
                         .buttonStyle(.plain).font(Typography.caption).foregroundColor(theme.textSecondary)

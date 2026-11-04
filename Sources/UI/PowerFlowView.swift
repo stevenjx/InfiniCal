@@ -80,24 +80,24 @@ struct PowerFlowModel {
         var sinks: [PowerFlowSink] = []
         if let watts = display.watts {
             sinks.append(PowerFlowSink(kind: .display, title: t("显示"), symbol: "display",
-                                       color: Color(red: 0.36, green: 0.58, blue: 0.98),
+                                       color: Theme.current.flowSystem,
                                        watts: watts, quality: display.quality, detail: display.note))
         }
         if let watts = soc.watts {
             sinks.append(PowerFlowSink(kind: .soc, title: "SoC", symbol: "cpu",
-                                       color: Color(red: 0.55, green: 0.47, blue: 0.96),
+                                       color: Theme.current.flowSoC,
                                        watts: watts, quality: soc.quality, detail: soc.note))
         }
         if plugged {
             let charge = max(0, batteryWatts)
             sinks.append(PowerFlowSink(kind: .battery, title: t("电池"), symbol: "battery.100.bolt",
-                                       color: Color(red: 0.30, green: 0.78, blue: 0.45),
+                                       color: Theme.current.flowBattery,
                                        watts: charge, quality: .measured,
                                        detail: charge < 0.05 ? t("未充电") : t("充电中")))
         }
         if let watts = usb.watts {
             sinks.append(PowerFlowSink(kind: .usb, title: "USB", symbol: "cable.connector",
-                                       color: Color(red: 0.60, green: 0.60, blue: 0.65),
+                                       color: Theme.current.flowUSB,
                                        watts: watts, quality: usb.quality, detail: usb.note))
         }
 
@@ -113,7 +113,7 @@ struct PowerFlowModel {
         let other = (totalIsLive && totalPower >= 3) ? max(0, totalPower - systemKnown) : 0
         let hasEstimate = sinks.contains { $0.quality == .estimated }
         sinks.append(PowerFlowSink(kind: .other, title: t("其他"), symbol: "ellipsis",
-                                   color: Color(red: 0.30, green: 0.68, blue: 0.60),
+                                   color: Theme.current.flowOther,
                                    watts: other, quality: .measured,
                                    detail: hasEstimate ? t("总数 − 已知分项（含估算误差）") : t("总数 − 已知分项")))
 
@@ -596,8 +596,8 @@ struct PowerFlowView: View {
     private func sourceCard(_ layout: Layout) -> some View {
         let isAdapter = model.source == .adapter
         let tint = isAdapter
-            ? Color(red: 0.95, green: 0.72, blue: 0.30)
-            : Color(red: 0.35, green: 0.80, blue: 0.45)
+            ? theme.flowAdapter
+            : theme.flowBattery
         let watts = ticker.shownSource > 0 ? ticker.shownSource : ticker.smoothedSource
         let pulse = 0.62 + 0.38 * (0.5 + 0.5 * sin(ticker.phase * .pi * 2))
 

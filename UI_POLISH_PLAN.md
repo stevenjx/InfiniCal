@@ -96,15 +96,21 @@
 | 令牌 | 深色 | 浅色 | 用途 |
 | --- | --- | --- | --- |
 | `success` | #3FB950 | #1A7F37 | 健康、已连接、正常 |
-| `warning` | #D29922 | #9A6700 | 偏高、需注意 |
-| `danger` | #F85149 | #CF222E | 失败、过热、危险操作 |
+| `warning` | #D29922 | **#8A5B00** | 偏高、需注意 |
+| `danger` | **#FF6B62** | #CF222E | 失败、过热、危险操作 |
 | `info` | 沿用 `accent` | 沿用 `accent` | 中性提示、链接 |
-| `chartGreen/Blue/Purple/Orange` | 保持现有 | 保持现有 | 图表系列色 |
+| `border` | 白 16% | 黑 18% | 控件描边（比 `cardStroke` 重一档） |
+| `focusRing` | #4A9EFF | #0A6BDA | 键盘焦点环（U2-03 接入） |
+| `flowAdapter/System/Battery/SoC/USB/Other` | 现有亮色 | **加深变体** | 能量流动图与 chip 的系列色 |
+| `chartGreen/Blue/Purple/Orange` | 保持现有 | 保持现有 | 只用于图形，不再当文字色 |
 
-对比度修正：
-- `textTertiary` 深色从 34% → **48%**，浅色从 42% → **56%**，使 10–11pt 文字达到 4.5:1。
-- `textSecondary` 深色 52% → 62%，用于正文说明。
+对比度修正（数值以 `Tools/contrast_check.py` 实测为准）：
+- `textTertiary` 深色 34% → **50%**，浅色 42% → **55%**，在 `card` 上 4.75 / 4.59:1。
+- `textSecondary` 深色 52% → 62%，浅色 56% → 64%，在 `card` 上 6.46 / 6.71:1。
 - 新增 `theme.border` 与 `theme.focusRing`，让键盘焦点可见（现在完全没有焦点样式）。
+- 原表给的 48% / 56% 实测落在 4.51 / 4.47 —— 一半在线上、一半在线下，所以各加了 2 个
+  百分点；`#F85149` 在 `card` 上只有 4.28，`#9A6700` 在 `windowBackground` 上 4.46，
+  同样上调/下调了一档。
 
 ### 2.5 卡片与页面骨架
 
@@ -168,7 +174,7 @@ PageScaffold(title, symbol, help?, toolbar: { ... }) { scrollContent }
   只能靠看图发现。
 - 16 张基线截图在逐张确认无裁切、无重叠后重新录制。
 
-#### U0-02 语义色与对比度 — ❌ 未开始
+#### U0-02 语义色与对比度 — ✅ 已完成（1.0.23）
 
 - **目标**：颜色只有 `Theme` 一个出口，并且小字可读。
 - **交付**：
@@ -177,6 +183,33 @@ PageScaffold(title, symbol, help?, toolbar: { ... }) { scrollContent }
   - 调整 `textTertiary` / `textSecondary` 到 §2.4 的取值。
 - **验收**：`ui_lint` 报 0 处视图内字面颜色；用脚本对 `textTertiary` 在 `card` 底色上算对比度，结果 ≥ 4.5:1（深色与浅色各一次）；截图确认没有出现「次要信息反而比正文显眼」。
 - **依赖**：无。
+
+**实现说明**
+
+- `Theme` 新增 6 个语义色与 6 个系列色（`flowAdapter/System/Battery/SoC/USB/Other`）。
+  系列色此前是散在 `PowerFlowView` 与 `DashboardView` 里的字面色，两处各写一遍同样的值；
+  现在 chip 与流动图共用一套，**浅色模式有加深变体** —— 它们会作为 10pt chip 文字出现，
+  亮色在白底上只有 2.2–3.4:1。
+- `textTertiary` 34% → 50%（深）/ 42% → 55%（浅），`textSecondary` 52% → 62% / 56% → 64%。
+  具体数值由脚本实测决定，不是照着计划抄的：计划给的 48% / 56% 量出来是 4.51 / 4.47，
+  一个在线上、一个在线下；`#F85149` 在 `card` 上 4.28、`#9A6700` 在 `windowBackground` 上
+  4.46，都做了 1 档调整。
+- 新增 `Tools/contrast_check.py`：**解析 `Theme.swift` 本身**算 WCAG 对比度，不复制一份
+  调色板（复制的那份会漂移，然后检查永远通过）。它只认三种写法（字面 RGB、白/黑 + 透明度、
+  令牌别名），遇到第四种直接报错而不是跳过。接入 `quality_gate.py source`，当前
+  **24 组全部 ≥ 4.5:1**，最差 `light success on windowBackground = 4.65`。
+- `innerControl` 上的文字单独测量但不设门禁（3.95–4.36）：要把 0.906 的灰底也压到 4.5，
+  整条文字阶梯得再深三四档，而几乎没有三级文字落在那里。这一条写进脚本注释，不藏着。
+- `ui_lint`：`literal-color 18 → 0`。`border` 用到了 `ChipButton` 的未选中描边，`info`
+  用到了侧边栏的更新提示，`focusRing` 已声明但留给 U2-03（那里才真正有焦点态）。
+
+**未覆盖**
+
+- `chartGreen/Blue/Purple/Orange` 仍有 17 处被当作**文字色**用（`foregroundColor(theme.chart*)`），
+  浅色模式下 `chartOrange` ≈ 2.2:1、`chartGreen` ≈ 2.9:1。计划把图表色定为「保持现有」，
+  所以这一轮只把它们留在图形里；文字场景需要换成语义色，与浅色模式专项（U2-04）一起做，
+  否则会同时改动图表本身的颜色。
+- `focusRing` 只有定义没有使用者，等 U2-03 接入键盘焦点。
 
 #### U0-03 卡片与标题收口 — ❌ 未开始
 
@@ -311,7 +344,7 @@ PageScaffold(title, symbol, help?, toolbar: { ... }) { scrollContent }
 | 编号 | 项目 | 状态 |
 | --- | --- | --- |
 | U0-01 | 设计令牌层 | ✅ 完成 |
-| U0-02 | 语义色与对比度 | ❌ 未开始 |
+| U0-02 | 语义色与对比度 | ✅ 完成 |
 | U0-03 | 卡片与标题收口 | ❌ 未开始 |
 | U0-04 | 页面骨架与空态 | ❌ 未开始 |
 | U1-01 | 侧边栏 | ❌ 未开始 |
@@ -329,7 +362,7 @@ PageScaffold(title, symbol, help?, toolbar: { ... }) { scrollContent }
 | U2-04 | 浅色模式 | ❌ 未开始 |
 | U2-05 | 视觉回归门禁 | ✅ 完成 |
 
-**统计：2 项完成 / 0 项部分完成 / 16 项未开始。**
+**统计：3 项完成 / 0 项部分完成 / 15 项未开始。**
 
 ---
 

@@ -19,11 +19,53 @@ struct Theme {
     var innerControl: Color { isDark ? Color(red: 0.235, green: 0.235, blue: 0.245) : Color(red: 0.906, green: 0.906, blue: 0.918) }
     var cardStroke: Color { isDark ? Color.white.opacity(0.075) : Color.black.opacity(0.095) }
     var divider: Color { isDark ? Color.white.opacity(0.07) : Color.black.opacity(0.105) }
+    /// Outlines a control, not a container: heavier than `cardStroke` so a
+    /// button reads as something you can press rather than as a faint edge.
+    var border: Color { isDark ? Color.white.opacity(0.16) : Color.black.opacity(0.18) }
     var textPrimary: Color { isDark ? Color.white.opacity(0.92) : Color.black.opacity(0.86) }
-    var textSecondary: Color { isDark ? Color.white.opacity(0.52) : Color.black.opacity(0.56) }
-    var textTertiary: Color { isDark ? Color.white.opacity(0.34) : Color.black.opacity(0.42) }
+    /// 62 % / 64 %: explanation copy. Both stay above 6:1 on `card`.
+    var textSecondary: Color { isDark ? Color.white.opacity(0.62) : Color.black.opacity(0.64) }
+    /// 50 % / 55 %: the lightest text the app allows. Chosen against measured
+    /// contrast, not by eye — 34 % / 42 % sat at 3.0:1 while carrying 10–11 pt
+    /// labels, and the plan's 48 % / 56 % landed at 4.51 / 4.47, i.e. one point
+    /// on each side of the 4.5 line. `Tools/contrast_check.py` enforces this.
+    var textTertiary: Color { isDark ? Color.white.opacity(0.50) : Color.black.opacity(0.55) }
     var accent: Color { Color(red: 0.04, green: 0.52, blue: 1.0) }
     var selectedSidebar: Color { isDark ? Color.white.opacity(0.09) : Color.black.opacity(0.06) }
+    /// Keyboard focus ring. Declared here so focus styling has one source; the
+    /// focus states themselves arrive with U2-03.
+    var focusRing: Color { isDark ? Color(red: 0.29, green: 0.62, blue: 1.0) : Color(red: 0.04, green: 0.42, blue: 0.86) }
+
+    // MARK: - Semantic colours
+    //
+    // One token per meaning, so a view never writes `Color(red: 1, green: 0.27,
+    // blue: 0.23)` to mean "wrong". Values are chosen for ≥ 4.5:1 on `card`;
+    // the light variants are the darker halves of the same hue.
+
+    /// #3FB950 / #1A7F37
+    var success: Color { isDark ? Color(red: 0.247, green: 0.725, blue: 0.314) : Color(red: 0.102, green: 0.498, blue: 0.216) }
+    /// #D29922 / #8A5B00
+    var warning: Color { isDark ? Color(red: 0.824, green: 0.600, blue: 0.133) : Color(red: 0.541, green: 0.357, blue: 0.000) }
+    /// #FF6B62 / #CF222E — the plan's #F85149 measured 4.28:1 on `card`, so the
+    /// dark half is one step brighter.
+    var danger: Color { isDark ? Color(red: 1.000, green: 0.420, blue: 0.384) : Color(red: 0.812, green: 0.133, blue: 0.180) }
+    /// Neutral notice; the accent is already the "look here" colour.
+    var info: Color { accent }
+
+    // MARK: - Series colours
+    //
+    // The flow diagram and the dashboard chips share one palette. It is brighter
+    // than `chart*` on purpose — those sit under a line, these are the line — and
+    // the light variants are darker so the same colour works as 10 pt chip text
+    // on a white card.
+
+    var flowAdapter: Color { isDark ? Color(red: 0.95, green: 0.72, blue: 0.30) : Color(red: 0.604, green: 0.404, blue: 0.000) }
+    var flowSystem: Color { isDark ? Color(red: 0.36, green: 0.58, blue: 0.98) : Color(red: 0.122, green: 0.373, blue: 0.816) }
+    var flowBattery: Color { isDark ? Color(red: 0.30, green: 0.78, blue: 0.45) : Color(red: 0.102, green: 0.498, blue: 0.216) }
+    var flowSoC: Color { isDark ? Color(red: 0.60, green: 0.53, blue: 1.00) : Color(red: 0.420, green: 0.306, blue: 0.839) }
+    var flowUSB: Color { isDark ? Color(red: 0.60, green: 0.60, blue: 0.65) : Color(red: 0.353, green: 0.353, blue: 0.388) }
+    var flowOther: Color { isDark ? Color(red: 0.30, green: 0.68, blue: 0.60) : Color(red: 0.102, green: 0.420, blue: 0.369) }
+
     var chartGreen: Color { Color(red: 0.29, green: 0.62, blue: 0.36) }
     var chartBlue: Color { Color(red: 0.25, green: 0.55, blue: 1.0) }
     var chartPurple: Color { Color(red: 0.60, green: 0.42, blue: 0.95) }
@@ -194,7 +236,7 @@ struct ChipButton: View {
                 Capsule().fill(selected ? theme.accent : theme.innerControl)
             )
             .overlay(
-                Capsule().strokeBorder(selected ? Color.clear : theme.cardStroke, lineWidth: 1)
+                Capsule().strokeBorder(selected ? Color.clear : theme.border, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)

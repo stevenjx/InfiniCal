@@ -189,11 +189,11 @@ struct ChargeControlView: View {
                 HStack(spacing: 0) {
                     adapterMetric(t("系统"), watts(adapter.systemWatts), theme.chartBlue)
                     adapterMetric(t("电池"), batteryText(adapter.batteryWatts),
-                                  adapter.batteryWatts < 0 ? Color(red: 1, green: 0.27, blue: 0.23) : theme.chartGreen)
+                                  adapter.batteryWatts < 0 ? theme.danger : theme.chartGreen)
                     if adapter.ratedWatts > 0 {
                         adapterMetric(t("余量"), signedWatts(adapter.headroomWatts),
                                       adapter.headroomWatts < 0
-                                        ? Color(red: 1, green: 0.27, blue: 0.23)
+                                        ? theme.danger
                                         : (adapter.level == .tight ? theme.chartOrange : theme.textSecondary))
                     }
                 }
@@ -207,7 +207,7 @@ struct ChargeControlView: View {
                 if adapter.level == .insufficient {
                     Text(t("当前适配器功率低于系统负载，电池正在放电。换用更大功率的适配器或降低负载。"))
                         .font(Typography.caption)
-                        .foregroundColor(Color(red: 1, green: 0.27, blue: 0.23))
+                        .foregroundColor(theme.danger)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -230,7 +230,7 @@ struct ChargeControlView: View {
         switch adapter.level {
         case .good: return (t("余量充足"), theme.chartGreen)
         case .tight: return (t("接近满载"), theme.chartOrange)
-        case .insufficient: return (t("功率不足"), Color(red: 1, green: 0.27, blue: 0.23))
+        case .insufficient: return (t("功率不足"), theme.danger)
         }
     }
 

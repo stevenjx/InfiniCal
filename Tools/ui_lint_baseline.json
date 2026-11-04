@@ -13,12 +13,7 @@
    "PanelsAutomation.swift": 2,
    "PanelsBattery.swift": 1
   },
-  "literal-color": {
-   "ChargeControlView.swift": 4,
-   "DashboardView.swift": 5,
-   "PanelsAppearance.swift": 2,
-   "PowerFlowView.swift": 7
-  },
+  "literal-color": {},
   "literal-radius": {
    "CalibrationPanel.swift": 7,
    "ChargeControlView.swift": 1,

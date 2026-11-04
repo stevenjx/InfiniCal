@@ -177,8 +177,8 @@ struct OtherView: View {
 
     private func color(for quality: PowerQuality) -> Color {
         switch quality {
-        case .measured: return Color(red: 0.30, green: 0.78, blue: 0.45)
-        case .estimated: return Color(red: 0.95, green: 0.72, blue: 0.30)
+        case .measured: return theme.success
+        case .estimated: return theme.warning
         case .unavailable: return theme.textTertiary
         }
     }

@@ -308,15 +308,15 @@ private struct PowerFlowCard: View {
         Card(padding: 12) {
             VStack(spacing: 10) {
                 HStack(spacing: 8) {
-                    chip("powerplug.fill", t("电源适配器"), PowerFormat.watts(state.snapshot.isPluggedIn ? flowTicker.shownSource : 0), tint: Color(red: 0.95, green: 0.72, blue: 0.30))
+                    chip("powerplug.fill", t("电源适配器"), PowerFormat.watts(state.snapshot.isPluggedIn ? flowTicker.shownSource : 0), tint: theme.flowAdapter)
                     divider
-                    chip("laptopcomputer", "MacBook", PowerFormat.watts(flowTicker.shownSystem), tint: Color(red: 0.36, green: 0.58, blue: 0.98))
+                    chip("laptopcomputer", "MacBook", PowerFormat.watts(flowTicker.shownSystem), tint: theme.flowSystem)
                     divider
-                    chip("battery.100", t("电池"), PowerFormat.signedWatts(state.snapshot.voltage * state.snapshot.amperage), tint: Color(red: 0.30, green: 0.78, blue: 0.45))
+                    chip("battery.100", t("电池"), PowerFormat.signedWatts(state.snapshot.voltage * state.snapshot.amperage), tint: theme.flowBattery)
                     divider
-                    chip("cpu", "SoC", reading(state.soc, flowTicker.shownSinks["soc"]), tint: Color(red: 0.55, green: 0.47, blue: 0.96))
+                    chip("cpu", "SoC", reading(state.soc, flowTicker.shownSinks["soc"]), tint: theme.flowSoC)
                     divider
-                    chip("display", t("显示"), reading(state.displayPower, flowTicker.shownSinks["display"]), tint: Color(red: 0.36, green: 0.58, blue: 0.98))
+                    chip("display", t("显示"), reading(state.displayPower, flowTicker.shownSinks["display"]), tint: theme.flowSystem)
                     divider
                     chip("ellipsis", t("其他"), PowerFormat.watts(flowTicker.shownSinks["other"]))
                     Spacer(minLength: 0)
