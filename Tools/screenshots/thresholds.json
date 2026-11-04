@@ -1,0 +1,8 @@
+{
+ "default": 0.02,
+ "_comment": "允许的像素差异比例。默认 2%。充电控制页在适配器实际供电时会多出「适配器转换损耗」一行，整页下移，故单独放宽到 10%。",
+ "overrides": {
+  "dark/chargeControl.png": 0.1,
+  "light/chargeControl.png": 0.1
+ }
+}

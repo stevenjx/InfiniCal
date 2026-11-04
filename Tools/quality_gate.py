@@ -11,6 +11,7 @@ from pathlib import Path
 import plistlib
 import re
 import subprocess
+import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -18,6 +19,20 @@ ROOT = Path(__file__).resolve().parent.parent
 
 def run(*args):
     subprocess.run([str(a) for a in args], check=True)
+
+
+def ui_lint():
+    """Design-token ratchet: font/colour/radius/padding counts may only go down.
+
+    Run as a separate process so the lint stays usable on its own
+    (`python3 Tools/ui_lint.py --list`) and cannot import app state by accident.
+    """
+    result = subprocess.run([sys.executable, str(ROOT / "Tools/ui_lint.py")],
+                            capture_output=True, text=True)
+    if result.returncode != 0:
+        sys.stderr.write(result.stderr or result.stdout)
+        raise SystemExit("ui_lint failed")
+    print(result.stdout.strip(), flush=True)
 
 
 def source_gate():
@@ -70,6 +85,7 @@ def source_gate():
     for builder in ("build.sh", "Tools/generate_xcodeproj.py"):
         assert "Sparkle" in (ROOT / builder).read_text(), builder + " does not link Sparkle"
     run("git", "-C", ROOT, "diff", "--check")
+    ui_lint()
     print("PASS source/version/localization gate", flush=True)
 
 
@@ -1019,11 +1035,29 @@ def artifact_gate(dmg):
     print("PASS artifact gate (ad-hoc signature is not Apple notarization)", flush=True)
 
 
+def screenshots():
+    """Compare Tools/screenshots/current against the committed baseline."""
+    current = ROOT / "Tools/screenshots/current"
+    if not current.is_dir():
+        raise SystemExit("no current screenshots — run bash Tools/capture_panels.sh first")
+    result = subprocess.run([sys.executable, str(ROOT / "Tools/compare_screenshots.py")],
+                            capture_output=True, text=True)
+    sys.stdout.write(result.stdout)
+    if result.returncode != 0:
+        sys.stderr.write(result.stderr)
+        raise SystemExit("screenshot gate failed")
+    print(result.stderr.strip(), flush=True)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("stage", choices=["source", "test", "artifact", "all"], default="all", nargs="?")
+    parser.add_argument("stage", choices=["source", "test", "artifact", "screenshots", "all"],
+                        default="all", nargs="?")
     parser.add_argument("--dmg")
     args = parser.parse_args()
     if args.stage in ("source", "all"): source_gate()
     if args.stage in ("test", "all"): tests()
     if args.stage in ("artifact", "all"): artifact_gate(args.dmg)
+    # Screenshots are deliberately outside `all`: they need a built app, a
+    # visible window and a capture run, so they are a separate, explicit step.
+    if args.stage == "screenshots": screenshots()

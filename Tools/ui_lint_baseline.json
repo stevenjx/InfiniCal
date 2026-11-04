@@ -1,0 +1,54 @@
+{
+ "rules": {
+  "bare-font": {
+   "AdviceCard.swift": 8,
+   "CalibrationPanel.swift": 109,
+   "ChargeControlView.swift": 23,
+   "Charts.swift": 4,
+   "DashboardView.swift": 20,
+   "DeviceProfileCard.swift": 13,
+   "FanControlView.swift": 46,
+   "FirstRunHelperSheet.swift": 3,
+   "HardwareDiagnosticsView.swift": 11,
+   "HistoryPanel.swift": 36,
+   "MenuBar.swift": 19,
+   "PanelsAppearance.swift": 17,
+   "PanelsAutomation.swift": 27,
+   "PanelsBattery.swift": 9,
+   "PowerFlowView.swift": 8,
+   "RootView.swift": 9
+  },
+  "card-padding": {
+   "AdviceCard.swift": 1,
+   "CalibrationPanel.swift": 15,
+   "ChargeControlView.swift": 4,
+   "DashboardView.swift": 4,
+   "DeviceProfileCard.swift": 1,
+   "FanControlView.swift": 5,
+   "HardwareDiagnosticsView.swift": 1,
+   "HistoryPanel.swift": 5,
+   "PanelsAutomation.swift": 2,
+   "PanelsBattery.swift": 1
+  },
+  "literal-color": {
+   "ChargeControlView.swift": 4,
+   "DashboardView.swift": 5,
+   "PanelsAppearance.swift": 2,
+   "PowerFlowView.swift": 7
+  },
+  "literal-radius": {
+   "CalibrationPanel.swift": 7,
+   "ChargeControlView.swift": 1,
+   "DashboardView.swift": 2,
+   "DeviceProfileCard.swift": 1,
+   "HardwareDiagnosticsView.swift": 1,
+   "HistoryPanel.swift": 1,
+   "MenuBar.swift": 2,
+   "PanelsAppearance.swift": 3,
+   "PanelsAutomation.swift": 3,
+   "PowerFlowView.swift": 7,
+   "RootView.swift": 2
+  }
+ },
+ "version": 1
+}
