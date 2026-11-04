@@ -383,7 +383,6 @@
  "尚未开始": "Not started",
  "就绪": "Ready",
  "屏幕功耗": "Display power",
- "峰值 {p}": "Peak {p}",
  "差异:": "Delta:",
  "已停止放电负载": "Discharge load stopped",
  "已停转（正常待机）": "Stopped (idle)",
@@ -877,5 +876,6 @@
  "上限 {p} RPM": "Max {p} RPM",
  "偏高": "High",
  "按设定转速运行": "Running at the set speed",
- "等待传感器读数": "Waiting for a sensor reading"
+ "等待传感器读数": "Waiting for a sensor reading",
+ "今天": "Today"
 }

@@ -66,13 +66,13 @@ struct HistoryView: View {
 
     private var alertCenter: some View {
         Card {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: Spacing.s) {
                 CardHeader(title: t("异常告警"),
                            subtitle: t("仅在 App 运行并持续观测时判断；提醒是异常证据，不是硬件故障诊断。"))
                 if alerts.events.isEmpty { Text(t("暂无异常记录")).font(Typography.caption) }
                 ForEach(alerts.events) { event in
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
+                    VStack(alignment: .leading, spacing: Spacing.xs) {
+                        HStack(spacing: Spacing.s) {
                             Text(t(event.title))
                             Spacer()
                             Text(event.date, style: .time)
@@ -93,7 +93,7 @@ struct HistoryView: View {
     private var healthTrends: some View {
         let window = HealthWindow(days: history.days, records: calibration.records, count: range.value)
         return Card {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: Spacing.m) {
                 CardHeader(title: t("电池健康趋势"),
                            subtitle: tf("有效日样本 {p} · 有效校准 {p} · 未评估或低质量 {p}",
                                         "\(window.days.count)", "\(window.records.count)",
@@ -196,7 +196,7 @@ struct HistoryView: View {
     // MARK: - Summary
 
     private var summary: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Spacing.m) {
             summaryCard(t("充入"), energy(totalCharge), "arrow.down.to.line", theme.chartGreen)
             summaryCard(t("放出"), energy(totalDischarge), "arrow.up.to.line", theme.chartOrange)
             summaryCard(t("平均温度"), String(format: "%.1f °C", averageTemperature), "thermometer.medium", theme.chartBlue)
@@ -204,23 +204,26 @@ struct HistoryView: View {
         }
     }
 
+    /// Three lines in every tile: label, figure, period. The label was `caption`
+    /// (11 regular) and the figure `title` (15) — the same sizes the page used
+    /// for body copy, so a stat tile did not read as a stat.
     private func summaryCard(_ title: String, _ value: String, _ symbol: String, _ tint: Color) -> some View {
         Card(padding: .compact) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 5) {
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                HStack(spacing: Spacing.xs) {
                     Image(systemName: symbol)
                         .font(Glyph.inline)
                         .foregroundColor(tint)
                     Text(title)
-                        .font(Typography.caption)
+                        .font(Typography.label)
                         .foregroundColor(theme.textSecondary)
                     Spacer(minLength: 0)
                 }
                 Text(value)
-                    .font(Typography.title.monospacedDigit())
+                    .font(Typography.figure)
                     .foregroundColor(theme.textPrimary)
                 Text(tf("近 {p} 天", "\(range.value)"))
-                    .font(Typography.micro)
+                    .font(Typography.caption)
                     .foregroundColor(theme.textTertiary)
             }
         }
@@ -231,35 +234,87 @@ struct HistoryView: View {
 
     private var chartCard: some View {
         Card {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 10) {
-                    Text(t("每日充放电"))
-                        .font(Typography.headline)
-                        .foregroundColor(theme.textPrimary)
-                    legend(t("充入"), theme.chartGreen)
-                    legend(t("放出"), theme.chartOrange)
-                    Spacer()
-                    Text(peakText)
-                        .font(Typography.caption)
-                        .foregroundColor(theme.textTertiary)
+            VStack(alignment: .leading, spacing: Spacing.m) {
+                CardHeader(title: t("每日充放电")) {
+                    HStack(spacing: Spacing.m) {
+                        legend(t("充入"), theme.chartGreen)
+                        legend(t("放出"), theme.chartOrange)
+                        Text("Wh")
+                            .font(Typography.micro)
+                            .foregroundColor(theme.textTertiary)
+                    }
                 }
-                DailyBarChart(stats: stats)
-                    .frame(height: 132)
-                HStack {
-                    Text(Self.dayLabel(stats.first?.day))
-                        .font(Typography.micro)
-                        .foregroundColor(theme.textTertiary)
-                    Spacer()
-                    Text(Self.dayLabel(stats.last?.day))
-                        .font(Typography.micro)
-                        .foregroundColor(theme.textTertiary)
+
+                // The bars had no scale at all: a 29 Wh day and a 3 Wh day were
+                // the same shape, only taller or shorter, with no number to
+                // anchor either. Three ticks and a grid, same as `MiniChart`.
+                HStack(alignment: .top, spacing: Spacing.s) {
+                    VStack(spacing: Spacing.xs) {
+                        DailyBarChart(stats: stats, axisMax: barAxisMax)
+                            .frame(height: 120)
+                        dayAxis
+                    }
+                    barTicks
+                        .frame(width: 40, height: 120)
                 }
             }
         }
     }
 
+    /// Rounded up to 1 / 1.5 / 2 / 2.5 / 3 / 4 / 5 / 6 / 8 / 10 × 10ⁿ so the
+    /// top tick is a number a person would write, and the tallest bar still
+    /// reaches most of the way up.
+    private var barAxisMax: Double {
+        let peak = stats.map { max($0.chargeWh, $0.dischargeWh) }.max() ?? 0
+        guard peak > 0 else { return 1 }
+        let exponent = floor(log10(peak))
+        let base = pow(10, exponent)
+        let scaled = peak / base
+        let steps: [Double] = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]
+        let step = steps.first { scaled <= $0 + 1e-9 } ?? 10
+        return step * base
+    }
+
+    private var barTicks: some View {
+        let max = barAxisMax
+        return VStack(alignment: .trailing, spacing: 0) {
+            tick(max).frame(maxHeight: .infinity, alignment: .top)
+            tick(max / 2).frame(maxHeight: .infinity, alignment: .center)
+            tick(0).frame(maxHeight: .infinity, alignment: .bottom)
+        }
+    }
+
+    private func tick(_ value: Double) -> some View {
+        Text(String(format: "%.0f", value))
+            .font(Typography.micro)
+            .foregroundColor(theme.textTertiary)
+            .fixedSize()
+    }
+
+    /// First, middle, and today. The last bar is always today — `series(days:)`
+    /// ends on the current day — so the right-hand label says so instead of
+    /// repeating a date the reader has to compare against the clock.
+    private var dayAxis: some View {
+        HStack(spacing: 0) {
+            Text(Self.dayLabel(stats.first?.day))
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(Self.dayLabel(middleDay))
+                .frame(maxWidth: .infinity, alignment: .center)
+            Text(t("今天"))
+                .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+        .font(Typography.micro)
+        .foregroundColor(theme.textTertiary)
+        .lineLimit(1)
+    }
+
+    private var middleDay: Date? {
+        let index = stats.count / 2
+        return stats.indices.contains(index) ? stats[index].day : nil
+    }
+
     private func legend(_ title: String, _ color: Color) -> some View {
-        HStack(spacing: 4) {
+        HStack(spacing: Spacing.xs) {
             Circle().fill(color).frame(width: 6, height: 6)
             Text(title)
                 .font(Typography.caption)
@@ -267,61 +322,61 @@ struct HistoryView: View {
         }
     }
 
-    private var peakText: String {
-        let peak = stats.map { max($0.chargeWh, $0.dischargeWh) }.max() ?? 0
-        return peak > 0 ? tf("峰值 {p}", energy(peak)) : ""
-    }
-
     // MARK: - List
+
+    private let dateColumnWidth: CGFloat = 88
 
     private var listCard: some View {
         Card(kind: .list) {
             VStack(spacing: 0) {
-                HStack(spacing: 0) {
-                    Text(t("日期")).frame(width: 96, alignment: .leading)
-                    Text(t("充入")).frame(maxWidth: .infinity, alignment: .trailing)
-                    Text(t("放出")).frame(maxWidth: .infinity, alignment: .trailing)
-                    Text(t("温度")).frame(maxWidth: .infinity, alignment: .trailing)
-                    Text(t("电量区间")).frame(maxWidth: .infinity, alignment: .trailing)
-                    Text(t("接电")).frame(maxWidth: .infinity, alignment: .trailing)
-                }
-                .font(Typography.caption)
-                .foregroundColor(theme.textTertiary)
-                .padding(.horizontal, CardPadding.regular)
-                .padding(.vertical, 8)
-
+                tableLine(t("日期"),
+                          [t("充入"), t("放出"), t("温度"), t("电量区间"), t("接电")],
+                          header: true)
                 Divider().background(theme.divider)
-
-                ForEach(stats.reversed()) { stat in
-                    HStack(spacing: 0) {
-                        Text(Self.dayLabel(stat.day))
-                            .frame(width: 96, alignment: .leading)
-                            .foregroundColor(theme.textPrimary)
-                        Text(stat.isEmpty ? "—" : energy(stat.chargeWh))
-                            .frame(maxWidth: .infinity, alignment: .trailing)
-                            .foregroundColor(theme.textPrimary)
-                        Text(stat.isEmpty ? "—" : energy(stat.dischargeWh))
-                            .frame(maxWidth: .infinity, alignment: .trailing)
-                            .foregroundColor(theme.textPrimary)
-                        Text(stat.isEmpty ? "—" : String(format: "%.0f °C", stat.averageTemperature))
-                            .frame(maxWidth: .infinity, alignment: .trailing)
-                            .foregroundColor(theme.textSecondary)
-                        Text(stat.isEmpty ? "—" : "\(stat.minPercentage)–\(stat.maxPercentage)%")
-                            .frame(maxWidth: .infinity, alignment: .trailing)
-                            .foregroundColor(theme.textSecondary)
-                        Text(stat.isEmpty ? "—" : String(format: "%.1f h", stat.pluggedHours))
-                            .frame(maxWidth: .infinity, alignment: .trailing)
-                            .foregroundColor(theme.textSecondary)
-                    }
-                    .font(Typography.caption.monospacedDigit())
-                    .padding(.horizontal, CardPadding.regular)
-                    .padding(.vertical, 7)
-                    .opacity(stat.isEmpty ? 0.45 : 1)
-
-                    Divider().background(theme.divider)
+                ForEach(Array(stats.reversed().enumerated()), id: \.element.id) { index, stat in
+                    tableLine(Self.dayLabel(stat.day),
+                              [stat.isEmpty ? "—" : energy(stat.chargeWh),
+                               stat.isEmpty ? "—" : energy(stat.dischargeWh),
+                               stat.isEmpty ? "—" : String(format: "%.0f °C", stat.averageTemperature),
+                               stat.isEmpty ? "—" : "\(stat.minPercentage)–\(stat.maxPercentage)%",
+                               stat.isEmpty ? "—" : String(format: "%.1f h", stat.pluggedHours)],
+                              header: false,
+                              striped: index % 2 == 1,
+                              dimmed: stat.isEmpty)
                 }
             }
         }
+    }
+
+    /// One row shape for the header and the body, so the two cannot drift apart.
+    /// 28 pt rows with a 3 % band on every other line: the divider-per-row this
+    /// replaces drew a rule under every line and still left the eye nothing to
+    /// follow across six columns.
+    ///
+    /// Column widths stay `maxWidth: .infinity` rather than measured: the plan
+    /// said the numbers were not right-aligned, but the old header and rows
+    /// measured 0–2 px apart on the right edge, so equal-share columns already
+    /// worked and a width-measuring pass would have been machinery for nothing.
+    private func tableLine(_ date: String,
+                           _ cells: [String],
+                           header: Bool,
+                           striped: Bool = false,
+                           dimmed: Bool = false) -> some View {
+        HStack(spacing: 0) {
+            Text(date)
+                .frame(width: dateColumnWidth, alignment: .leading)
+                .foregroundColor(header ? theme.textTertiary : theme.textPrimary)
+            ForEach(Array(cells.enumerated()), id: \.offset) { _, value in
+                Text(value)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .foregroundColor(header ? theme.textTertiary : theme.textSecondary)
+            }
+        }
+        .font(header ? Typography.label : Typography.caption.monospacedDigit())
+        .padding(.horizontal, CardPadding.regular)
+        .frame(height: 28)
+        .background(striped ? theme.textPrimary.opacity(0.03) : Color.clear)
+        .opacity(dimmed ? 0.45 : 1)
     }
 
     private var emptyState: some View {
@@ -374,30 +429,42 @@ struct HistoryView: View {
 
 private struct DailyBarChart: View {
     let stats: [DailyStat]
+    /// Shared with the tick column, so a bar's height and the number beside it
+    /// mean the same thing.
+    let axisMax: Double
     private var theme: Theme { Theme.current }
-
-    private var peak: Double {
-        max(1, stats.map { max($0.chargeWh, $0.dischargeWh) }.max() ?? 1)
-    }
 
     var body: some View {
         GeometryReader { geo in
             let height = geo.size.height
-            HStack(alignment: .bottom, spacing: 2) {
-                ForEach(stats) { stat in
-                    HStack(alignment: .bottom, spacing: 1.5) {
-                        bar(value: stat.chargeWh, height: height, color: theme.chartGreen)
-                        bar(value: stat.dischargeWh, height: height, color: theme.chartOrange)
+            ZStack(alignment: .bottom) {
+                VStack(spacing: 0) {
+                    gridLine
+                    Spacer(minLength: 0)
+                    gridLine
+                    Spacer(minLength: 0)
+                    gridLine
+                }
+                HStack(alignment: .bottom, spacing: 2) {
+                    ForEach(stats) { stat in
+                        HStack(alignment: .bottom, spacing: 1.5) {
+                            bar(value: stat.chargeWh, height: height, color: theme.chartGreen)
+                            bar(value: stat.dischargeWh, height: height, color: theme.chartOrange)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .bottom)
                     }
-                    .frame(maxWidth: .infinity, alignment: .bottom)
                 }
             }
         }
     }
 
+    private var gridLine: some View {
+        Rectangle().fill(theme.divider).frame(height: 1)
+    }
+
     private func bar(value: Double, height: CGFloat, color: Color) -> some View {
-        let fraction = min(1, max(0, value / peak))
-        return RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+        let fraction = min(1, max(0, value / max(axisMax, 1)))
+        return Capsule()
             .fill(value > 0 ? color : theme.divider.opacity(0.5))
             .frame(maxWidth: 14)
             .frame(height: value > 0 ? max(1.5, height * CGFloat(fraction)) : 1.5)

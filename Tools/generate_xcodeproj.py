@@ -495,7 +495,7 @@ app_common = '''\t\t\t\tMACOSX_DEPLOYMENT_TARGET = 12.0;
 \t\t\t\t);
 \t\t\t\tASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
 \t\t\t\tCOMBINE_HIDPI_IMAGES = YES;
-\t\t\t\tCURRENT_PROJECT_VERSION = 32;
+\t\t\t\tCURRENT_PROJECT_VERSION = 33;
 \t\t\t\tENABLE_PREVIEWS = YES;
 \t\t\t\tGENERATE_INFOPLIST_FILE = NO;
 \t\t\t\tINFOPLIST_FILE = Resources/Info.plist;
@@ -518,7 +518,7 @@ helper_common = '''\t\t\t\tMACOSX_DEPLOYMENT_TARGET = 12.0;
 \t\t\t\t\tarm64,
 \t\t\t\t\tx86_64,
 \t\t\t\t);
-\t\t\t\tCURRENT_PROJECT_VERSION = 32;
+\t\t\t\tCURRENT_PROJECT_VERSION = 33;
 \t\t\t\tGENERATE_INFOPLIST_FILE = NO;
 \t\t\t\tMARKETING_VERSION = 1.0.26;
 \t\t\t\tPRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical.helper;
