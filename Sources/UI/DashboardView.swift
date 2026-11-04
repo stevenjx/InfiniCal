@@ -9,65 +9,59 @@ struct DashboardView: View {
     private var theme: Theme { Theme.current }
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(spacing: 14) {
-                PowerFlowCard(state: state, theme: theme)
-                    .frame(height: 224)
-                // No fixed height here: "电池规格" needs more than 172 pt for its
-                // six rows, so it overflowed while the two cards with a Spacer
-                // stopped at 172 and ended 18 px higher. Letting the tallest card
-                // define the row (Spacers make the others match) keeps all three
-                // bottom edges on one line.
-                HStack(alignment: .top, spacing: 14) {
-                    batterySpecs.frame(maxWidth: .infinity)
-                    batteryHealth.frame(maxWidth: .infinity)
-                    adapterSpecs.frame(maxWidth: .infinity)
-                }
-                // One row of four equal charts. The right column used to sit next to
-                // these, which squeezed each card to ~90 pt and wrapped the titles.
-                HStack(alignment: .top, spacing: 14) {
-                    chartCard(title: t("电池电量"),
-                              value: "\(state.snapshot.percentage) %",
-                              symbol: "battery.100",
-                              color: theme.chartGreen,
-                              points: state.history.battery,
-                              limit: state.limitMarkerFraction,
-                              range: 0...100)
-                    chartCard(title: t("电池温度"),
-                              value: state.snapshot.temperature > 0 ? String(format: "%.0f°C", state.snapshot.temperature) : "--",
-                              symbol: "thermometer",
-                              color: theme.chartBlue,
-                              points: state.history.temperature,
-                              limit: nil,
-                              range: nil)
-                    chartCard(title: t("耗电量"),
-                              value: PowerFormat.watts(state.energyUseWatts),
-                              caption: remainingTimeText,
-                              symbol: "bolt.horizontal",
-                              color: theme.chartPurple,
-                              points: state.history.power,
-                              limit: nil,
-                              range: nil)
-                    chartCard(title: t("最大容量"),
-                              value: "\(state.snapshot.healthPercent) %",
-                              caption: "\(state.snapshot.maxCapacity) / \(state.snapshot.designCapacity) mAh",
-                              symbol: "heart",
-                              color: theme.chartOrange,
-                              points: state.history.capacity,
-                              limit: nil,
-                              range: nil)
-                }
-
-                // Same rule for the bottom row.
-                HStack(alignment: .top, spacing: 14) {
-                    highUsageCard
-                    calibrationCard
-                }
+        PageScaffold(title: Panel.dashboard.title, symbol: Panel.dashboard.symbol) {
+        PowerFlowCard(state: state, theme: theme)
+                .frame(height: 224)
+            // No fixed height here: "电池规格" needs more than 172 pt for its
+            // six rows, so it overflowed while the two cards with a Spacer
+            // stopped at 172 and ended 18 px higher. Letting the tallest card
+            // define the row (Spacers make the others match) keeps all three
+            // bottom edges on one line.
+            HStack(alignment: .top, spacing: 14) {
+                batterySpecs.frame(maxWidth: .infinity)
+                batteryHealth.frame(maxWidth: .infinity)
+                adapterSpecs.frame(maxWidth: .infinity)
             }
-            // Slightly tighter vertically: the spec row is no longer hard-coded to
-            // 172 pt, which pushed the bottom row past the window edge.
-            .padding(.horizontal, 18)
-            .padding(.vertical, 14)
+            // One row of four equal charts. The right column used to sit next to
+            // these, which squeezed each card to ~90 pt and wrapped the titles.
+            HStack(alignment: .top, spacing: 14) {
+                chartCard(title: t("电池电量"),
+                          value: "\(state.snapshot.percentage) %",
+                          symbol: "battery.100",
+                          color: theme.chartGreen,
+                          points: state.history.battery,
+                          limit: state.limitMarkerFraction,
+                          range: 0...100)
+                chartCard(title: t("电池温度"),
+                          value: state.snapshot.temperature > 0 ? String(format: "%.0f°C", state.snapshot.temperature) : "--",
+                          symbol: "thermometer",
+                          color: theme.chartBlue,
+                          points: state.history.temperature,
+                          limit: nil,
+                          range: nil)
+                chartCard(title: t("耗电量"),
+                          value: PowerFormat.watts(state.energyUseWatts),
+                          caption: remainingTimeText,
+                          symbol: "bolt.horizontal",
+                          color: theme.chartPurple,
+                          points: state.history.power,
+                          limit: nil,
+                          range: nil)
+                chartCard(title: t("最大容量"),
+                          value: "\(state.snapshot.healthPercent) %",
+                          caption: "\(state.snapshot.maxCapacity) / \(state.snapshot.designCapacity) mAh",
+                          symbol: "heart",
+                          color: theme.chartOrange,
+                          points: state.history.capacity,
+                          limit: nil,
+                          range: nil)
+            }
+
+            // Same rule for the bottom row.
+            HStack(alignment: .top, spacing: 14) {
+                highUsageCard
+                calibrationCard
+            }
         }
     }
 

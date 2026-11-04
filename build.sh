@@ -59,6 +59,7 @@ SOURCES=(
   "$ROOT/Sources/Core/Metrics.swift"
   "$ROOT/Sources/Core/Theme.swift"
   "$ROOT/Sources/Core/AppState.swift"
+  "$ROOT/Sources/UI/PageScaffold.swift"
   "$ROOT/Sources/UI/Charts.swift"
   "$ROOT/Sources/UI/PowerFlowView.swift"
   "$ROOT/Sources/UI/DashboardView.swift"

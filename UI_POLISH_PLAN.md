@@ -127,10 +127,12 @@ Card(kind: .plain | .list, padding: .regular | .compact)
 > —— 表格与滚动列表要满幅、要裁切圆角。
 
 ```
-PageScaffold(title, symbol, help?, toolbar: { ... }) { scrollContent }
-  ├─ 固定页头（标题 15 + 帮助点 + 右侧控件）
-  ├─ ScrollView（水平 20 / 垂直 16）
-  └─ EmptyState(symbol, title, message, action?)       // 统一空态
+PageScaffold(title, symbol?, help?, toolbar: { ... }) { content }
+  ├─ 固定页头（图标 + 标题 15 + 帮助点 + 右侧控件），不随内容滚动
+  └─ ScrollView（水平 20 / 上 12 / 下 16，卡片间距 12）
+
+EmptyState(symbol, title, message?, layout: .stacked | .inline, action?)
+  // 由页面放进卡片里，不由 PageScaffold 代劳：空态的容器（卡片 / 列表槽位）各页不同
 ```
 
 `PageScaffold` 顺带解决窗口顶部让位问题：现在侧边栏用 `Color.clear.frame(height: 36)`
@@ -265,7 +267,7 @@ PageScaffold(title, symbol, help?, toolbar: { ... }) { scrollContent }
 - `literal-radius` 仍有 30 处（`RoundedRectangle(cornerRadius: 7/8/9/10/11)`）。
   U0-03 只收卡片与标题，这些散落的容器圆角留给对应的逐页改造。
 
-#### U0-04 页面骨架与空态 — ❌ 未开始
+#### U0-04 页面骨架与空态 — ✅ 已完成（1.0.24）
 
 - **目标**：8 个面板用同一套页头、内边距与空态。
 - **交付**：
@@ -274,6 +276,43 @@ PageScaffold(title, symbol, help?, toolbar: { ... }) { scrollContent }
   - 侧边栏顶部改为安全区驱动，去掉硬编码的 36pt。
 - **验收**：每页都有同位置的标题与右侧操作区；内容水平内边距统一 20；空态有图标、标题、一句说明，高度不超过 160pt；最小窗口 980×640 下页头不折行。
 - **依赖**：U0-03。
+
+**实现说明**
+
+- 8 个面板全部接进 `PageScaffold`：页头（图标 + 标题 15 + 帮助点 + 右侧操作区）在 `ScrollView`
+  之外，滚动时不动；内容水平 20、底部 16、卡片间距 12。此前 5 个页面的标题会跟着内容滚走，
+  2 个页面（仪表板、其他）根本没有标题，1 个（充电控制）的标题其实是个节名。
+- **页面标题统一取 `Panel.title`**（侧边栏里的名字），于是四处改名：
+  充电限制 → 充电控制、电池历史 → 历史、任务 → 定时设置、防止睡眠期间过度充电 → 睡眠与能源。
+  被换下来的两个节名没有丢：「充电限制」留在页头右侧当步进器的标签，
+  「防止睡眠期间过度充电」下沉为第一张卡的 `CardHeader`（原说明句变成它的 `subtitle`）。
+  这一条是「同位置的标题」的实质内容 —— 侧边栏说「历史」、页面写「电池历史」，读者要重新对号。
+- 水平内边距 18 / 20 / 22 三种 → **20**（`Spacing.xl`）。垂直方向：页头顶 12、内容顶 12、
+  内容底 16。窗口用 `.fullSizeContentView`，SwiftUI 已经把标题栏高度（本机实测 32pt）
+  作为安全区应用，所以这些数值是「标题栏之下」的真实间距。
+- `EmptyState` 两态：`stacked`（图标 30 + 标题 + 说明，居中，最大宽 360）用于历史页与定时页
+  两处空列表；`inline`（同一组元素横排）用于「此机型没有风扇」。
+  实测 `stacked` 高度约 **90pt**，低于验收的 160pt。
+- 侧边栏顶部：`Color.clear.frame(height: 36)` → `Spacing.s`（8）。实测结论是那个 36 在
+  **重复补偿**：SwiftUI 已经按安全区把整个栈下移了 32pt，再叠 36pt，第一个条目被压到
+  标题栏下方 68pt（截图量得）。改成 8 后是 40pt，仍是标题栏之下的呼吸空间。
+- 删掉只被 `RootView` 用一次的 `CalibrationPage` 包装，校准页直接就是 `CalibrationPanel`。
+- 新增 `Sources/UI/PageScaffold.swift`，同时登记进 `generate_xcodeproj.py` 与 `build.sh`
+  —— `quality_gate` 的源列表一致性检查就是为了抓「只加了工程、忘了加编译脚本」这种情况，
+  这次它确实抓到了（第一次跑就报 `APP_SOURCES source list drift`）。
+- 980×640 实测：临时把窗口建成最小尺寸截了 4 张（仪表板 / 历史 / 其他 / 充电控制），
+  历史页页头（标题 + 帮助 + 3 个 chip + 清除）单行不折行、不截断；截图后已把窗口尺寸改回
+  1080×720，`AppDelegate.swift` 无残留改动。
+- 16 张基线截图重录。整页位移导致差异 6–23%，逐张确认页头位置、对齐、无裁切后接受。
+
+**未覆盖**
+
+- 页内二级标题仍是三种写法：`SectionLabel`（「能源使用」「合盖模式」）、
+  `headline + IconBadge`（「高功耗的应用程序」「任务历史」）、`CardHeader`。
+  这是设置页与定时页的内部层级问题，属 U1-06 / U1-07，`PageScaffold` 只定一级页头。
+- 空态只收编了三处真正「整块为空」的地方。仪表板的「暂无」是行内占位（26pt 图标 + 一行字），
+  不是空态，留给 U1-02。
+- 弹窗（任务编辑器、校准历史、硬件诊断、更新）没有接入 `PageScaffold`，属 U1-09。
 
 ### 第二批：逐页重排（U1，依赖 U0 全部完成）
 
@@ -390,7 +429,7 @@ PageScaffold(title, symbol, help?, toolbar: { ... }) { scrollContent }
 | U0-01 | 设计令牌层 | ✅ 完成 |
 | U0-02 | 语义色与对比度 | ✅ 完成 |
 | U0-03 | 卡片与标题收口 | ✅ 完成 |
-| U0-04 | 页面骨架与空态 | ❌ 未开始 |
+| U0-04 | 页面骨架与空态 | ✅ 完成 |
 | U1-01 | 侧边栏 | ❌ 未开始 |
 | U1-02 | 仪表板 | ❌ 未开始 |
 | U1-03 | 电池校准页 | ❌ 未开始 |
@@ -406,7 +445,7 @@ PageScaffold(title, symbol, help?, toolbar: { ... }) { scrollContent }
 | U2-04 | 浅色模式 | ❌ 未开始 |
 | U2-05 | 视觉回归门禁 | ✅ 完成 |
 
-**统计：4 项完成 / 0 项部分完成 / 14 项未开始。**
+**统计：5 项完成 / 0 项部分完成 / 13 项未开始。**
 
 ---
 

@@ -60,6 +60,7 @@ APP_SOURCES = [
     "Sources/Core/Metrics.swift",
     "Sources/Core/Theme.swift",
     "Sources/Core/AppState.swift",
+    "Sources/UI/PageScaffold.swift",
     "Sources/UI/Charts.swift",
     "Sources/UI/PowerFlowView.swift",
     "Sources/UI/DashboardView.swift",

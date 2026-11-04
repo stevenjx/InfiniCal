@@ -11,17 +11,6 @@
 import SwiftUI
 import AppKit
 
-/// Sidebar page wrapper — 电池校准 has its own entry, right below 充电控制.
-struct CalibrationPage: View {
-    var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            CalibrationPanel()
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
-        }
-    }
-}
-
 struct CalibrationPanel: View {
     @ObservedObject private var engine = CalibrationEngine.shared
     @ObservedObject private var fans = FanController.shared
@@ -29,8 +18,10 @@ struct CalibrationPanel: View {
     private var theme: Theme { Theme.current }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            header
+        PageScaffold(title: Panel.calibration.title,
+                     symbol: Panel.calibration.symbol,
+                     help: t("完整走一遍 满充 → 受控放电 → 复充 → 静置 → 回落 的循环，用库仑积分算出电池真实的满充容量与健康度。全过程本地完成，不依赖任何第三方 App。"),
+                     toolbar: { headerToolbar }) {
             if let quality = engine.resultQuality {
                 Card {
                     VStack(alignment: .leading, spacing: 5) {
@@ -211,19 +202,14 @@ struct CalibrationPanel: View {
 
     // MARK: - Header
 
-    private var header: some View {
-        HStack(spacing: 10) {
-            IconBadge(symbol: "wrench.and.screwdriver")
-            Text(t("电池校准"))
-                .font(Typography.title)
-                .foregroundColor(theme.textPrimary)
-            HelpDot(text: t("完整走一遍 满充 → 受控放电 → 复充 → 静置 → 回落 的循环，用库仑积分算出电池真实的满充容量与健康度。全过程本地完成，不依赖任何第三方 App。"))
+    /// Last run, phase badge and the start/stop button: the page toolbar.
+    private var headerToolbar: some View {
+        HStack(spacing: Spacing.s) {
             if let last = engine.lastCalibrationDate {
                 Text(tf("上次校准 {p}", Self.lastRun.string(from: last)))
                     .font(Typography.caption)
                     .foregroundColor(theme.textTertiary)
             }
-            Spacer()
             if engine.phase != .idle { statusPill }
             Button {
                 AppState.shared.requestCalibrationStart()
@@ -241,7 +227,6 @@ struct CalibrationPanel: View {
             }
             .buttonStyle(.plain)
         }
-        .frame(height: 34)
     }
 
     private var statusPill: some View {

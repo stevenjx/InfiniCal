@@ -23,41 +23,34 @@ struct HistoryView: View {
     }
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 12) {
-                header
-                AdviceCard(report: advice)
-                alertCenter
+        PageScaffold(title: Panel.history.title,
+                     symbol: Panel.history.symbol,
+                     help: t("每天充入与放出的电量、温度区间和接电时长。用于观察长期使用习惯，不参与健康度计算。"),
+                     toolbar: { rangeToolbar }) {
+            AdviceCard(report: advice)
+            alertCenter
 
-                if isEmpty {
-                    emptyState
-                } else {
-                    summary
-                    chartCard
-                    listCard
-                }
-                healthTrends
-
-                Text(t("按自然日聚合，数据来自本机电池的电压 × 电流积分；App 未运行时不计入。"))
-                    .font(Typography.caption)
-                    .foregroundColor(theme.textTertiary)
-                    .padding(.top, 2)
+            if isEmpty {
+                emptyState
+            } else {
+                summary
+                chartCard
+                listCard
             }
-            .padding(22)
+            healthTrends
+
+            Text(t("按自然日聚合，数据来自本机电池的电压 × 电流积分；App 未运行时不计入。"))
+                .font(Typography.caption)
+                .foregroundColor(theme.textTertiary)
         }
     }
 
     // MARK: - Header
 
-    private var header: some View {
-        HStack(spacing: 10) {
-            IconBadge(symbol: "chart.bar.xaxis")
-            Text(t("电池历史"))
-                .font(Typography.title)
-                .foregroundColor(theme.textPrimary)
-            HelpDot(text: t("每天充入与放出的电量、温度区间和接电时长。用于观察长期使用习惯，不参与健康度计算。"))
-            Spacer()
-            HStack(spacing: 6) {
+    /// Range chips and the clear action: the page's toolbar, right of the title.
+    private var rangeToolbar: some View {
+        HStack(spacing: Spacing.s) {
+            HStack(spacing: Spacing.xs + Spacing.xxs) {
                 ChipButton(title: t("7 天"), selected: range.value == 7) { range.value = 7 }
                 ChipButton(title: t("30 天"), selected: range.value == 30) { range.value = 30 }
                 ChipButton(title: t("90 天"), selected: range.value == 90) { range.value = 90 }
@@ -69,7 +62,6 @@ struct HistoryView: View {
                     .foregroundColor(theme.textTertiary)
             }
         }
-        .frame(height: 34)
     }
 
     private var alertCenter: some View {
@@ -334,22 +326,9 @@ struct HistoryView: View {
 
     private var emptyState: some View {
         Card {
-            VStack(spacing: 10) {
-                Image(systemName: "chart.bar.xaxis")
-                    .font(Glyph.hero)
-                    .foregroundColor(theme.textTertiary)
-                Text(t("还没有历史数据"))
-                    .font(Typography.headline)
-                    .foregroundColor(theme.textPrimary)
-                Text(t("InfiniCal 每 2 秒采样一次电池功率，按天累加。保持运行一天后，这里会出现第一根柱子。"))
-                    .font(Typography.caption)
-                    .foregroundColor(theme.textSecondary)
-                    .multilineTextAlignment(.center)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: 360)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 28)
+            EmptyState(symbol: "chart.bar.xaxis",
+                       title: t("还没有历史数据"),
+                       message: t("InfiniCal 每 2 秒采样一次电池功率，按天累加。保持运行一天后，这里会出现第一根柱子。"))
         }
     }
 

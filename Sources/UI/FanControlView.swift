@@ -12,55 +12,39 @@ struct FanControlPage: View {
     private var theme: Theme { Theme.current }
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 12) {
-                header
-
-                if controller.hasFans {
-                    // Side by side: a two-fan machine fits both in one row, and
-                    // a single fan simply fills the width.
-                    HStack(alignment: .top, spacing: 10) {
-                        ForEach(controller.fans) { fan in
-                            FanCard(fan: fan, controller: controller)
-                                .frame(maxWidth: .infinity)
-                        }
+        PageScaffold(title: Panel.fanControl.title,
+                     symbol: Panel.fanControl.symbol,
+                     help: t("直接读写 SMC 的风扇目标转速与模式键：自动交给系统，自定义与全速由本 App 强制。退出 App 时自动恢复系统控制。"),
+                     toolbar: { statusPill }) {
+            if controller.hasFans {
+                // Side by side: a two-fan machine fits both in one row, and
+                // a single fan simply fills the width.
+                HStack(alignment: .top, spacing: 10) {
+                    ForEach(controller.fans) { fan in
+                        FanCard(fan: fan, controller: controller)
+                            .frame(maxWidth: .infinity)
                     }
-                } else {
-                    noFanCard
                 }
-
-                temperatureCard
-                curveCard
-                presetRow
-
-                if !state.helperInstalled {
-                    helperNotice
-                }
-
-                if let error = controller.lastError {
-                    Text(error)
-                        .font(Typography.caption)
-                        .foregroundColor(.red.opacity(0.85))
-                        .padding(.top, 2)
-                }
+            } else {
+                noFanCard
             }
-            .padding(22)
+
+            temperatureCard
+            curveCard
+            presetRow
+
+            if !state.helperInstalled {
+                helperNotice
+            }
+
+            if let error = controller.lastError {
+                Text(error)
+                    .font(Typography.caption)
+                    .foregroundColor(.red.opacity(0.85))
+            }
         }
         .onAppear { controller.beginMonitoring() }
         .onDisappear { controller.endMonitoring() }
-    }
-
-    private var header: some View {
-        HStack(spacing: 10) {
-            IconBadge(symbol: "fanblades")
-            Text(t("风扇控制"))
-                .font(Typography.title)
-                .foregroundColor(theme.textPrimary)
-            HelpDot(text: t("直接读写 SMC 的风扇目标转速与模式键：自动交给系统，自定义与全速由本 App 强制。退出 App 时自动恢复系统控制。"))
-            Spacer()
-            statusPill
-        }
-        .frame(height: 34)
     }
 
     private var statusPill: some View {
@@ -79,20 +63,10 @@ struct FanControlPage: View {
 
     private var noFanCard: some View {
         Card {
-            HStack(spacing: 10) {
-                Image(systemName: "wind")
-                    .font(Glyph.block)
-                    .foregroundColor(theme.textTertiary)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(t("此机型没有风扇"))
-                        .font(Typography.headline)
-                        .foregroundColor(theme.textPrimary)
-                    Text(t("SMC 未报告任何风扇（FNum = 0），散热完全被动。温度数据仍然可用。"))
-                        .font(Typography.caption)
-                        .foregroundColor(theme.textSecondary)
-                }
-                Spacer()
-            }
+            EmptyState(symbol: "wind",
+                       title: t("此机型没有风扇"),
+                       message: t("SMC 未报告任何风扇（FNum = 0），散热完全被动。温度数据仍然可用。"),
+                       layout: .inline)
         }
     }
 

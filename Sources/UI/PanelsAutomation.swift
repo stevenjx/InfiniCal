@@ -10,24 +10,16 @@ struct ScheduleView: View {
     @StateObject private var editor = ScheduleEditorModel()
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 10) {
-                    IconBadge(symbol: "calendar.badge.clock")
-                    Text(t("任务"))
-                        .font(Typography.title)
-                        .foregroundColor(theme.textPrimary)
-                    HelpDot(text: t("在指定时间自动执行充电、放电或校准操作。"))
-                    Spacer()
-                }
-                .frame(height: 34)
-
+        PageScaffold(title: Panel.schedule.title,
+                     symbol: Panel.schedule.symbol,
+                     help: t("在指定时间自动执行充电、放电或校准操作。"),
+                     toolbar: { taskToolbar }) {
                 Card(kind: .list) {
                     Group {
                         if state.tasks.isEmpty {
-                            Text(t("点击 “+” 按钮添加新任务，或从现有模板中选择。"))
-                                .font(Typography.body)
-                                .foregroundColor(theme.textSecondary)
+                            EmptyState(symbol: "calendar.badge.plus",
+                                       title: t("还没有定时任务"),
+                                       message: t("点击 “+” 按钮添加新任务，或从现有模板中选择。"))
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                         } else {
                             ScrollView {
@@ -41,63 +33,6 @@ struct ScheduleView: View {
                         }
                     }
                     .frame(height: 330)
-                }
-
-                HStack(spacing: 10) {
-                    Button {
-                        editor.draft.reset()
-                        editor.isPresented = true
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(Glyph.row.weight(.semibold))
-                            .frame(width: 30, height: 26)
-                            .background(RoundedRectangle(cornerRadius: 7).fill(theme.innerControl))
-                            .foregroundColor(theme.textPrimary)
-                    }
-                    .buttonStyle(.plain)
-
-                    Menu {
-                        Button(t("周末充满")) {
-                            var task = ScheduledTask()
-                            task.kind = .topUp
-                            task.hour = 9
-                            task.weekdays = [6, 7]
-                            state.addTask(task)
-                        }
-                        Button(t("周一早晨充满")) {
-                            var task = ScheduledTask()
-                            task.kind = .topUp
-                            task.hour = 7
-                            task.weekdays = [1]
-                            state.addTask(task)
-                        }
-                        Button(t("每月校准")) {
-                            var task = ScheduledTask()
-                            task.kind = .calibrate
-                            task.hour = 9
-                            task.weekdays = [1]
-                            state.addTask(task)
-                        }
-                        Button(t("每两周校准")) {
-                            var task = ScheduledTask()
-                            task.kind = .calibrate
-                            task.hour = 9
-                            task.weekdays = [1, 3]
-                            state.addTask(task)
-                        }
-                    } label: {
-                        HStack(spacing: 5) {
-                            Image(systemName: "doc.on.doc").font(Glyph.row)
-                            Text(t("模板")).font(Typography.body.weight(.medium))
-                        }
-                        .padding(.horizontal, 12)
-                        .frame(height: 26)
-                        .background(RoundedRectangle(cornerRadius: 7).fill(theme.innerControl))
-                        .foregroundColor(theme.textPrimary)
-                    }
-                    .menuStyle(.borderlessButton)
-                    .frame(width: 90)
-                    Spacer()
                 }
 
                 ToggleRow(symbol: "arrow.triangle.2.circlepath",
@@ -125,9 +60,9 @@ struct ScheduleView: View {
                 Card(kind: .list) {
                     Group {
                         if state.taskHistory.isEmpty {
-                            Text(t("已执行的任务将显示在此处。"))
-                                .font(Typography.body)
-                                .foregroundColor(theme.textSecondary)
+                            EmptyState(symbol: "clock.arrow.circlepath",
+                                       title: t("还没有执行记录"),
+                                       message: t("已执行的任务将显示在此处。"))
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                         } else {
                             ScrollView {
@@ -167,8 +102,6 @@ struct ScheduleView: View {
                     }
                     .frame(height: 130)
                 }
-            }
-            .padding(22)
         }
         .sheet(isPresented: $editor.isPresented) {
             TaskEditor(draft: editor.draft) { task in
@@ -177,6 +110,67 @@ struct ScheduleView: View {
             } onCancel: {
                 editor.isPresented = false
             }
+        }
+    }
+
+    /// Add and template buttons: the page's toolbar, right of the title. They
+    /// used to sit in a row of their own below the list, which put the primary
+    /// action at the bottom of the page it acts on.
+    private var taskToolbar: some View {
+        HStack(spacing: Spacing.s) {
+            Button {
+                editor.draft.reset()
+                editor.isPresented = true
+            } label: {
+                Image(systemName: "plus")
+                    .font(Glyph.row.weight(.semibold))
+                    .frame(width: 30, height: 26)
+                    .background(RoundedRectangle(cornerRadius: 7).fill(theme.innerControl))
+                    .foregroundColor(theme.textPrimary)
+            }
+            .buttonStyle(.plain)
+
+            Menu {
+                Button(t("周末充满")) {
+                    var task = ScheduledTask()
+                    task.kind = .topUp
+                    task.hour = 9
+                    task.weekdays = [6, 7]
+                    state.addTask(task)
+                }
+                Button(t("周一早晨充满")) {
+                    var task = ScheduledTask()
+                    task.kind = .topUp
+                    task.hour = 7
+                    task.weekdays = [1]
+                    state.addTask(task)
+                }
+                Button(t("每月校准")) {
+                    var task = ScheduledTask()
+                    task.kind = .calibrate
+                    task.hour = 9
+                    task.weekdays = [1]
+                    state.addTask(task)
+                }
+                Button(t("每两周校准")) {
+                    var task = ScheduledTask()
+                    task.kind = .calibrate
+                    task.hour = 9
+                    task.weekdays = [1, 3]
+                    state.addTask(task)
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "doc.on.doc").font(Glyph.row)
+                    Text(t("模板")).font(Typography.body.weight(.medium))
+                }
+                .padding(.horizontal, 12)
+                .frame(height: 26)
+                .background(RoundedRectangle(cornerRadius: 7).fill(theme.innerControl))
+                .foregroundColor(theme.textPrimary)
+            }
+            .menuStyle(.borderlessButton)
+            .frame(width: 90)
         }
     }
 

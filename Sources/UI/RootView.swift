@@ -33,7 +33,12 @@ struct RootView: View {
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Color.clear.frame(height: 36)
+            // The window uses .fullSizeContentView, so SwiftUI already insets
+            // this stack by the titlebar height (32 pt on this Mac, measured).
+            // The old fixed 36 pt spacer sat on top of that inset and pushed the
+            // first item 36 pt below the traffic lights; 8 pt is breathing room,
+            // not a second copy of the titlebar.
+            Color.clear.frame(height: Spacing.s)
 
             ForEach(Array(Panel.allCases.enumerated()), id: \.offset) { item in
                 let panel = item.element
@@ -153,7 +158,7 @@ struct RootView: View {
             switch state.selectedPanel {
             case .dashboard: DashboardView()
             case .chargeControl: ChargeControlView()
-            case .calibration: CalibrationPage()
+            case .calibration: CalibrationPanel()
             case .fanControl: FanControlPage()
             case .sleep: SleepEnergyView()
             case .history: HistoryView()

@@ -9,156 +9,156 @@ struct ChargeControlView: View {
     private var theme: Theme { Theme.current }
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 10) {
-                    IconBadge(symbol: "battery.75")
-                    Text(t("充电限制"))
-                        .font(Typography.title)
-                        .foregroundColor(theme.textPrimary)
-                    HelpDot(text: t("设置电池允许充到的最高电量。达到该数值后 InfiniCal 会暂停充电，让 MacBook 直接使用电源适配器供电。"))
+        PageScaffold(title: Panel.chargeControl.title,
+                     symbol: Panel.chargeControl.symbol,
+                     help: t("设置电池允许充到的最高电量。达到该数值后 InfiniCal 会暂停充电，让 MacBook 直接使用电源适配器供电。"),
+                     toolbar: { limitToolbar }) {
+            if let restore = state.topUpRestoreLimit {
+                HStack(spacing: 8) {
+                    Image(systemName: "bolt.fill")
+                        .font(Glyph.row)
+                        .foregroundColor(theme.accent)
+                    Text(tf("一次性充满至 100%，完成后恢复 {p}%", "\(restore)"))
+                        .font(Typography.caption)
+                        .foregroundColor(theme.textSecondary)
                     Spacer()
-                    ValueStepper(value: Binding(get: { state.chargeVal },
-                                                set: { state.userSetLimit($0) }),
-                                 range: state.allowBelow80 && ChargeController.shared.canSetBelow80 ? 1...100 : 80...100,
-                                 step: 5)
-                        .frame(width: 108)
+                    Button(t("取消")) { state.cancelTopUp() }
+                        .buttonStyle(.plain)
+                        .font(Typography.label)
+                        .foregroundColor(theme.accent)
                 }
-                .frame(height: 34)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(theme.innerControl))
+            }
 
-                if let restore = state.topUpRestoreLimit {
-                    HStack(spacing: 8) {
-                        Image(systemName: "bolt.fill")
-                            .font(Glyph.row)
-                            .foregroundColor(theme.accent)
-                        Text(tf("一次性充满至 100%，完成后恢复 {p}%", "\(restore)"))
-                            .font(Typography.caption)
-                            .foregroundColor(theme.textSecondary)
-                        Spacer()
-                        Button(t("取消")) { state.cancelTopUp() }
-                            .buttonStyle(.plain)
-                            .font(Typography.label)
-                            .foregroundColor(theme.accent)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(theme.innerControl))
-                }
+            ToggleRow(symbol: "exclamationmark.triangle",
+                      title: t("允许充电上限低于 80%"),
+                      help: t("关闭后，充电限制最低只能设置为 80%。"),
+                      isOn: Binding(get: { state.allowBelow80 },
+                                    set: { state.allowBelow80 = $0 }))
 
-                ToggleRow(symbol: "exclamationmark.triangle",
-                          title: t("允许充电上限低于 80%"),
-                          help: t("关闭后，充电限制最低只能设置为 80%。"),
-                          isOn: Binding(get: { state.allowBelow80 },
-                                        set: { state.allowBelow80 = $0 }))
+            ToggleRow(symbol: "bolt.slash",
+                      title: t("自动放电"),
+                      help: t("当电池电量高于充电限制时，自动放电至限制值。"),
+                      isOn: $state.automaticDischarge)
 
-                ToggleRow(symbol: "bolt.slash",
-                          title: t("自动放电"),
-                          help: t("当电池电量高于充电限制时，自动放电至限制值。"),
-                          isOn: $state.automaticDischarge)
+            ToggleRow(symbol: "sailboat",
+                      title: t("航海模式"),
+                      help: t("电池电量低于「充电限制 − 差异」时自动恢复充电，避免频繁插拔。"),
+                      isOn: $state.sailingMode)
 
-                ToggleRow(symbol: "sailboat",
-                          title: t("航海模式"),
-                          help: t("电池电量低于「充电限制 − 差异」时自动恢复充电，避免频繁插拔。"),
-                          isOn: $state.sailingMode)
-
-                if state.sailingMode {
-                    Card {
-                        HStack(spacing: 8) {
-                            Spacer()
-                            Text(t("差异:"))
-                                .font(Typography.body)
-                                .foregroundColor(theme.textSecondary)
-                            ValueStepper(value: $state.sailingLevel, range: 1...max(1, min(30, state.chargeVal - 1)), step: 1)
-                                .frame(width: 92)
-                            Text(tf("→ 将航海至 {p}%.", "\(max(1, state.chargeVal - state.sailingLevel))"))
-                                .font(Typography.body)
-                                .foregroundColor(theme.textPrimary)
-                            Spacer()
-                        }
-                    }
-                }
-
-                ToggleRow(symbol: "flame",
-                          title: t("过热保护"),
-                          help: t("电池温度超过上限时暂停充电，冷却后自动恢复。"),
-                          isOn: $state.heatProtectMode)
-
+            if state.sailingMode {
                 Card {
-                    HStack {
+                    HStack(spacing: 8) {
                         Spacer()
-                        Text(state.heatProtectMode
-                             ? tf("过热保护已开启。 温度上限: {p}°C。 当前温度: {p}", "\(state.maxTemperature)", String(format: "%.1f°C", state.snapshot.temperature))
-                             : tf("过热保护已关闭。 当前温度: {p}", String(format: "%.1f°C", state.snapshot.temperature)))
+                        Text(t("差异:"))
                             .font(Typography.body)
                             .foregroundColor(theme.textSecondary)
-                        if state.heatProtectMode {
-                            ValueStepper(value: $state.maxTemperature, range: 25...60, step: 1, suffix: "°C")
-                                .frame(width: 100)
-                                .padding(.leading, 8)
-                        }
+                        ValueStepper(value: $state.sailingLevel, range: 1...max(1, min(30, state.chargeVal - 1)), step: 1)
+                            .frame(width: 92)
+                        Text(tf("→ 将航海至 {p}%.", "\(max(1, state.chargeVal - state.sailingLevel))"))
+                            .font(Typography.body)
+                            .foregroundColor(theme.textPrimary)
                         Spacer()
                     }
-                }
-
-                if let adapter = state.adapterDiagnosis {
-                    Divider().background(theme.divider).padding(.vertical, 6)
-                    SectionLabel(text: t("电源适配器"))
-                    adapterCard(adapter)
-                }
-
-                Divider().background(theme.divider).padding(.vertical, 6)
-                SectionLabel(text: t("按时间充满"))
-                smartChargeCard
-
-                if !state.helperInstalled {
-                    HStack(spacing: 8) {
-                        Image(systemName: "lock.shield")
-                            .font(Glyph.row)
-                            .foregroundColor(theme.textSecondary)
-                        Text(tf("写入 SMC 需要特权助手（当前策略：{p}）", state.capabilities.strategy.title))
-                            .font(Typography.caption)
-                            .foregroundColor(theme.textSecondary)
-                        Spacer()
-                        Button {
-                            state.installHelper()
-                        } label: {
-                            Text(t("安装"))
-                                .font(Typography.label)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 4)
-                                .background(Capsule().fill(theme.accent))
-                                .foregroundColor(.white)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.top, 10)
-                }
-
-                if state.statusNote.isEmpty == false {
-                    Text(state.statusNote)
-                        .font(Typography.caption)
-                        .foregroundColor(theme.textTertiary)
-                        .padding(.top, 6)
-                }
-
-                // Only when two strategies actually compete. A single owner is
-                // already obvious from the controls above it.
-                if let arbitration = state.chargeArbitration, arbitration.isConflict {
-                    HStack(alignment: .top, spacing: 6) {
-                        Image(systemName: "arrow.triangle.branch")
-                            .font(Glyph.inline)
-                            .foregroundColor(theme.textTertiary)
-                        Text(tf("当前生效：{p}；已覆盖：{p}",
-                                arbitration.winner.strategy.title,
-                                arbitration.suppressedTitles))
-                            .font(Typography.caption)
-                            .foregroundColor(theme.textTertiary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(.top, 6)
                 }
             }
-            .padding(22)
+
+            ToggleRow(symbol: "flame",
+                      title: t("过热保护"),
+                      help: t("电池温度超过上限时暂停充电，冷却后自动恢复。"),
+                      isOn: $state.heatProtectMode)
+
+            Card {
+                HStack {
+                    Spacer()
+                    Text(state.heatProtectMode
+                         ? tf("过热保护已开启。 温度上限: {p}°C。 当前温度: {p}", "\(state.maxTemperature)", String(format: "%.1f°C", state.snapshot.temperature))
+                         : tf("过热保护已关闭。 当前温度: {p}", String(format: "%.1f°C", state.snapshot.temperature)))
+                        .font(Typography.body)
+                        .foregroundColor(theme.textSecondary)
+                    if state.heatProtectMode {
+                        ValueStepper(value: $state.maxTemperature, range: 25...60, step: 1, suffix: "°C")
+                            .frame(width: 100)
+                            .padding(.leading, 8)
+                    }
+                    Spacer()
+                }
+            }
+
+            if let adapter = state.adapterDiagnosis {
+                Divider().background(theme.divider).padding(.vertical, 6)
+                SectionLabel(text: t("电源适配器"))
+                adapterCard(adapter)
+            }
+
+            Divider().background(theme.divider).padding(.vertical, 6)
+            SectionLabel(text: t("按时间充满"))
+            smartChargeCard
+
+            if !state.helperInstalled {
+                HStack(spacing: 8) {
+                    Image(systemName: "lock.shield")
+                        .font(Glyph.row)
+                        .foregroundColor(theme.textSecondary)
+                    Text(tf("写入 SMC 需要特权助手（当前策略：{p}）", state.capabilities.strategy.title))
+                        .font(Typography.caption)
+                        .foregroundColor(theme.textSecondary)
+                    Spacer()
+                    Button {
+                        state.installHelper()
+                    } label: {
+                        Text(t("安装"))
+                            .font(Typography.label)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(Capsule().fill(theme.accent))
+                            .foregroundColor(.white)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.top, 10)
+            }
+
+            if state.statusNote.isEmpty == false {
+                Text(state.statusNote)
+                    .font(Typography.caption)
+                    .foregroundColor(theme.textTertiary)
+                    .padding(.top, 6)
+            }
+
+            // Only when two strategies actually compete. A single owner is
+            // already obvious from the controls above it.
+            if let arbitration = state.chargeArbitration, arbitration.isConflict {
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: "arrow.triangle.branch")
+                        .font(Glyph.inline)
+                        .foregroundColor(theme.textTertiary)
+                    Text(tf("当前生效：{p}；已覆盖：{p}",
+                            arbitration.winner.strategy.title,
+                            arbitration.suppressedTitles))
+                        .font(Typography.caption)
+                        .foregroundColor(theme.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.top, 6)
+            }
+        }
+    }
+
+    /// The limit stepper, labelled — it is the page's primary control, so it
+    /// sits in the header rather than inside a card.
+    private var limitToolbar: some View {
+        HStack(spacing: Spacing.s) {
+            Text(t("充电限制"))
+                .font(Typography.caption)
+                .foregroundColor(theme.textSecondary)
+            ValueStepper(value: Binding(get: { state.chargeVal },
+                                        set: { state.userSetLimit($0) }),
+                         range: state.allowBelow80 && ChargeController.shared.canSetBelow80 ? 1...100 : 80...100,
+                         step: 5)
+                .frame(width: 108)
         }
     }
 

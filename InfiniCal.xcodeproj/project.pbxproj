@@ -39,6 +39,7 @@
 		ED322B3F4B29B23612AA5A36 /* Metrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0D10A0144CEFC5CE021CB49 /* Metrics.swift */; };
 		8D46EC944C72D8277C8F7BC5 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2139CF0FDE43CE2C7F1BD00 /* Theme.swift */; };
 		145B9A1F0C19B2A74052333D /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45FF0F11228E4E0741C6BCC4 /* AppState.swift */; };
+		500A6872D1B056B702A6CD61 /* PageScaffold.swift in Sources */ = {isa = PBXBuildFile; fileRef = 703030336C7F84F75220BE85 /* PageScaffold.swift */; };
 		F5AA214806C87D8B9C8864FC /* Charts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 73F838EA1F1816594DE856B9 /* Charts.swift */; };
 		6054E6E8908393F585B20D52 /* PowerFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E20F26DA04039DF24CBE088 /* PowerFlowView.swift */; };
 		952029B0A4E8C2D0B1562010 /* DashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6AB9BA48442206934EE15499 /* DashboardView.swift */; };
@@ -124,6 +125,7 @@
 		C0D10A0144CEFC5CE021CB49 /* Metrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Metrics.swift; sourceTree = "<group>"; };
 		C2139CF0FDE43CE2C7F1BD00 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		45FF0F11228E4E0741C6BCC4 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		703030336C7F84F75220BE85 /* PageScaffold.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PageScaffold.swift; sourceTree = "<group>"; };
 		73F838EA1F1816594DE856B9 /* Charts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Charts.swift; sourceTree = "<group>"; };
 		2E20F26DA04039DF24CBE088 /* PowerFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerFlowView.swift; sourceTree = "<group>"; };
 		6AB9BA48442206934EE15499 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
@@ -247,6 +249,7 @@
 			isa = PBXGroup;
 			children = (
 				EA41B8B1FC1FEB4BCA29BF00 /* UpdatePanel.swift */,
+				703030336C7F84F75220BE85 /* PageScaffold.swift */,
 				73F838EA1F1816594DE856B9 /* Charts.swift */,
 				2E20F26DA04039DF24CBE088 /* PowerFlowView.swift */,
 				6AB9BA48442206934EE15499 /* DashboardView.swift */,
@@ -412,6 +415,7 @@
 				ED322B3F4B29B23612AA5A36 /* Metrics.swift in Sources */,
 				8D46EC944C72D8277C8F7BC5 /* Theme.swift in Sources */,
 				145B9A1F0C19B2A74052333D /* AppState.swift in Sources */,
+				500A6872D1B056B702A6CD61 /* PageScaffold.swift in Sources */,
 				F5AA214806C87D8B9C8864FC /* Charts.swift in Sources */,
 				6054E6E8908393F585B20D52 /* PowerFlowView.swift in Sources */,
 				952029B0A4E8C2D0B1562010 /* DashboardView.swift in Sources */,
