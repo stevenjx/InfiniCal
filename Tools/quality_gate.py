@@ -113,6 +113,7 @@ func handleWrite(_ request: [String: Any]) -> [String: Any] {
 }
 '''
     swift += (ROOT / "Sources/Core/ControlResult.swift").read_text()
+    swift += (ROOT / "Sources/Core/DeviceProfile.swift").read_text()
     app_state = (ROOT / "Sources/Core/AppState.swift").read_text()
     fan_source = (ROOT / "Sources/Core/FanController.swift").read_text()
     update_methods = app_state[app_state.index("    func prepareForUpdate()"):app_state.index("    private func tick()", app_state.index("    func prepareForUpdate()"))]
@@ -677,7 +678,108 @@ check(TaskPolicy.decide([makeTask(.topUp)], context: taskCtx).count == 1, "a sin
 let legacyLog = TaskLogEntry(title: "充满", detail: "09:00")
 let legacyRoundTrip = (try? JSONEncoder().encode(legacyLog)).flatMap { try? JSONDecoder().decode(TaskLogEntry.self, from: $0) }
 check(legacyRoundTrip?.outcome == nil, "history entries written before outcomes still decode")
-print("PASS pure policy/math/checkpoint/helper-validation/quality/trend/anomaly tests (no hardware)")
+// MARK: - 跨机型能力画像：匹配、优先级、去重与回滚
+let ruleLibrary = CapabilityRuleLibrary.bundled
+check(ruleLibrary.validationError == nil, "内置规则库必须自洽")
+check(ChipFamily.classify("Apple M2 Pro") == .appleSilicon, "Apple 芯片归类为 Apple Silicon")
+check(ChipFamily.classify("Intel(R) Core(TM) i9-9880H") == .intel, "Intel 品牌串归类为 Intel")
+check(ChipFamily.classify("--") == .unknown, "读不到品牌串时归类为未知")
+
+let laptop = DeviceProfile(model: "Mac14,9", chip: "Apple M2 Pro", family: .appleSilicon,
+                           macOSMajor: 27, chargeStrategy: "systemLimit", helperAvailable: true,
+                           fanCount: 2, hasBattery: true, sensorKeys: ["Tp01"])
+let laptopAssessment = ruleLibrary.assess(laptop)
+check(laptopAssessment.ruleIDs.contains("system-limit-floor-80"), "macOS 26+ 命中系统上限下限规则")
+check(laptopAssessment.ruleIDs.contains("system-limit-preferred"), "系统上限优先建议出现")
+check(!laptopAssessment.ruleIDs.contains("bclm-readback"), "系统上限机器不应命中 BCLM 规则")
+check(!laptopAssessment.ruleIDs.contains("intel-no-socpower"), "Intel 规则不应命中 Apple Silicon")
+check(laptopAssessment.notes.isEmpty, "正常笔记本没有本机实测告警")
+check(laptopAssessment.libraryVersion == ruleLibrary.version, "评估记录所用规则库版本")
+
+// 更具体的规则必须排在前面：机型规则优先于通用建议。
+let fanless = DeviceProfile(model: "Mac14,2", chip: "Apple M2", family: .appleSilicon,
+                            macOSMajor: 27, chargeStrategy: "systemLimit", helperAvailable: true,
+                            fanCount: 0, hasBattery: true, sensorKeys: [])
+let fanlessAssessment = ruleLibrary.assess(fanless)
+check(fanlessAssessment.ruleIDs.first == "fanless-air", "机型专属规则排在最前")
+check(fanlessAssessment.limitations.contains("该机型为无风扇设计，没有可控制的风扇。"), "无风扇限制被列出")
+check(fanlessAssessment.notes.contains("未检测到风扇：风扇控制不适用。"), "风扇事实来自实测而非规则")
+check(fanlessAssessment.notes.contains("没有读到温度传感器：温控与热保护无法生效。"), "缺少传感器时给出实测提示")
+
+// 台式机：规则说没有电池，实测也同样说没有电池，两者互不替代。
+let desktop = DeviceProfile(model: "Macmini9,1", chip: "Apple M1", family: .appleSilicon,
+                            macOSMajor: 27, chargeStrategy: "unavailable", helperAvailable: true,
+                            fanCount: 1, hasBattery: false, sensorKeys: [])
+let desktopAssessment = ruleLibrary.assess(desktop)
+check(desktopAssessment.ruleIDs.contains("desktop-no-battery"), "台式机型命中无电池规则")
+check(desktopAssessment.notes.contains("未检测到电池：充电控制、校准与电池健康不适用。"), "实测提示电池缺失")
+check(desktopAssessment.notes.contains("助手已连接，但没有找到可写的充电控制键。"), "助手已连接但无键时给出不同提示")
+
+// Intel：功耗与租约限制都适用，系统上限的 80% 下限不适用。
+let intel = DeviceProfile(model: "MacBookPro16,1", chip: "Intel(R) Core(TM) i9-9880H",
+                          family: .intel, macOSMajor: 13, chargeStrategy: "ch0bch0c",
+                          helperAvailable: true, fanCount: 2, hasBattery: true, sensorKeys: ["TB0T"])
+let intelAssessment = ruleLibrary.assess(intel)
+check(intelAssessment.ruleIDs.contains("intel-no-socpower"), "Intel 命中无 SoC 功耗规则")
+check(intelAssessment.ruleIDs.contains("intel-inflow-lease"), "Intel 命中租约规则")
+check(!intelAssessment.ruleIDs.contains("system-limit-floor-80"), "80% 下限只约束系统上限后端")
+check(!intelAssessment.ruleIDs.contains("apple-silicon-temperature-keys"), "Intel 不命中 Apple Silicon 温度键规则")
+
+// 系统版本与后端都是硬门槛：换一个就不该命中。
+var olderMac = laptop
+olderMac.macOSMajor = 25
+olderMac.chargeStrategy = "bclm"
+let olderAssessment = ruleLibrary.assess(olderMac)
+check(!olderAssessment.ruleIDs.contains("system-limit-floor-80"), "macOS 25 超出系统上限规则的版本范围")
+check(olderAssessment.ruleIDs.contains("bclm-readback"), "BCLM 机器命中回读校验规则")
+
+// 机型前缀大小写不敏感，避免 hw.model 大小写差异导致规则静默失效。
+let lowercased = DeviceProfile(model: "macbookair10,1", chip: "Apple M1", family: .appleSilicon,
+                               macOSMajor: 12, chargeStrategy: "bclm", helperAvailable: false,
+                               fanCount: 0, hasBattery: true, sensorKeys: [])
+check(ruleLibrary.assess(lowercased).ruleIDs.contains("fanless-air"), "机型前缀大小写不敏感")
+
+// 多条规则给出同一条限制时只显示一次；同精度按 priority 排序。
+let dedupeLibrary = CapabilityRuleLibrary(version: 9, updated: "test", rules: [
+    CapabilityRule(id: "a", limitations: ["同一条限制"], recommendations: ["同一条建议"], priority: 1),
+    CapabilityRule(id: "b", limitations: ["同一条限制"], recommendations: ["同一条建议"], priority: 2),
+])
+let deduped = dedupeLibrary.assess(laptop)
+check(deduped.limitations == ["同一条限制"], "重复限制只保留一次")
+check(deduped.recommendations == ["同一条建议"], "重复建议只保留一次")
+check(deduped.ruleIDs == ["b", "a"], "同精度规则按 priority 排序")
+
+// 非法规则库必须被拒绝，而不是带着坏规则运行。
+check(CapabilityRuleLibrary(version: 0, updated: "", rules: [
+    CapabilityRule(id: "x", recommendations: ["r"])]).validationError != nil, "版本号 0 被拒绝")
+check(CapabilityRuleLibrary(version: 1, updated: "", rules: []).validationError != nil, "空规则库被拒绝")
+check(CapabilityRuleLibrary(version: 1, updated: "", rules: [
+    CapabilityRule(id: "dup", recommendations: ["r"]),
+    CapabilityRule(id: "dup", recommendations: ["s"])]).validationError != nil, "重复 id 被拒绝")
+check(CapabilityRuleLibrary(version: 1, updated: "", rules: [
+    CapabilityRule(id: "empty")]).validationError != nil, "空内容规则被拒绝")
+
+// 版本化与回滚：导入保留旧库，回滚换回旧库并留下反向撤销。
+let nextLibrary = CapabilityRuleLibrary(version: 2, updated: "test", rules: [
+    CapabilityRule(id: "only", recommendations: ["r"]),
+])
+let installed = CapabilityRuleArchive.bundled.installing(nextLibrary)
+check(installed.current.version == 2 && installed.previous?.version == 1, "导入后保留被替换的版本")
+let rolledBack = installed.rollingBack()
+check(rolledBack?.current.version == 1 && rolledBack?.previous?.version == 2, "回滚换回旧库并保留撤销能力")
+check(CapabilityRuleArchive.bundled.rollingBack() == nil, "没有上一版本时不可回滚")
+check(CapabilityRuleArchive.bundled.installing(.bundled) == .bundled, "重复导入同一版本不产生新版本")
+let archiveRoundTrip = (try? JSONEncoder().encode(installed)).flatMap {
+    try? JSONDecoder().decode(CapabilityRuleArchive.self, from: $0)
+}
+check(archiveRoundTrip == installed, "规则档案可以完整 JSON 往返")
+
+// 隐私约束：画像只能包含机型代码、芯片名与系统版本这类公开信息。
+let profileFields = Set(Mirror(reflecting: laptop).children.compactMap { $0.label })
+let allowedFields: Set<String> = ["model", "chip", "family", "macOSMajor", "chargeStrategy",
+                                  "helperAvailable", "fanCount", "hasBattery", "sensorKeys"]
+check(profileFields == allowedFields, "画像不含序列号等额外字段")
+print("PASS pure policy/math/checkpoint/helper-validation/quality/trend/anomaly/profile tests (no hardware)")
 '''
     with tempfile.TemporaryDirectory(prefix="infinical-tests-") as directory:
         main = Path(directory) / "main.swift"

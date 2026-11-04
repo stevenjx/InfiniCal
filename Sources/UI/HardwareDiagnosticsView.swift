@@ -17,6 +17,10 @@ struct HardwareDiagnosticReport: Codable {
     let architecture: String
     let operatingSystem: String
     let rows: [Row]
+    /// Optional so an older export still decodes. The profile is a value, not
+    /// a live probe: it describes the machine at the moment of capture.
+    var profile: DeviceProfile?
+    var assessment: CapabilityAssessment?
 
     static func capture() -> HardwareDiagnosticReport {
         var size = 0
@@ -32,6 +36,10 @@ struct HardwareDiagnosticReport: Codable {
         let helper = HelperClient.shared
         let installed = helper.refreshInstallState()
         let battery = BatteryReader.read()
+        // The profile is measured once per capture; the assessment is a pure
+        // function of it and the offline rule library.
+        let profile = DeviceProfile.capture()
+        let assessment = DeviceProfileStore.shared.assess(profile)
         var rows: [Row] = []
         func add(_ id: String, _ label: String, _ status: String, _ detail: String) {
             rows.append(Row(id: id, label: label, status: status, detail: detail))
@@ -102,12 +110,24 @@ struct HardwareDiagnosticReport: Codable {
         return HardwareDiagnosticReport(generatedAt: Date(),
             appVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "--",
             model: model, architecture: architecture,
-            operatingSystem: ProcessInfo.processInfo.operatingSystemVersionString, rows: rows)
+            operatingSystem: ProcessInfo.processInfo.operatingSystemVersionString, rows: rows,
+            profile: profile, assessment: assessment)
     }
 
     var text: String {
         let header = "InfiniCal \(appVersion)\n\(generatedAt.ISO8601Format())\n\(model) / \(architecture)\n\(operatingSystem)\n"
-        return header + rows.map { "\(t($0.label)): \(t($0.status)) — \($0.detail)" }.joined(separator: "\n")
+        var lines = [header + rows.map { "\(t($0.label)): \(t($0.status)) — \($0.detail)" }.joined(separator: "\n")]
+        if let profile {
+            lines.append("\n[Profile] \(profile.summary) / \(profile.family.rawValue) / \(profile.chargeStrategy)")
+            lines.append("helper=\(profile.helperAvailable) fans=\(profile.fanCount) battery=\(profile.hasBattery) sensors=\(profile.sensorKeys.joined(separator: ","))")
+        }
+        if let assessment {
+            lines.append("[Rules] v\(assessment.libraryVersion) matched=\(assessment.ruleIDs.joined(separator: ","))")
+            for item in assessment.notes { lines.append("[Measured] \(t(item))") }
+            for item in assessment.limitations { lines.append("[Limit] \(t(item))") }
+            for item in assessment.recommendations { lines.append("[Advice] \(t(item))") }
+        }
+        return lines.joined(separator: "\n")
     }
 }
 
@@ -179,6 +199,10 @@ struct HardwareDiagnosticsView: View {
                 Text(report.operatingSystem).font(.system(size: 11))
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
+                        if let assessment = report.assessment {
+                            DeviceProfileCard(assessment: assessment,
+                                              onLibraryChanged: { refresh() })
+                        }
                         ForEach(report.rows) { row in
                             Card(padding: 10) {
                                 VStack(alignment: .leading, spacing: 4) {
