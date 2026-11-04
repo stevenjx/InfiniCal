@@ -358,6 +358,9 @@ struct ValueStepper: View {
     @Binding var value: Int
     var range: ClosedRange<Int> = 0...100
     var step = 5
+    /// Intrinsic width is 26 + 30 + 26 + suffix + 8: **98 pt for "%" and 106 pt
+    /// for "°C"**. A narrower `frame(width:)` does not shrink the buttons, so
+    /// the suffix used to wrap into a vertical "° / C" — give it at least that.
     var suffix = "%"
 
     var body: some View {
@@ -392,6 +395,7 @@ struct ValueStepper: View {
             Text(suffix)
                 .font(Typography.caption)
                 .foregroundColor(theme.textSecondary)
+                .lineLimit(1)
                 .padding(.trailing, 8)
         }
         .background(RoundedRectangle(cornerRadius: Radius.control, style: .continuous).fill(theme.innerControl))

@@ -383,7 +383,6 @@
  "尚未开始": "Not started",
  "就绪": "Ready",
  "屏幕功耗": "Display power",
- "差异:": "Delta:",
  "已停止放电负载": "Discharge load stopped",
  "已停转（正常待机）": "Stopped (idle)",
  "已充满": "Full",
@@ -655,8 +654,6 @@
  "转速": "Speed",
  "输入 {p}": "Input {p}",
  "过热保护": "Overheat protection",
- "过热保护已关闭。 当前温度: {p}": "Overheat protection is off. Current temperature: {p}",
- "过热保护已开启。 温度上限: {p}°C。 当前温度: {p}": "Overheat protection is on. Cap: {p} °C. Current temperature: {p}",
  "过热保护已触发": "Overheat protection triggered",
  "过热保护（{p}）: {p}°C ≥ 阈值 {p}°C，已暂停负载": "Overheat protection ({p}): {p}°C ≥ limit {p}°C, load paused",
  "近 {p} 天": "Last {p} days",
@@ -879,5 +876,9 @@
  "今天": "Today",
  "还没有定时任务": "No scheduled tasks yet",
  "还没有执行记录": "No run history yet",
- "到点自动执行充电、放电或校准，无需手动操作。": "Charging, discharging and calibration run on schedule, with no manual steps."
+ "到点自动执行充电、放电或校准，无需手动操作。": "Charging, discharging and calibration run on schedule, with no manual steps.",
+ "差异": "Delta",
+ "温度上限": "Temperature cap",
+ "当前 {p}": "Now {p}",
+ "→ 将航海至 {p}%": "→ sails down to {p}%"
 }
