@@ -856,5 +856,16 @@
  "只根据本机历史数据生成，每条建议都附带证据。它是使用建议，不是硬件故障诊断。": "Generated only from this Mac's history. Every item lists its evidence. These are usage suggestions, not a hardware fault diagnosis.",
  "已记录 {p} 天 · 有效校准 {p} 次": "{p} days recorded · {p} valid calibrations",
  "近 {p} 天没有足够数据给出建议。继续使用后会基于温度和充电记录生成。": "Not enough data in the last {p} days for advice. Keep using the app and suggestions will follow from temperature and charging records.",
- "建议只使用本机数据，不联网、不上传。": "Advice uses local data only; nothing is sent over the network."
+ "建议只使用本机数据，不联网、不上传。": "Advice uses local data only; nothing is sent over the network.",
+ "紧急保护": "Emergency protection",
+ "充电上限": "Charge limit",
+ "、": ", ",
+ "适配器状态不确定，先恢复供电": "Adapter state is unknown; restore power first",
+ "校准会话占用充电控制": "A calibration session owns charge control",
+ "手动暂停充电": "Charging paused by hand",
+ "电量高于上限 {p}%": "Above the {p}% limit",
+ "电池温度 %.1f°C，上限 %d°C": "Battery %.1f °C, ceiling %d °C",
+ "已到上限 {p}%": "At the {p}% limit",
+ "航海区间保持 {p}%–{p}%": "Holding in the sailing band {p}%–{p}%",
+ "当前生效：{p}；已覆盖：{p}": "Active: {p}; overridden: {p}"
 }

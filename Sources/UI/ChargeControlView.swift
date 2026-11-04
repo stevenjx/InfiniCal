@@ -140,6 +140,23 @@ struct ChargeControlView: View {
                         .foregroundColor(theme.textTertiary)
                         .padding(.top, 6)
                 }
+
+                // Only when two strategies actually compete. A single owner is
+                // already obvious from the controls above it.
+                if let arbitration = state.chargeArbitration, arbitration.isConflict {
+                    HStack(alignment: .top, spacing: 6) {
+                        Image(systemName: "arrow.triangle.branch")
+                            .font(.system(size: 10))
+                            .foregroundColor(theme.textTertiary)
+                        Text(tf("当前生效：{p}；已覆盖：{p}",
+                                arbitration.winner.strategy.title,
+                                arbitration.suppressedTitles))
+                            .font(.system(size: 11))
+                            .foregroundColor(theme.textTertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.top, 6)
+                }
             }
             .padding(22)
         }

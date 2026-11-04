@@ -84,6 +84,10 @@ final class AppState: ObservableObject {
     private var lastManualAction: TaskContext.ManualOverride?
     @Published var lastMessage: String?
     @Published var statusNote: String = ""
+    /// Who owns the charge hardware this tick, and who is standing down.
+    /// Recorded by the arbiter so a conflict is visible instead of being
+    /// silently resolved by whichever `if` came first.
+    @Published private(set) var chargeArbitration: ChargeArbitration?
 
     // MARK: - Settings (persisted with the same keys AlDente uses where applicable)
 
@@ -493,6 +497,9 @@ final class AppState: ObservableObject {
             if calibration != nil { calibration = nil }
         } else if calibrationEngine.isRunning {
             mirrorCalibration()
+            // Calibration is a strategy like any other, so the conflict record
+            // has to include it even though the normal loop stays out of the way.
+            publishArbitration(currentArbitration(calibrationRunning: true))
         } else {
             if calibration != nil { endCalibrationMirror() }
             evaluateSmartCharge()
@@ -580,8 +587,53 @@ final class AppState: ObservableObject {
 
     // MARK: - Charge control
 
+    // MARK: - Charge arbitration (P0-03)
+    //
+    // Every rule above the hardware is a claim, not a branch. The arbiter picks
+    // the lowest rank and the loop only lets the winner act, so the documented
+    // priority decides the outcome instead of the order of the `if` statements.
+
+    private func currentArbitration(calibrationRunning: Bool) -> ChargeArbitration? {
+        ChargeArbiter.arbitrate(ChargeArbiter.claims(for: ChargeArbitrationInput(
+            percentage: snapshot.percentage,
+            limit: chargeVal,
+            temperature: snapshot.temperature,
+            heatProtectMode: heatProtectMode,
+            maxTemperature: maxTemperature,
+            heatPause: heatPause,
+            userPaused: userPaused,
+            manualDischargeTarget: manualDischargeTarget,
+            automaticDischarge: automaticDischarge,
+            sailingMode: sailingMode,
+            sailingLevel: sailingLevel,
+            pluggedIn: snapshot.isPluggedIn,
+            calibrationRunning: calibrationRunning,
+            adapterRestoreFailed: ChargeController.shared.adapterRestoreError != nil,
+            previousChargingAllowed: lastChargingAllowed,
+            isCharging: snapshot.isCharging)))
+    }
+
+    /// Publishes the verdict for the UI and writes a real conflict to the
+    /// journal. An unchanged repeat is collapsed by the journal, so the 2 Hz
+    /// control loop does not flood the list.
+    private func publishArbitration(_ arbitration: ChargeArbitration?) {
+        if chargeArbitration != arbitration { chargeArbitration = arbitration }
+        guard let arbitration, arbitration.isConflict else { return }
+        ControlJournal.shared.record(ControlEvidence(
+            operation: "charge.arbitrate",
+            backend: "policy",
+            phase: .active,
+            target: arbitration.winner.strategy.title,
+            observed: arbitration.suppressedTitles,
+            detail: arbitration.winner.reason))
+    }
+
     private func evaluateChargeControl() {
         guard snapshot.isPresent else { chargeState = .noBattery; return }
+
+        let arbitration = currentArbitration(calibrationRunning: false)
+        publishArbitration(arbitration)
+        let winner = arbitration?.winner.strategy
 
         // An uncertain adapter write must be rolled back before a new policy
         // can request another discharge. Retry even when ExternalConnected is
@@ -681,7 +733,8 @@ final class AppState: ObservableObject {
             return
         }
 
-        if heatProtectMode, snapshot.temperature >= Double(maxTemperature) {
+        if heatProtectMode, snapshot.temperature >= Double(maxTemperature),
+           winner == .heatProtect {
             heatPause = true
             guard setCharging(false) else { return }
             // Say what actually happened. On a machine whose only lever is the
@@ -706,6 +759,10 @@ final class AppState: ObservableObject {
                 statusNote = ""
                 lastAppliedLimit = nil
                 lastChargingAllowed = nil
+                // The latch just released, so this tick is no longer owned by
+                // heat protection; publish again rather than leaving the UI and
+                // the conflict record describing a strategy that already ended.
+                publishArbitration(currentArbitration(calibrationRunning: false))
                 Notifier.shared.post(key: "heat-recovered",
                                      title: t("温度已恢复"),
                                      body: t("电池已降温，充电恢复。"),

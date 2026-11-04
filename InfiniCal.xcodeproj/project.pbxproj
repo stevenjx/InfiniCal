@@ -14,6 +14,7 @@
 		73B3FAA0F01FF2318C3BCF82 /* PowerMeter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2284B3756D13B4E160B65DA6 /* PowerMeter.swift */; };
 		807190014BCA5BFEBC509EFB /* PowerFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2E0624F576F0BBB118F18061 /* PowerFormat.swift */; };
 		15F27AE38801C8E4E5166CCD /* ChargeController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1911408CF8F9FDBD1AF4BD3 /* ChargeController.swift */; };
+		CAC16AF7AE58452EF8FB5C49 /* ChargeArbitration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 10D103E023415182BE483BD4 /* ChargeArbitration.swift */; };
 		E0E5C4D525F0FF86CF69EF5E /* ControlResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12B8C7AFB6BDB6AD122908AA /* ControlResult.swift */; };
 		559F013CEFD8CDB9C5F595CC /* DeviceProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = F515B84BBBA40F06E7CD0FA1 /* DeviceProfile.swift */; };
 		0AD07C15B19F6730CA5192FA /* DeviceProfileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A28245E215BFF7AFE88E7EC /* DeviceProfileStore.swift */; };
@@ -96,6 +97,7 @@
 		2284B3756D13B4E160B65DA6 /* PowerMeter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerMeter.swift; sourceTree = "<group>"; };
 		2E0624F576F0BBB118F18061 /* PowerFormat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PowerFormat.swift; sourceTree = "<group>"; };
 		E1911408CF8F9FDBD1AF4BD3 /* ChargeController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChargeController.swift; sourceTree = "<group>"; };
+		10D103E023415182BE483BD4 /* ChargeArbitration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChargeArbitration.swift; sourceTree = "<group>"; };
 		12B8C7AFB6BDB6AD122908AA /* ControlResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlResult.swift; sourceTree = "<group>"; };
 		F515B84BBBA40F06E7CD0FA1 /* DeviceProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceProfile.swift; sourceTree = "<group>"; };
 		6A28245E215BFF7AFE88E7EC /* DeviceProfileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceProfileStore.swift; sourceTree = "<group>"; };
@@ -209,6 +211,7 @@
 				2284B3756D13B4E160B65DA6 /* PowerMeter.swift */,
 				2E0624F576F0BBB118F18061 /* PowerFormat.swift */,
 				E1911408CF8F9FDBD1AF4BD3 /* ChargeController.swift */,
+				10D103E023415182BE483BD4 /* ChargeArbitration.swift */,
 				12B8C7AFB6BDB6AD122908AA /* ControlResult.swift */,
 				F515B84BBBA40F06E7CD0FA1 /* DeviceProfile.swift */,
 				6A28245E215BFF7AFE88E7EC /* DeviceProfileStore.swift */,
@@ -378,6 +381,7 @@
 				73B3FAA0F01FF2318C3BCF82 /* PowerMeter.swift in Sources */,
 				807190014BCA5BFEBC509EFB /* PowerFormat.swift in Sources */,
 				15F27AE38801C8E4E5166CCD /* ChargeController.swift in Sources */,
+				CAC16AF7AE58452EF8FB5C49 /* ChargeArbitration.swift in Sources */,
 				E0E5C4D525F0FF86CF69EF5E /* ControlResult.swift in Sources */,
 				559F013CEFD8CDB9C5F595CC /* DeviceProfile.swift in Sources */,
 				0AD07C15B19F6730CA5192FA /* DeviceProfileStore.swift in Sources */,
@@ -512,7 +516,7 @@
 				);
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 26;
+				CURRENT_PROJECT_VERSION = 27;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Resources/Info.plist;
@@ -524,7 +528,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.21;
+				MARKETING_VERSION = 1.0.22;
 				PRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -541,7 +545,7 @@
 				);
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 26;
+				CURRENT_PROJECT_VERSION = 27;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Resources/Info.plist;
@@ -553,7 +557,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.21;
+				MARKETING_VERSION = 1.0.22;
 				PRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -568,9 +572,9 @@
 					arm64,
 					x86_64,
 				);
-				CURRENT_PROJECT_VERSION = 26;
+				CURRENT_PROJECT_VERSION = 27;
 				GENERATE_INFOPLIST_FILE = NO;
-				MARKETING_VERSION = 1.0.21;
+				MARKETING_VERSION = 1.0.22;
 				PRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical.helper;
 				PRODUCT_NAME = com.infinitycomputer.infinical.helper;
 				SKIP_INSTALL = YES;
@@ -585,9 +589,9 @@
 					arm64,
 					x86_64,
 				);
-				CURRENT_PROJECT_VERSION = 26;
+				CURRENT_PROJECT_VERSION = 27;
 				GENERATE_INFOPLIST_FILE = NO;
-				MARKETING_VERSION = 1.0.21;
+				MARKETING_VERSION = 1.0.22;
 				PRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical.helper;
 				PRODUCT_NAME = com.infinitycomputer.infinical.helper;
 				SKIP_INSTALL = YES;

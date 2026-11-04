@@ -115,6 +115,7 @@ func handleWrite(_ request: [String: Any]) -> [String: Any] {
     swift += (ROOT / "Sources/Core/ControlResult.swift").read_text()
     swift += (ROOT / "Sources/Core/DeviceProfile.swift").read_text()
     swift += (ROOT / "Sources/Core/Advice.swift").read_text()
+    swift += (ROOT / "Sources/Core/ChargeArbitration.swift").read_text()
     app_state = (ROOT / "Sources/Core/AppState.swift").read_text()
     fan_source = (ROOT / "Sources/Core/FanController.swift").read_text()
     update_methods = app_state[app_state.index("    func prepareForUpdate()"):app_state.index("    private func tick()", app_state.index("    func prepareForUpdate()"))]
@@ -877,7 +878,90 @@ check(mixedAdvice.items[0].level == .attention, "需要注意的建议排在前�
 let staleDays = (31...40).map { adviceDay($0, high: 9000, peak: 46) }
 check(AdviceEngine.evaluate(adviceInput(staleDays)).observedDays == 0, "30 天外的记录不计入窗口")
 check(AdviceEngine.evaluate(adviceInput(staleDays)).items.isEmpty, "窗口外的历史不触发建议")
-print("PASS pure policy/math/checkpoint/helper-validation/quality/trend/anomaly/profile/advice tests (no hardware)")
+
+// 充电仲裁（P0-03）：优先级写在 ChargeAuthority 里，执行顺序不能替代它。
+check(ChargeAuthority.allCases.map { $0.rawValue } == Array(0...6),
+      "策略顺序与文档一致：紧急保护 > 校准 > 手动暂停 > 放电 > 过热保护 > 航海 > 上限")
+func arbitrationInput(_ mutate: (inout ChargeArbitrationInput) -> Void) -> ChargeArbitrationInput {
+    var input = ChargeArbitrationInput()
+    mutate(&input)
+    return input
+}
+func arbitrated(_ input: ChargeArbitrationInput) -> ChargeArbitration? {
+    ChargeArbiter.arbitrate(ChargeArbiter.claims(for: input))
+}
+
+check(arbitrated(ChargeArbitrationInput(percentage: 50, limit: 80)) == nil,
+      "没有策略争夺时不产生仲裁记录")
+
+// 放电高于过热保护：过去靠 if 顺序，结果是过热保护先 return、放电永远不启动。
+let hotAndDraining = arbitrationInput {
+    $0.percentage = 90; $0.limit = 80; $0.pluggedIn = true
+    $0.automaticDischarge = true
+    $0.heatProtectMode = true; $0.temperature = 41; $0.maxTemperature = 35
+}
+let hotVerdict = arbitrated(hotAndDraining)
+check(hotVerdict?.winner.strategy == .autoDischarge, "放电优先于过热保护")
+check(hotVerdict?.suppressed.map { $0.strategy } == [.heatProtect, .chargeLimit],
+      "被覆盖策略按优先级排序写入记录")
+check(hotVerdict?.isConflict == true, "两条以上策略同时生效算冲突")
+check(hotVerdict?.winner.reason.isEmpty == false, "获胜策略必须带理由")
+check(hotVerdict?.suppressedTitles == "过热保护、充电上限", "被覆盖策略合并成一行文本")
+
+// 手动暂停高于放电；紧急保护高于一切。
+let pausedAndDraining = arbitrationInput {
+    $0.percentage = 90; $0.limit = 80; $0.userPaused = true
+    $0.manualDischargeTarget = 60; $0.pluggedIn = true
+}
+check(arbitrated(pausedAndDraining)?.winner.strategy == .manualPause, "手动暂停优先于放电")
+let everythingAtOnce = arbitrationInput {
+    $0.percentage = 90; $0.limit = 80; $0.userPaused = true
+    $0.manualDischargeTarget = 60; $0.pluggedIn = true
+    $0.automaticDischarge = true; $0.heatProtectMode = true; $0.temperature = 45
+    $0.calibrationRunning = true; $0.adapterRestoreFailed = true
+}
+let worstCase = arbitrated(everythingAtOnce)
+check(worstCase?.winner.strategy == .emergency, "适配器状态不确定时其它策略全部让位")
+check(worstCase?.suppressed.count == 5, "其余策略全部记为被覆盖")
+
+// 校准高于手动暂停，低于紧急保护。
+let calibrating = arbitrationInput {
+    $0.calibrationRunning = true; $0.userPaused = true; $0.pluggedIn = true
+}
+check(arbitrated(calibrating)?.winner.strategy == .calibration, "校准优先于手动暂停")
+
+// 航海滞回与上限：低于上限但滞回要求保持时才由航海模式接管。
+let sailingHeld = arbitrationInput {
+    $0.percentage = 78; $0.limit = 80; $0.pluggedIn = true
+    $0.sailingMode = true; $0.sailingLevel = 5; $0.previousChargingAllowed = false
+}
+check(arbitrated(sailingHeld)?.winner.strategy == .sailing, "航海区间内保持不充电时记为航海策略")
+let sailingRecharging = arbitrationInput {
+    $0.percentage = 70; $0.limit = 80; $0.pluggedIn = true
+    $0.sailingMode = true; $0.sailingLevel = 5; $0.previousChargingAllowed = false
+}
+check(arbitrated(sailingRecharging) == nil, "跌到航海下沿后允许充电，不算冲突")
+let atLimit = arbitrationInput { $0.percentage = 80; $0.limit = 80; $0.pluggedIn = true }
+check(arbitrated(atLimit)?.winner.strategy == .chargeLimit, "到达上限记为充电上限策略")
+
+// 同一策略重复申报只算一条，被覆盖列表里不能出现自己。
+let claimDuplicates = [ChargeClaim(strategy: .autoDischarge, reason: "a"),
+                       ChargeClaim(strategy: .autoDischarge, reason: "b"),
+                       ChargeClaim(strategy: .heatProtect, reason: "c")]
+let dedupedClaims = ChargeArbiter.arbitrate(claimDuplicates)
+check(dedupedClaims?.suppressed.count == 1, "重复申报的策略只保留一条")
+check(dedupedClaims.map { ["a", "b"].contains($0.winner.reason) } == true,
+      "同策略保留其中一条理由")
+
+// 过热迟滞：温度回落到上限以下但仍在 2°C 缓冲内时，策略仍然成立。
+let latchedHeat = arbitrationInput {
+    $0.percentage = 50; $0.limit = 80; $0.pluggedIn = true
+    $0.heatProtectMode = true; $0.maxTemperature = 35
+    $0.temperature = 34; $0.heatPause = true
+}
+check(arbitrated(latchedHeat)?.winner.strategy == .heatProtect, "过热锁存期间仍由过热保护持有")
+
+print("PASS pure policy/math/checkpoint/helper-validation/quality/trend/anomaly/profile/advice/arbitration tests (no hardware)")
 '''
     with tempfile.TemporaryDirectory(prefix="infinical-tests-") as directory:
         main = Path(directory) / "main.swift"

@@ -34,6 +34,7 @@ SOURCES=(
   "$ROOT/Sources/Core/PowerEstimate.swift"
   "$ROOT/Sources/Core/PowerFormat.swift"
   "$ROOT/Sources/Core/ChargeController.swift"
+  "$ROOT/Sources/Core/ChargeArbitration.swift"
   "$ROOT/Sources/Core/ControlResult.swift"
   "$ROOT/Sources/Core/DeviceProfile.swift"
   "$ROOT/Sources/Core/DeviceProfileStore.swift"
