@@ -9,6 +9,9 @@ struct RootView: View {
     @EnvironmentObject private var state: AppState
     @ObservedObject private var updater = SparkleUpdater.shared
     @StateObject private var showingUpdates = UIFlag()
+    /// Which row the pointer is over. `nil` is the resting state, so hovering a
+    /// second row cannot leave the first one lit.
+    @StateObject private var hovered = UIValue<Panel?>(nil)
     private var theme: Theme { Theme.current }
 
     var body: some View {
@@ -44,16 +47,17 @@ struct RootView: View {
                 let panel = item.element
                 if let category = panel.category, category != previousCategory(item.offset) {
                     Text(category)
-                        .font(Typography.caption)
+                        .font(Typography.label.weight(.semibold))
+                        .tracking(0.6)
                         .foregroundColor(theme.textTertiary)
                         .padding(.leading, 12)
-                        .padding(.top, item.offset == 1 ? 16 : 14)
+                        .padding(.top, 16)
                         .padding(.bottom, 4)
                 }
                 Button {
                     state.selectedPanel = panel
                 } label: {
-                    HStack(spacing: 9) {
+                    HStack(spacing: Spacing.s) {
                         Image(systemName: panel.symbol)
                             .font(Glyph.row)
                             .frame(width: 18)
@@ -62,40 +66,41 @@ struct RootView: View {
                         Spacer(minLength: 0)
                     }
                     .foregroundColor(state.selectedPanel == panel ? theme.accent : theme.textPrimary)
-                    .padding(.horizontal, 9)
-                    .frame(height: 28)
-                    .background(
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .fill(state.selectedPanel == panel ? theme.selectedSidebar : Color.clear)
-                    )
+                    .padding(.leading, 11)
+                    .padding(.trailing, 9)
+                    .frame(height: 30)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(SidebarRowStyle(selected: state.selectedPanel == panel,
+                                             hovered: hovered.value == panel))
+                .onHover { inside in
+                    if inside {
+                        hovered.value = panel
+                    } else if hovered.value == panel {
+                        hovered.value = nil
+                    }
+                }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 1)
             }
 
             Spacer(minLength: 0)
 
-            if let version = updater.availableVersion {
-                VStack(alignment: .leading, spacing: 6) {
-                    Button { showingUpdates.value = true } label: {
-                        Label(tf("发现新版本 {p}", version), systemImage: "arrow.down.circle.fill")
-                            .font(Typography.label)
-                    }
-                    .buttonStyle(.plain).foregroundColor(theme.info)
-                    .sheet(isPresented: $showingUpdates.value) { UpdateSheet() }
-                    Button(t("立即更新")) { updater.checkForUpdates() }
-                        .buttonStyle(.plain).font(Typography.caption).foregroundColor(theme.textSecondary)
-                }
-                .padding(10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 8).fill(theme.selectedSidebar))
-                .padding(.horizontal, 12).padding(.bottom, 10)
-            }
+            footer
+        }
+        .frame(width: 240)
+        .background(theme.sidebarBackground)
+    }
 
-            ZStack {
-                // Centred in the sidebar regardless of what sits at either end.
-                VStack(spacing: 1) {
+    /// Company, author, then version and the update entry on a line of their
+    /// own. All three used to share one 28 pt band: the credit was centred on
+    /// the sidebar rather than between the two controls beside it, and the
+    /// version sat at the far right with nothing to do with the name it was
+    /// level with.
+    private var footer: some View {
+        VStack(alignment: .leading, spacing: Spacing.s) {
+            HStack(spacing: Spacing.s) {
+                circleButton("power") { NSApp.terminate(nil) }
+                VStack(alignment: .leading, spacing: 1) {
                     Text("Infinity Computer")
                         .font(Typography.micro)
                         .foregroundColor(theme.textSecondary)
@@ -103,32 +108,44 @@ struct RootView: View {
                         .font(Typography.micro)
                         .foregroundColor(theme.textTertiary)
                 }
-                .fixedSize()
-
-                HStack(spacing: 12) {
-                    circleButton("power") { NSApp.terminate(nil) }
-                    Spacer(minLength: 0)
-                    Button {
-                        openReleasePage()
-                    } label: {
-                        Text("v\(appVersion)")
-                            .font(Typography.caption.monospacedDigit())
-                            .foregroundColor(theme.textTertiary)
-                    }
-                    .buttonStyle(.plain)
-                    .help(t("在 GitHub 上查看发布说明"))
-                }
+                Spacer(minLength: 0)
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 14)
+            updateCapsule
         }
-        .frame(width: 240)
-        .background(theme.sidebarBackground)
+        .padding(.horizontal, Spacing.m)
+        .padding(.bottom, Spacing.m)
     }
 
-    private func openReleasePage() {
-        guard let url = URL(string: "https://github.com/stevenjx/InfiniCal/releases") else { return }
-        NSWorkspace.shared.open(url)
+    /// Version on the left, update entry on the right, one hit target. When a
+    /// release is waiting the capsule turns into the notice itself instead of
+    /// stacking a second line above the credit.
+    private var updateCapsule: some View {
+        let available = updater.availableVersion
+        return Button {
+            showingUpdates.value = true
+        } label: {
+            HStack(spacing: Spacing.xs) {
+                Text("v\(appVersion)")
+                    .font(Typography.caption.monospacedDigit())
+                Spacer(minLength: Spacing.xs)
+                if let available {
+                    HStack(spacing: 3) {
+                        Image(systemName: "arrow.down.circle.fill").font(Glyph.inline)
+                        Text(tf("发现新版本 {p}", available))
+                            .font(Typography.micro.weight(.medium))
+                    }
+                } else {
+                    Text(t("检查更新")).font(Typography.micro)
+                }
+            }
+            .foregroundColor(available == nil ? theme.textSecondary : .white)
+            .padding(.horizontal, Spacing.s + Spacing.xxs)
+            .frame(height: 24)
+            .background(Capsule().fill(available == nil ? theme.innerControl : theme.accent))
+        }
+        .buttonStyle(.plain)
+        .help(available == nil ? t("检查更新") : tf("发现新版本 {p}", available ?? ""))
+        .sheet(isPresented: $showingUpdates.value) { UpdateSheet() }
     }
 
     private var appVersion: String {
@@ -140,11 +157,11 @@ struct RootView: View {
         return Panel.allCases[index - 1].category
     }
 
-    private func circleButton(_ symbol: String, highlighted: Bool = false, action: @escaping () -> Void) -> some View {
+    private func circleButton(_ symbol: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(Glyph.row)
-                .foregroundColor(highlighted ? theme.accent : theme.textSecondary)
+                .foregroundColor(theme.textSecondary)
                 .frame(width: 28, height: 28)
                 .background(Circle().fill(theme.isDark ? Color.white.opacity(0.07) : Color.black.opacity(0.05)))
                 .overlay(Circle().strokeBorder(theme.cardStroke, lineWidth: 1))
@@ -168,5 +185,41 @@ struct RootView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(theme.windowBackground)
+    }
+}
+
+/// Three states on one row: resting, pointer-over, selected.
+///
+/// The old row only had two, and the selected one leaned on 9 % white plus the
+/// accent text — on a 11.5 % sidebar that fill was barely above the row's own
+/// background. A 3 pt accent bar at the leading edge carries the selection now,
+/// so it survives being glanced at rather than read, and hover gets a fill of
+/// its own so the pointer has something to say before you click. Held is a
+/// deeper fill rather than a fade — see `pressedSidebar`.
+private struct SidebarRowStyle: ButtonStyle {
+    var selected: Bool
+    var hovered: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        let theme = Theme.current
+        return configuration.label
+            .background(
+                RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+                    .fill(fill(theme, pressed: configuration.isPressed))
+            )
+            .overlay(alignment: .leading) {
+                if selected {
+                    Capsule()
+                        .fill(theme.accent)
+                        .frame(width: 3, height: 16)
+                        .padding(.leading, 3)
+                }
+            }
+    }
+
+    private func fill(_ theme: Theme, pressed: Bool) -> Color {
+        if pressed { return theme.pressedSidebar }
+        if selected { return theme.selectedSidebar }
+        return hovered ? theme.hoverBackground : Color.clear
     }
 }

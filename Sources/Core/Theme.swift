@@ -39,7 +39,20 @@ struct Theme {
     /// on each side of the 4.5 line. `Tools/contrast_check.py` enforces this.
     var textTertiary: Color { isDark ? Color.white.opacity(0.50) : Color.black.opacity(0.55) }
     var accent: Color { Color(red: 0.04, green: 0.52, blue: 1.0) }
-    var selectedSidebar: Color { isDark ? Color.white.opacity(0.09) : Color.black.opacity(0.06) }
+    /// The selected sidebar row, and the one place a stronger fill was needed:
+    /// 9 % white on a 11.5 % sidebar measured barely above the row's own
+    /// background, so the selection leaned on the accent text alone.
+    var selectedSidebar: Color { isDark ? Color.white.opacity(0.12) : Color.black.opacity(0.08) }
+    /// Pointer-over a sidebar row. Half of `selectedSidebar`, so the three
+    /// states (idle / hover / selected) stay ordered on both appearances.
+    var hoverBackground: Color { isDark ? Color.white.opacity(0.055) : Color.black.opacity(0.045) }
+    /// Button-held. Deeper than `selectedSidebar` rather than dimmer: the first
+    /// cut faded the whole row to 72 % on press, which measured *darker* than
+    /// hover (38 against 41 on a 29 sidebar) — a state that reads as the row
+    /// going away instead of being held. Deepening the fill keeps the four
+    /// states ordered (29 / 42 / 56 / 70 in dark, 241 / 230 / 222 / 210 in
+    /// light) and leaves the label at full strength.
+    var pressedSidebar: Color { isDark ? Color.white.opacity(0.18) : Color.black.opacity(0.13) }
     /// Keyboard focus ring. Declared here so focus styling has one source; the
     /// focus states themselves arrive with U2-03.
     var focusRing: Color { isDark ? Color(red: 0.29, green: 0.62, blue: 1.0) : Color(red: 0.04, green: 0.42, blue: 0.86) }

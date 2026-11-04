@@ -7,12 +7,25 @@
 // `screencapture -l <id>` can grab a deterministic window image.
 //
 // Usage: window_tool <pid> [--wait milliseconds]
+//        window_tool --park            (move the pointer to the top-left corner)
 
 import AppKit
 import CoreGraphics
 import Foundation
 
 let args = CommandLine.arguments
+
+// Sidebar rows now have a hover fill, so a capture taken while the pointer
+// happens to rest on one of them bakes a pointer state into the baseline.
+// Parking the pointer in the corner before the app is launched keeps the
+// screenshots a function of the code alone. Warping needs no permissions;
+// posting events does, and is not needed here.
+if args.count >= 2, args[1] == "--park" {
+    CGWarpMouseCursorPosition(CGPoint(x: 2, y: 2))
+    CGAssociateMouseAndMouseCursorPosition(1)
+    exit(0)
+}
+
 guard args.count >= 2, let pid = Int32(args[1]) else {
     FileHandle.standardError.write("usage: window_tool <pid>\n".data(using: .utf8)!)
     exit(64)

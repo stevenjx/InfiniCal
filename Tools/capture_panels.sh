@@ -80,6 +80,9 @@ for appearance in "${APPEARANCES[@]}"; do
     pkill -f "InfiniCal.app/Contents/MacOS" 2>/dev/null || true
     sleep 1
     defaults write "$BUNDLE_ID" colorMode -int "$mode"
+    # Park the pointer before the window appears: a row that happens to be
+    # under it on launch would otherwise be captured with its hover fill.
+    "$TOOL_BIN" --park 2>/dev/null || true
 
     # Double fork: the subshell exits at once, so bash does not print a
     # "Terminated" line for every panel when the next pkill reaps the app.
