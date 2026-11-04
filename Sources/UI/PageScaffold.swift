@@ -72,7 +72,12 @@ extension PageScaffold where Toolbar == EmptyView {
 /// the same three pieces as a row, and the schedule page printed a bare grey
 /// sentence inside the list. All three are the same message: "there is nothing
 /// here yet, and this is what would put something here".
-struct EmptyState: View {
+///
+/// `Actions` is a view slot rather than a title/closure pair because the
+/// schedule page's empty state needs two actions and one of them is a menu
+/// (模板). The pair that used to sit here had no callers and could not express
+/// that, and a title-only button cannot be styled as the primary action.
+struct EmptyState<Actions: View>: View {
     /// `stacked` centres the block inside a card; `inline` lays it out as a row,
     /// for cards whose height is set by a sibling rather than by the message.
     enum Layout { case stacked, inline }
@@ -83,8 +88,7 @@ struct EmptyState: View {
     let title: String
     var message: String? = nil
     var layout: Layout = .stacked
-    var actionTitle: String? = nil
-    var action: (() -> Void)? = nil
+    @ViewBuilder var actions: Actions
 
     var body: some View {
         switch layout {
@@ -109,11 +113,9 @@ struct EmptyState: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: 360)
             }
-            if let actionTitle, let action {
-                Button(actionTitle, action: action)
-                    .font(Typography.caption)
-                    .padding(.top, Spacing.xs)
-            }
+            // No padding of its own: an empty slot must not add height to the
+            // three pages that pass no actions.
+            actions
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, Spacing.l)
@@ -137,5 +139,11 @@ struct EmptyState: View {
             }
             Spacer(minLength: 0)
         }
+    }
+}
+
+extension EmptyState where Actions == EmptyView {
+    init(symbol: String, title: String, message: String? = nil, layout: Layout = .stacked) {
+        self.init(symbol: symbol, title: title, message: message, layout: layout) { EmptyView() }
     }
 }

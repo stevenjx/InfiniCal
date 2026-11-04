@@ -9,99 +9,32 @@ struct ScheduleView: View {
     private var theme: Theme { Theme.current }
     @StateObject private var editor = ScheduleEditorModel()
 
+    /// 44 pt: a title line and a time line, with room for the 20 pt switch. The
+    /// rows used to stack three lines in 9 pt of padding, so two tasks already
+    /// filled 100 pt of a card whose height was pinned at 330.
+    private static let rowHeight: CGFloat = 44
+    /// History rows are one line — what ran, what it was, when — because the
+    /// detail is a time plus a reason, not prose.
+    private static let historyRowHeight: CGFloat = 32
+
     var body: some View {
         PageScaffold(title: Panel.schedule.title,
                      symbol: Panel.schedule.symbol,
                      help: t("在指定时间自动执行充电、放电或校准操作。"),
-                     toolbar: { taskToolbar }) {
-                Card(kind: .list) {
-                    Group {
-                        if state.tasks.isEmpty {
-                            EmptyState(symbol: "calendar.badge.plus",
-                                       title: t("还没有定时任务"),
-                                       message: t("点击 “+” 按钮添加新任务，或从现有模板中选择。"))
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        } else {
-                            ScrollView {
-                                VStack(spacing: 0) {
-                                    ForEach(state.tasks) { task in
-                                        taskRow(task)
-                                        Divider().background(theme.divider)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    .frame(height: 330)
-                }
+                     // The empty state carries 新建任务 and 模板 itself, so a
+                     // toolbar would be a second copy of the same two buttons
+                     // 40 pt above them. It appears once there is a list to add to.
+                     toolbar: { if !state.tasks.isEmpty { taskToolbar } }) {
+            taskCard
 
+            Card {
                 ToggleRow(symbol: "arrow.triangle.2.circlepath",
                           title: t("自动补做未完成的任务"),
                           help: t("启用后，InfiniCal 会自动运行 MacBook 处于睡眠或关机状态时未执行的任务。"),
                           isOn: $state.startTasksAfterDue)
+            }
 
-                HStack(spacing: 10) {
-                    IconBadge(symbol: "list.bullet.rectangle")
-                    Text(t("任务历史"))
-                        .font(Typography.headline)
-                        .foregroundColor(theme.textPrimary)
-                    HelpDot(text: t("已执行的任务会记录在此处。"))
-                    Spacer()
-                    if !state.taskHistory.isEmpty {
-                        Button(t("清除")) { state.clearTaskHistory() }
-                            .buttonStyle(.plain)
-                            .font(Typography.caption)
-                            .foregroundColor(theme.textSecondary)
-                    }
-                }
-                .frame(height: 34)
-                .padding(.top, 6)
-
-                Card(kind: .list) {
-                    Group {
-                        if state.taskHistory.isEmpty {
-                            EmptyState(symbol: "clock.arrow.circlepath",
-                                       title: t("还没有执行记录"),
-                                       message: t("已执行的任务将显示在此处。"))
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        } else {
-                            ScrollView {
-                                VStack(spacing: 0) {
-                                    ForEach(state.taskHistory) { entry in
-                                        HStack {
-                                            VStack(alignment: .leading, spacing: 2) {
-                                                HStack(spacing: 5) {
-                                                    Text(entry.title).font(Typography.body)
-                                                    if entry.outcome == .skipped {
-                                                        Text(t("已跳过"))
-                                                            .font(Typography.micro)
-                                                            .foregroundColor(theme.chartOrange)
-                                                            .padding(.horizontal, 4)
-                                                            .padding(.vertical, 1)
-                                                            .background(RoundedRectangle(cornerRadius: 3)
-                                                                            .fill(theme.chartOrange.opacity(0.14)))
-                                                    }
-                                                }
-                                                Text(entry.detail)
-                                                    .font(Typography.caption)
-                                                    .foregroundColor(theme.textSecondary)
-                                                    .fixedSize(horizontal: false, vertical: true)
-                                            }
-                                            Spacer(minLength: 8)
-                                            Text(Self.formatter.string(from: entry.date))
-                                                .font(Typography.caption)
-                                                .foregroundColor(theme.textSecondary)
-                                        }
-                                        .padding(.horizontal, CardPadding.regular)
-                                        .padding(.vertical, 8)
-                                        Divider().background(theme.divider)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    .frame(height: 130)
-                }
+            historyCard
         }
         .sheet(isPresented: $editor.isPresented) {
             TaskEditor(draft: editor.draft) { task in
@@ -113,85 +46,56 @@ struct ScheduleView: View {
         }
     }
 
-    /// Add and template buttons: the page's toolbar, right of the title. They
-    /// used to sit in a row of their own below the list, which put the primary
-    /// action at the bottom of the page it acts on.
-    private var taskToolbar: some View {
-        HStack(spacing: Spacing.s) {
-            Button {
-                editor.draft.reset()
-                editor.isPresented = true
-            } label: {
-                Image(systemName: "plus")
-                    .font(Glyph.row.weight(.semibold))
-                    .frame(width: 30, height: 26)
-                    .background(RoundedRectangle(cornerRadius: 7).fill(theme.innerControl))
-                    .foregroundColor(theme.textPrimary)
-            }
-            .buttonStyle(.plain)
+    // MARK: - Task list
 
-            Menu {
-                Button(t("周末充满")) {
-                    var task = ScheduledTask()
-                    task.kind = .topUp
-                    task.hour = 9
-                    task.weekdays = [6, 7]
-                    state.addTask(task)
+    /// The card sizes itself to its rows. A fixed 330 pt box meant one task sat
+    /// in a 330 pt hole, and the scroll view inside it captured the wheel before
+    /// the page could scroll.
+    private var taskCard: some View {
+        Card(kind: .list) {
+            VStack(spacing: 0) {
+                if state.tasks.isEmpty {
+                    EmptyState(symbol: "calendar.badge.plus",
+                               title: t("还没有定时任务"),
+                               message: t("到点自动执行充电、放电或校准，无需手动操作。")) {
+                        // No extra padding above the buttons: the block's own
+                        // 10 pt rhythm already separates them, and 4 more put
+                        // the card at 161 pt against a 160 pt target.
+                        HStack(spacing: Spacing.s) {
+                            newTaskButton
+                            templateMenu
+                        }
+                    }
+                } else {
+                    cardHeader(t("定时任务"), symbol: "calendar")
+                    Divider().background(theme.divider)
+                    ForEach(Array(state.tasks.enumerated()), id: \.element.id) { index, task in
+                        taskRow(task)
+                        if index < state.tasks.count - 1 {
+                            Divider().background(theme.divider)
+                        }
+                    }
                 }
-                Button(t("周一早晨充满")) {
-                    var task = ScheduledTask()
-                    task.kind = .topUp
-                    task.hour = 7
-                    task.weekdays = [1]
-                    state.addTask(task)
-                }
-                Button(t("每月校准")) {
-                    var task = ScheduledTask()
-                    task.kind = .calibrate
-                    task.hour = 9
-                    task.weekdays = [1]
-                    state.addTask(task)
-                }
-                Button(t("每两周校准")) {
-                    var task = ScheduledTask()
-                    task.kind = .calibrate
-                    task.hour = 9
-                    task.weekdays = [1, 3]
-                    state.addTask(task)
-                }
-            } label: {
-                HStack(spacing: 5) {
-                    Image(systemName: "doc.on.doc").font(Glyph.row)
-                    Text(t("模板")).font(Typography.body.weight(.medium))
-                }
-                .padding(.horizontal, 12)
-                .frame(height: 26)
-                .background(RoundedRectangle(cornerRadius: 7).fill(theme.innerControl))
-                .foregroundColor(theme.textPrimary)
             }
-            .menuStyle(.borderlessButton)
-            .frame(width: 90)
         }
     }
 
     private func taskRow(_ task: ScheduledTask) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Spacing.m) {
             Image(systemName: task.kind.symbol)
                 .font(Glyph.row)
-                .foregroundColor(theme.textSecondary)
-                .frame(width: 18)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(task.kind.title).font(Typography.body)
-                Text("\(task.timeText) · \(task.weekdayText)")
+                .foregroundColor(task.enabled ? theme.textSecondary : theme.textTertiary)
+                .frame(width: 20)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(task.kind.title)
+                    .font(Typography.body)
+                    .foregroundColor(task.enabled ? theme.textPrimary : theme.textSecondary)
+                Text(subtitle(task))
                     .font(Typography.caption)
                     .foregroundColor(theme.textSecondary)
-                if let summary = Self.conditionText(task) {
-                    Text(summary)
-                        .font(Typography.caption)
-                        .foregroundColor(theme.textTertiary)
-                }
+                    .lineLimit(1)
             }
-            Spacer()
+            Spacer(minLength: Spacing.s)
             Toggle("", isOn: Binding(get: { task.enabled }, set: { value in
                 if let index = state.tasks.firstIndex(where: { $0.id == task.id }) {
                     state.tasks[index].enabled = value
@@ -212,14 +116,180 @@ struct ScheduleView: View {
             .buttonStyle(.plain)
         }
         .padding(.horizontal, CardPadding.regular)
-        .padding(.vertical, 9)
+        .frame(height: Self.rowHeight)
     }
 
+    // MARK: - History
+
+    private var historyCard: some View {
+        Card(kind: .list) {
+            VStack(spacing: 0) {
+                if state.taskHistory.isEmpty {
+                    EmptyState(symbol: "clock.arrow.circlepath",
+                               title: t("还没有执行记录"),
+                               message: t("已执行的任务将显示在此处。"))
+                } else {
+                    cardHeader(t("任务历史"), symbol: "list.bullet.rectangle",
+                               help: t("已执行的任务会记录在此处。")) {
+                        Button(t("清除")) { state.clearTaskHistory() }
+                            .buttonStyle(.plain)
+                            .font(Typography.caption)
+                            .foregroundColor(theme.textTertiary)
+                    }
+                    Divider().background(theme.divider)
+                    ForEach(Array(state.taskHistory.enumerated()), id: \.element.id) { index, entry in
+                        historyRow(entry)
+                        if index < state.taskHistory.count - 1 {
+                            Divider().background(theme.divider)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// `warning` rather than `chartOrange`: the series colour is the same value
+    /// in both appearances, so 「已跳过」 sat at 2.2:1 on a white card. `warning`
+    /// is in the contrast gate and carries a light-mode variant.
+    private func historyRow(_ entry: TaskLogEntry) -> some View {
+        HStack(spacing: Spacing.s) {
+            Text(entry.title)
+                .font(Typography.body)
+                .foregroundColor(theme.textPrimary)
+            if entry.outcome == .skipped {
+                Text(t("已跳过"))
+                    .font(Typography.micro)
+                    .foregroundColor(theme.warning)
+                    .padding(.horizontal, Spacing.xs)
+                    .padding(.vertical, 1)
+                    .background(RoundedRectangle(cornerRadius: Radius.chip, style: .continuous)
+                                    .fill(theme.warning.opacity(0.14)))
+            }
+            Text(entry.detail)
+                .font(Typography.caption)
+                .foregroundColor(theme.textSecondary)
+                .lineLimit(1)
+            Spacer(minLength: Spacing.s)
+            Text(Self.formatter.string(from: entry.date))
+                .font(Typography.caption.monospacedDigit())
+                .foregroundColor(theme.textTertiary)
+        }
+        .padding(.horizontal, CardPadding.regular)
+        .frame(height: Self.historyRowHeight)
+    }
+
+    // MARK: - Chrome
+
+    /// A 34 pt header row inside a full-bleed card, so the section title belongs
+    /// to the card it names. 「任务历史」 used to float on the window background
+    /// above its card, 20 pt away from the rows it describes.
+    private func cardHeader<Content: View>(_ title: String,
+                                           symbol: String,
+                                           help: String? = nil,
+                                           @ViewBuilder trailing: () -> Content) -> some View {
+        CardHeader(title: title, symbol: symbol, help: help) { trailing() }
+            .padding(.horizontal, CardPadding.regular)
+            .frame(height: 34)
+    }
+
+    private func cardHeader(_ title: String, symbol: String, help: String? = nil) -> some View {
+        cardHeader(title, symbol: symbol, help: help) { EmptyView() }
+    }
+
+    private var newTaskButton: some View {
+        Button {
+            editor.draft.reset()
+            editor.isPresented = true
+        } label: {
+            HStack(spacing: Spacing.xs) {
+                Image(systemName: "plus").font(Glyph.row.weight(.semibold))
+                Text(t("新建任务")).font(Typography.body.weight(.medium))
+            }
+            .padding(.horizontal, Spacing.m)
+            .frame(height: 28)
+            .background(RoundedRectangle(cornerRadius: Radius.control, style: .continuous).fill(theme.accent))
+            .foregroundColor(.white)
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Add and template buttons: the page's toolbar, right of the title. They
+    /// used to sit in a row of their own below the list, which put the primary
+    /// action at the bottom of the page it acts on.
+    private var taskToolbar: some View {
+        HStack(spacing: Spacing.s) {
+            Button {
+                editor.draft.reset()
+                editor.isPresented = true
+            } label: {
+                Image(systemName: "plus")
+                    .font(Glyph.row.weight(.semibold))
+                    .frame(width: 30, height: 28)
+                    .background(RoundedRectangle(cornerRadius: Radius.control, style: .continuous).fill(theme.innerControl))
+                    .foregroundColor(theme.textPrimary)
+            }
+            .buttonStyle(.plain)
+
+            templateMenu
+        }
+    }
+
+    /// One template menu for both places it appears. `fixedSize` because a
+    /// borderless `Menu` in an `HStack` with a `Spacer` otherwise stretches to
+    /// fill the row, which is what the old 90 pt frame was working around.
+    private var templateMenu: some View {
+        Menu {
+            templateItems
+        } label: {
+            HStack(spacing: Spacing.xs) {
+                Image(systemName: "doc.on.doc").font(Glyph.row)
+                Text(t("模板")).font(Typography.body.weight(.medium))
+            }
+            .padding(.horizontal, Spacing.m)
+            .frame(height: 28)
+            .background(RoundedRectangle(cornerRadius: Radius.control, style: .continuous).fill(theme.innerControl))
+            .foregroundColor(theme.textPrimary)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+    }
+
+    @ViewBuilder
+    private var templateItems: some View {
+        Button(t("周末充满")) { addTemplate(.topUp, hour: 9, weekdays: [6, 7]) }
+        Button(t("周一早晨充满")) { addTemplate(.topUp, hour: 7, weekdays: [1]) }
+        Button(t("每月校准")) { addTemplate(.calibrate, hour: 9, weekdays: [1]) }
+        Button(t("每两周校准")) { addTemplate(.calibrate, hour: 9, weekdays: [1, 3]) }
+    }
+
+    private func addTemplate(_ kind: TaskKind, hour: Int, weekdays: Set<Int>) {
+        var task = ScheduledTask()
+        task.kind = kind
+        task.hour = hour
+        task.weekdays = weekdays
+        state.addTask(task)
+    }
+
+    // MARK: - Text
+
+    /// `en_US_POSIX`: with the system set to 12-hour time, ICU overrides the
+    /// literal `HH` and this formatter returned 「11/05 凌晨 3:41」 instead of
+    /// 「11/05 03:41」 — 30 pt wider than the column it sits in, and different in
+    /// shape from row to row.
     static let formatter: DateFormatter = {
         let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "MM/dd HH:mm"
         return f
     }()
+
+    /// Time, repeat, then conditions — on one line. The conditions used to get a
+    /// third line of their own, which is what pushed the rows past 50 pt.
+    private func subtitle(_ task: ScheduledTask) -> String {
+        var parts = ["\(task.timeText) · \(task.weekdayText)"]
+        if let conditions = Self.conditionText(task) { parts.append(conditions) }
+        return parts.joined(separator: " · ")
+    }
 
     /// Conditions only show when they are actually set, so the common case of a
     /// plain "every day at 09:00" task stays one line.

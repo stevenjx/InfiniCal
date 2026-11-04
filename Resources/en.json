@@ -548,7 +548,6 @@
  "温度曲线": "Temperature curve",
  "满电静置": "Rest at full",
  "满载": "Peak",
- "点击 “+” 按钮添加新任务，或从现有模板中选择。": "Click “+” to add a task, or start from a template.",
  "点按「电池健康」右侧的 ⓘ": "Click the ⓘ next to Battery Health",
  "照原样继续": "Leave as is",
  "特权助手已安装": "Privileged helper installed",
@@ -877,5 +876,8 @@
  "偏高": "High",
  "按设定转速运行": "Running at the set speed",
  "等待传感器读数": "Waiting for a sensor reading",
- "今天": "Today"
+ "今天": "Today",
+ "还没有定时任务": "No scheduled tasks yet",
+ "还没有执行记录": "No run history yet",
+ "到点自动执行充电、放电或校准，无需手动操作。": "Charging, discharging and calibration run on schedule, with no manual steps."
 }
