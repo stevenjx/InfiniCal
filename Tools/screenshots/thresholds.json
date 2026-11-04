@@ -1,8 +1,10 @@
 {
  "default": 0.02,
- "_comment": "允许的像素差异比例。默认 2%。充电控制页在适配器实际供电时会多出「适配器转换损耗」一行，整页下移，故单独放宽到 10%。",
+ "_comment": "允许的像素差异比例。默认 2%。充电控制页在适配器实际供电时会多出「适配器转换损耗」一行，整页下移，故单独放宽到 10%。仪表板有四条实时曲线和一张功率流动图，曲线形状每次抓图都不同（U1-02 之后图表真的画数据了），差异被数据主导，故放宽到 5%。",
  "overrides": {
   "dark/chargeControl.png": 0.1,
-  "light/chargeControl.png": 0.1
+  "light/chargeControl.png": 0.1,
+  "dark/dashboard.png": 0.05,
+  "light/dashboard.png": 0.05
  }
 }

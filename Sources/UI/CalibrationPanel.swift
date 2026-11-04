@@ -69,121 +69,16 @@ struct CalibrationPanel: View {
                 }
             }
             dischargeHintCard
-            statusCard
+            // Four sections, one card each. Before this the page stacked 27
+            // cards of equal weight — the hero, the pipeline, the results, the
+            // host telemetry and six scopes all looked like the same thing.
+            heroCard
             pipelineCard
-            HStack(alignment: .top, spacing: 10) {
-                enduranceCard
-                healthCard
-            }
-            .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 10) {
-                hostCard(title: t("SoC 功耗"),
-                         value: engine.socPowerQuality == .unavailable
-                                ? "--" : String(format: "%.1f", engine.socPowerWatts),
-                         unit: "W",
-                         symbol: "cpu",
-                         tint: theme.chartOrange,
-                         progress: min(1, engine.socPowerWatts / 50),
-                         note: socNote)
-                hostCard(title: t("屏幕功耗"),
-                         value: engine.displayPowerQuality == .unavailable
-                                ? "--" : String(format: "%.1f", engine.displayPowerWatts),
-                         unit: "W",
-                         symbol: "display",
-                         tint: theme.chartBlue,
-                         progress: min(1, engine.displayPowerWatts / 8),
-                         note: engine.displayPowerQuality.badge)
-                hostCard(title: t("CPU 温度"),
-                         value: engine.cpuTemperature > 0 ? String(format: "%.0f", engine.cpuTemperature) : "--",
-                         unit: "°C",
-                         symbol: "thermometer.medium",
-                         tint: engine.cpuTemperature >= 85 ? .red : theme.chartOrange,
-                         progress: min(1, max(0, (engine.cpuTemperature - 30) / 70)))
-                fanCard
-            }
-            HStack(spacing: 10) {
-                scopeCard(title: engine.phase == .discharging
-                          ? tf("放电曲线（{p}% → {p}%）", "\(engine.dischargeStartPercentage)", "\(engine.dischargeTarget)")
-                          : t("电量趋势"),
-                          badge: "\(engine.percentage)",
-                          badgeUnit: "%",
-                          tint: theme.chartBlue,
-                          domain: 0...100,
-                          steps: [Double(engine.dischargeTarget), 50, 100],
-                          unit: "%",
-                          points: engine.dischargeCurve.isEmpty ? engine.chartPoints : engine.dischargeCurve,
-                          keyPath: \.percentage)
-                scopeCard(title: t("瞬时功率"),
-                          badge: String(format: "%.2f", engine.batteryPower),
-                          badgeUnit: "W",
-                          tint: theme.chartOrange,
-                          domain: 0...max(35, (engine.chartPoints.map(\.power).max() ?? 20) + 5),
-                          steps: [0, max(35, (engine.chartPoints.map(\.power).max() ?? 20) + 5) / 2],
-                          unit: "W",
-                          points: engine.chartPoints,
-                          keyPath: \.power)
-            }
-            .frame(height: 110)
-            HStack(spacing: 10) {
-                scopeCard(title: t("电压"),
-                          badge: String(format: "%.2f", engine.voltage),
-                          badgeUnit: "V",
-                          tint: theme.chartBlue,
-                          domain: voltageDomain,
-                          steps: [voltageDomain.lowerBound,
-                                  (voltageDomain.lowerBound + voltageDomain.upperBound) / 2,
-                                  voltageDomain.upperBound],
-                          unit: "V",
-                          points: engine.chartPoints,
-                          keyPath: \.voltage)
-                scopeCard(title: t("电流"),
-                          badge: String(format: "%.2f", engine.signedAmperage),
-                          badgeUnit: "A",
-                          tint: theme.chartOrange,
-                          domain: currentDomain,
-                          steps: [currentDomain.lowerBound, 0, currentDomain.upperBound],
-                          unit: "A",
-                          points: engine.chartPoints,
-                          keyPath: \.amperage)
-                scopeCard(title: t("温度"),
-                          badge: String(format: "%.1f", engine.temperature),
-                          badgeUnit: "°C",
-                          tint: theme.chartGreen,
-                          domain: temperatureDomain,
-                          steps: [temperatureDomain.lowerBound,
-                                  (temperatureDomain.lowerBound + temperatureDomain.upperBound) / 2,
-                                  temperatureDomain.upperBound],
-                          unit: "°C",
-                          points: engine.chartPoints,
-                          keyPath: \.temperature)
-            }
-            .frame(height: 110)
-            if engine.cellVoltages.count >= 2 {
-                HStack(spacing: 10) {
-                    scopeCard(title: t("电芯压差"),
-                              badge: String(format: "%.1f", engine.cellDeltaMillivolts),
-                              badgeUnit: "mV",
-                              tint: theme.chartOrange,
-                              domain: 0...cellDeltaCeiling,
-                              steps: [0, cellDeltaCeiling / 2],
-                              unit: "mV",
-                              points: engine.chartPoints,
-                              keyPath: \.cellDeltaMillivolts)
-                    cellBalanceCard
-                }
-                .frame(height: 110)
-            }
+            healthCard
+            liveMetricsCard
+            curvesCard
             controlBar
-            Card {
-                CardHeader(title: t("报告与数据导出")) {
-                    HStack(spacing: Spacing.s) {
-                        ForEach(["txt", "csv", "json"], id: \.self) { format in
-                            Button(format.uppercased()) { engine.exportSession(format: format) }
-                                .disabled(!engine.hasExportSamples)
-                        }
-                    }
-                }
-            }
+            exportCard
         }
         .onAppear {
             engine.beginTelemetryPage()
@@ -341,9 +236,15 @@ struct CalibrationPanel: View {
 
     // MARK: - Live status
 
-    private var statusCard: some View {
+    // MARK: - Hero
+
+    /// The one card that answers "where is the pack right now": state of charge,
+    /// what it is doing, and the three electrical readings that explain it.
+    /// Six metrics used to sit here, which made the hero a grid rather than a
+    /// headline; the other three moved to the 实时指标 section.
+    private var heroCard: some View {
         Card {
-            HStack(spacing: 14) {
+            HStack(spacing: Spacing.m) {
                 HStack(spacing: 12) {
                     CalibrationRing(percentage: engine.percentage,
                                     isCharging: engine.isCharging,
@@ -367,7 +268,7 @@ struct CalibrationPanel: View {
                             Circle()
                                 .fill(engine.isExternalConnected ? theme.chartGreen : theme.textTertiary)
                                 .frame(width: 5, height: 5)
-                            Text(tf("设计 {p} mAh · 系统满充容量 {p} mAh", "\(Int(engine.designCapacityMAh))", "\(Int(engine.rawMaxCapacityMAh))"))
+                            Text(tf("系统满充容量 {p} mAh", "\(Int(engine.rawMaxCapacityMAh))"))
                                 .font(Typography.micro)
                                 .foregroundColor(theme.textTertiary)
                                 .lineLimit(1)
@@ -376,22 +277,18 @@ struct CalibrationPanel: View {
                     .frame(minWidth: 132, alignment: .leading)
                 }
 
-                Rectangle().fill(theme.divider).frame(width: 1, height: 48)
+                Rectangle().fill(theme.divider).frame(width: 1, height: 52)
 
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 10),
-                                    GridItem(.flexible(), spacing: 10),
-                                    GridItem(.flexible(), spacing: 10)],
-                          alignment: .leading, spacing: 9) {
-                    metric(t("电压"), String(format: "%.2f", engine.voltage), "V", "bolt", theme.textPrimary)
-                    metric(t("电流"), String(format: "%.2f", engine.signedAmperage), "A",
-                           "arrow.left.arrow.right", amperageTint)
-                    metric(t("电池功率"), String(format: "%.2f", engine.batteryPower), "W", "power", theme.chartOrange)
-                    metric(t("电池温度"),
-                           engine.temperature > 0 ? String(format: "%.1f", engine.temperature) : "--",
-                           "°C", "thermometer.medium",
-                           engine.temperature >= engine.highTemperature ? .red : theme.textPrimary)
-                    metric(t("剩余容量"), String(format: "%.0f", engine.remainingCapacityMAh), "mAh", "battery.50", theme.textPrimary)
-                    metric(t("循环次数"), "\(engine.cycleCount)", "", "arrow.triangle.2.circlepath", theme.textPrimary)
+                HStack(alignment: .top, spacing: Spacing.l) {
+                    metricTile(t("电压"), String(format: "%.2f", engine.voltage), "V",
+                               symbol: "bolt", tint: theme.textPrimary,
+                               valueFont: Typography.figure.weight(.semibold))
+                    metricTile(t("电流"), String(format: "%.2f", engine.signedAmperage), "A",
+                               symbol: "arrow.left.arrow.right", tint: amperageTint,
+                               valueFont: Typography.figure.weight(.semibold))
+                    metricTile(t("电池功率"), String(format: "%.2f", engine.batteryPower), "W",
+                               symbol: "power", tint: theme.chartOrange,
+                               valueFont: Typography.figure.weight(.semibold))
                 }
             }
         }
@@ -410,9 +307,14 @@ struct CalibrationPanel: View {
         return theme.textPrimary
     }
 
-    private func metric(_ title: String, _ value: String, _ unit: String,
-                        _ symbol: String, _ tint: Color) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+    /// One tile of a metric grid: icon + label, value + unit, note. Every grid on
+    /// this page uses it, so tiles in the same row always share an anatomy and a
+    /// height — the four host readings used to be four slightly different cards.
+    private func metricTile(_ title: String, _ value: String, _ unit: String,
+                            symbol: String, tint: Color,
+                            note: String? = nil,
+                            valueFont: Font = Typography.headline) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 4) {
                 Image(systemName: symbol)
                     .font(Glyph.inline.weight(.semibold))
@@ -424,17 +326,32 @@ struct CalibrationPanel: View {
             }
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(value)
-                    .font(Typography.headline)
+                    .font(valueFont)
                     .foregroundColor(tint)
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
-                Text(unit)
-                    .font(Typography.micro)
-                    .foregroundColor(theme.textSecondary)
+                if !unit.isEmpty {
+                    Text(unit)
+                        .font(Typography.micro)
+                        .foregroundColor(theme.textSecondary)
+                }
             }
+            // Reserved even when empty, so a tile without a note is the same
+            // height as one with it.
+            Text(note ?? "")
+                .font(Typography.micro)
+                .foregroundColor(theme.textTertiary)
+                .lineLimit(1)
+                .frame(height: 13, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Three equal columns: the rhythm shared by 实时指标 and 健康度与容量.
+    private var gridColumns: [GridItem] {
+        Array(repeating: GridItem(.flexible(), spacing: Spacing.m, alignment: .topLeading),
+              count: 3)
     }
 
     // MARK: - Pipeline
@@ -456,8 +373,8 @@ struct CalibrationPanel: View {
     }
 
     private var pipelineCard: some View {
-        Card(padding: .compact) {
-            VStack(alignment: .leading, spacing: 6) {
+        Card {
+            VStack(alignment: .leading, spacing: Spacing.m) {
                 CardHeader(title: t("校准流程"), symbol: "arrow.triangle.branch",
                            tint: theme.textSecondary) {
                     Text(pipelineProgressText)
@@ -465,19 +382,46 @@ struct CalibrationPanel: View {
                         .foregroundColor(theme.textSecondary)
                 }
 
-                HStack(spacing: 0) {
-                    ForEach(Array(steps.enumerated()), id: \.offset) { item in
-                        pipelineStep(index: item.offset, phase: item.element)
-                        if item.offset < steps.count - 1 {
-                            Rectangle()
-                                .fill(currentIndex > item.offset ? theme.accent.opacity(0.55) : theme.divider)
-                                .frame(width: 18, height: 1.5)
-                                .offset(y: -11)
+                ZStack(alignment: .top) {
+                    pipelineRail
+                    HStack(spacing: 0) {
+                        ForEach(Array(steps.enumerated()), id: \.offset) { item in
+                            pipelineStep(index: item.offset, phase: item.element)
                         }
                     }
                 }
             }
         }
+    }
+
+    /// One continuous rail behind the five circles, filled up to the current
+    /// step. The old version drew a fixed 18 pt segment *between* steps, so the
+    /// connector never read as a single track.
+    private var pipelineRail: some View {
+        GeometryReader { geo in
+            let column = geo.size.width / CGFloat(steps.count)
+            let start = column / 2
+            let end = geo.size.width - column / 2
+            let reached = currentIndex < 0
+                ? start
+                : start + column * CGFloat(min(currentIndex, steps.count - 1))
+            ZStack(alignment: .topLeading) {
+                Path { path in
+                    path.move(to: CGPoint(x: start, y: 16))
+                    path.addLine(to: CGPoint(x: end, y: 16))
+                }
+                .stroke(theme.divider, lineWidth: 1.5)
+                if reached > start {
+                    Path { path in
+                        path.move(to: CGPoint(x: start, y: 16))
+                        path.addLine(to: CGPoint(x: reached, y: 16))
+                    }
+                    .stroke(theme.accent.opacity(0.8), lineWidth: 1.5)
+                }
+            }
+        }
+        .frame(height: 32)
+        .allowsHitTesting(false)
     }
 
     private var pipelineProgressText: String {
@@ -493,6 +437,8 @@ struct CalibrationPanel: View {
 
         return VStack(spacing: 6) {
             ZStack {
+                // Opaque base, so the rail does not show through the circle.
+                Circle().fill(theme.card).frame(width: 32, height: 32)
                 Circle()
                     .fill(tint.opacity(theme.isDark
                                         ? (isActive ? 0.18 : (isDone ? 0.10 : 0.06))
@@ -506,68 +452,45 @@ struct CalibrationPanel: View {
                     .font(Glyph.row.weight(.semibold))
                     .foregroundColor(tint)
             }
+            // One line per step: five equal columns leave ~190 pt each at the
+            // default window, which is far more than the longest label needs, so
+            // the old forced line break was buying nothing.
             Text(stepTitle(phase))
-                .font(Typography.micro.weight(isActive ? .bold : .regular))
+                .font(Typography.label.weight(isActive ? .semibold : .regular))
                 .foregroundColor(isActive ? theme.textPrimary : theme.textSecondary)
-                .multilineTextAlignment(.center)
-                // Two lines at micro: a fixed 24 pt frame clipped the second
-                // line once the label moved up from 9.5 pt.
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(minHeight: 24, alignment: .top)
+                .lineLimit(1)
+                .fixedSize()
+                .padding(.horizontal, Spacing.s)
+                .padding(.vertical, 2)
+                .background(Capsule().fill(isActive ? theme.accent.opacity(0.14) : Color.clear))
         }
         .frame(maxWidth: .infinity)
     }
 
     private func stepTitle(_ phase: CalibrationPhase) -> String {
         switch phase {
-        case .chargingToFull: return t("预充至\n100%")
-        case .discharging: return tf("受控放电\n至 {p}%", "\(engine.dischargeTarget)")
-        case .rechargingToFull: return t("复充至\n100%")
-        case .holdingAtFull: return t("满电静置\n10 分钟")
-        case .dischargingToBuffer: return tf("回落至\n{p}%", "\(engine.storageLevel)")
+        case .chargingToFull: return t("预充至 100%")
+        case .discharging: return tf("受控放电至 {p}%", "\(engine.dischargeTarget)")
+        case .rechargingToFull: return t("复充至 100%")
+        case .holdingAtFull: return t("满电静置 10 分钟")
+        case .dischargingToBuffer: return tf("回落至 {p}%", "\(engine.storageLevel)")
         default: return phase.title
         }
     }
 
     // MARK: - Results
 
-    private var enduranceCard: some View {
-        Card(padding: .compact) {
-            VStack(alignment: .leading, spacing: 8) {
-                CardHeader(title: t("续航评估"), symbol: "clock", tint: theme.chartOrange) {
-                    if engine.aiRemainingMinutes > 0 {
-                        Text(t("AI 预测"))
-                            .font(Typography.micro.weight(.semibold))
-                            .foregroundColor(theme.chartPurple)
-                    }
-                }
-
-                let minutes = engine.aiRemainingMinutes > 0 ? engine.aiRemainingMinutes : engine.estimatedRemainingMinutes
-                HStack(alignment: .firstTextBaseline, spacing: 5) {
-                    Text(Self.duration(minutes))
-                        .font(Typography.figure.weight(.bold))
-                        .foregroundColor(minutes > 0 ? theme.chartOrange : theme.textSecondary)
-                        .monospacedDigit()
-                    Text(t("预计可用"))
-                        .font(Typography.micro)
-                        .foregroundColor(theme.textSecondary)
-                    Spacer(minLength: 0)
-                }
-
-                HStack(spacing: 10) {
-                    metric(t("全周期耗时"), Self.duration(engine.totalDischargeRuntimeMinutes), "", "hourglass", theme.textPrimary)
-                    metric(t("平均放电功耗"), String(format: "%.1f", engine.dischargeAveragePower), "W", "bolt.slash", theme.textPrimary)
-                }
-                Spacer(minLength: 0)
-            }
-            .frame(maxHeight: .infinity, alignment: .top)
-        }
-    }
-
+    /// 健康度与容量: two headline figures over one uniform grid of six facts,
+    /// then the evidence lines. 续航评估 used to be its own card holding two
+    /// numbers and a placeholder, which is why the row read lopsided next to the
+    /// dense health card.
     private var healthCard: some View {
-        Card(padding: .compact) {
-            VStack(alignment: .leading, spacing: 8) {
-                CardHeader(title: t("健康度与容量"), symbol: "heart", tint: theme.chartBlue) {
+        let health = engine.measuredHealth > 0 ? engine.measuredHealth : engine.aiTrueHealthPercent
+        let minutes = engine.aiRemainingMinutes > 0 ? engine.aiRemainingMinutes : engine.estimatedRemainingMinutes
+
+        return Card {
+            VStack(alignment: .leading, spacing: Spacing.m) {
+                CardHeader(title: t("健康度与容量"), symbol: "heart.fill", tint: theme.chartBlue) {
                     if engine.aiConfidence > 0 {
                         Text(tf("置信度 {p}%", "\(Int(engine.aiConfidence))"))
                             .font(Typography.micro)
@@ -575,43 +498,77 @@ struct CalibrationPanel: View {
                     }
                 }
 
-                let health = engine.measuredHealth > 0 ? engine.measuredHealth : engine.aiTrueHealthPercent
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text(health > 0 ? String(format: "%.1f", health) : "--")
-                        .font(Typography.figure.weight(.bold))
-                        .foregroundColor(health >= 80 ? theme.chartGreen : (health > 0 ? theme.chartOrange : theme.textSecondary))
-                        .monospacedDigit()
-                    if health > 0 {
-                        Text("%")
-                            .font(Typography.label.weight(.semibold))
-                            .foregroundColor(theme.textSecondary)
-                    }
-                    Text(t("电池健康度"))
-                        .font(Typography.micro)
-                        .foregroundColor(theme.textSecondary)
+                HStack(alignment: .top, spacing: Spacing.xl) {
+                    headlineFigure(health > 0 ? String(format: "%.1f", health) : "--",
+                                   unit: health > 0 ? "%" : "",
+                                   title: t("电池健康度"),
+                                   tint: health >= 80 ? theme.chartGreen
+                                        : (health > 0 ? theme.chartOrange : theme.textSecondary),
+                                   badge: nil)
+                    headlineFigure(Self.duration(minutes), unit: "",
+                                   title: t("预计可用"),
+                                   tint: minutes > 0 ? theme.chartOrange : theme.textSecondary,
+                                   badge: engine.aiRemainingMinutes > 0 ? t("AI 预测") : nil)
                     Spacer(minLength: 0)
                 }
 
-                HStack(spacing: 10) {
-                    metric(t("真实满充容量"),
-                           engine.aiTrueCapacityMAh > 0 ? String(format: "%.0f", engine.aiTrueCapacityMAh) : "--",
-                           "mAh", "battery.100", theme.textPrimary)
-                    metric(t("直流内阻"),
-                           engine.internalResistanceMilliohm > 0 ? String(format: "%.1f", engine.internalResistanceMilliohm) : "--",
-                           "mΩ", "waveform.path.ecg", theme.textPrimary)
+                LazyVGrid(columns: gridColumns, alignment: .leading, spacing: Spacing.m) {
+                    metricTile(t("真实满充容量"),
+                               engine.aiTrueCapacityMAh > 0 ? String(format: "%.0f", engine.aiTrueCapacityMAh) : "--",
+                               "mAh", symbol: "battery.100", tint: theme.textPrimary)
+                    metricTile(t("设计容量"), String(format: "%.0f", engine.designCapacityMAh), "mAh",
+                               symbol: "ruler", tint: theme.textPrimary)
+                    metricTile(t("直流内阻"),
+                               engine.internalResistanceMilliohm > 0
+                                   ? String(format: "%.1f", engine.internalResistanceMilliohm) : "--",
+                               "mΩ", symbol: "waveform.path.ecg", tint: theme.textPrimary)
+                    metricTile(t("循环次数"), "\(engine.cycleCount)", "",
+                               symbol: "arrow.triangle.2.circlepath", tint: theme.textPrimary)
+                    metricTile(t("全周期耗时"), Self.duration(engine.totalDischargeRuntimeMinutes), "",
+                               symbol: "hourglass", tint: theme.textPrimary)
+                    metricTile(t("平均放电功耗"), String(format: "%.1f", engine.dischargeAveragePower), "W",
+                               symbol: "bolt.slash", tint: theme.textPrimary)
                 }
 
                 if !engine.cellVoltages.isEmpty {
-                    Text(tf("电芯 {p} V · 压差 {p} mV", engine.cellVoltages.map { String(format: "%.3f", $0) }.joined(separator: " / "), String(format: "%.1f", engine.cellDeltaMillivolts)))
+                    Text(tf("电芯 {p} V · 压差 {p} mV",
+                            engine.cellVoltages.map { String(format: "%.3f", $0) }.joined(separator: " / "),
+                            String(format: "%.1f", engine.cellDeltaMillivolts)))
                         .font(Typography.micro.monospaced())
                         .foregroundColor(theme.textTertiary)
                         .lineLimit(1)
                 }
 
                 trendLine
-                Spacer(minLength: 0)
             }
-            .frame(maxHeight: .infinity, alignment: .top)
+        }
+    }
+
+    /// The two figures at the top of 健康度与容量: value + unit, then what it is.
+    private func headlineFigure(_ value: String, unit: String, title: String,
+                                tint: Color, badge: String?) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(value)
+                    .font(Typography.figure.weight(.bold))
+                    .foregroundColor(tint)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                if !unit.isEmpty {
+                    Text(unit)
+                        .font(Typography.label.weight(.semibold))
+                        .foregroundColor(theme.textSecondary)
+                }
+                if let badge {
+                    Text(badge)
+                        .font(Typography.micro.weight(.semibold))
+                        .foregroundColor(theme.chartPurple)
+                        .padding(.leading, 4)
+                }
+            }
+            Text(title)
+                .font(Typography.micro)
+                .foregroundColor(theme.textSecondary)
         }
     }
 
@@ -643,7 +600,10 @@ struct CalibrationPanel: View {
             Text(t("衰减趋势: 样本不足（至少 8 个不同循环数、跨度 20 次），继续使用后可推算"))
                 .font(Typography.micro)
                 .foregroundColor(theme.textTertiary)
-                .lineLimit(1)
+                // Two lines: at the 980 pt minimum window the sentence is wider
+                // than the card, and truncating it hid the "how to fix this".
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
@@ -657,93 +617,59 @@ struct CalibrationPanel: View {
                   String(format: "%.1f", engine.socGPUWatts))
     }
 
-    // MARK: - Host telemetry
+    // MARK: - Live metrics
 
-    private func hostCard(title: String, value: String, unit: String,
-                          symbol: String, tint: Color, progress: Double,
-                          note: String? = nil) -> some View {
-        Card(padding: .compact) {
-            HStack(spacing: 9) {
-                ZStack {
-                    Circle().stroke(tint.opacity(0.15), lineWidth: 3)
-                    Circle()
-                        .trim(from: 0, to: CGFloat(max(0.04, min(1, progress))))
-                        .stroke(tint, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
-                    Image(systemName: symbol)
-                        .font(Glyph.inline.weight(.semibold))
-                        .foregroundColor(tint)
-                }
-                .frame(width: 30, height: 30)
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title)
-                        .font(Typography.caption)
-                        .foregroundColor(theme.textSecondary)
-                    HStack(alignment: .firstTextBaseline, spacing: 2) {
-                        Text(value)
-                            .font(Typography.headline.weight(.bold))
-                            .foregroundColor(theme.textPrimary)
-                            .monospacedDigit()
-                        Text(unit)
-                            .font(Typography.micro)
-                            .foregroundColor(theme.textSecondary)
-                    }
-                    if let note {
-                        Text(note)
-                            .font(Typography.micro)
-                            .foregroundColor(theme.textTertiary)
-                            .lineLimit(1)
-                    }
-                }
-                Spacer(minLength: 0)
-            }
-        }
-    }
-
-    private var fanCard: some View {
+    /// The pack's own readings plus the host's, in one grid. Four separate cards
+    /// with four different anatomies used to sit here (one had a progress ring,
+    /// one had no note, two had notes of different lengths).
+    private var liveMetricsCard: some View {
         // Read the same published sample the 风扇控制 page shows, so the two
         // pages can never display different numbers for the same instant.
         let readings = fans.fans
-        let current = readings.map { $0.currentRPM }.max() ?? 0
-        let ceiling = readings.map { $0.maxRPM }.max() ?? 0
+        let fanRPM = readings.map { $0.currentRPM }.max() ?? 0
+        let fanCeiling = readings.map { $0.maxRPM }.max() ?? 0
         let hasFan = !readings.isEmpty
 
-        return Card(padding: .compact) {
-            HStack(spacing: 9) {
-                ZStack {
-                    Circle().stroke(theme.chartPurple.opacity(0.15), lineWidth: 3)
-                    Circle()
-                        .trim(from: 0, to: CGFloat(ceiling > 0 ? min(1, Double(current) / Double(ceiling)) : 0))
-                        .stroke(theme.chartPurple, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
-                    Image(systemName: "fanblades.fill")
-                        .font(Glyph.row.weight(.semibold))
-                        .foregroundColor(hasFan ? theme.chartPurple : theme.textTertiary)
-                }
-                .frame(width: 30, height: 30)
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(t("风扇转速"))
-                        .font(Typography.caption)
-                        .foregroundColor(theme.textSecondary)
-                    HStack(alignment: .firstTextBaseline, spacing: 2) {
-                        Text(hasFan ? "\(current)" : "--")
-                            .font(Typography.headline.weight(.bold))
-                            .foregroundColor(hasFan ? theme.textPrimary : theme.textSecondary)
-                            .monospacedDigit()
-                        Text("RPM")
-                            .font(Typography.micro)
-                            .foregroundColor(theme.textSecondary)
-                    }
-                    Text(hasFan
-                         ? (current > 0 ? tf("最高 · {p} 个风扇", "\(readings.count)") : t("已停转（正常待机）"))
-                         : t("此机型无风扇"))
+        return Card {
+            VStack(alignment: .leading, spacing: Spacing.m) {
+                CardHeader(title: t("实时指标"), symbol: "gauge", tint: theme.textSecondary) {
+                    Text(t("全部本地测量"))
                         .font(Typography.micro)
                         .foregroundColor(theme.textTertiary)
-                        .lineLimit(1)
                 }
-                Spacer(minLength: 0)
+
+                LazyVGrid(columns: gridColumns, alignment: .leading, spacing: Spacing.m) {
+                    metricTile(t("电池温度"),
+                               engine.temperature > 0 ? String(format: "%.1f", engine.temperature) : "--",
+                               "°C", symbol: "thermometer.medium",
+                               tint: engine.temperature >= engine.highTemperature ? theme.danger : theme.textPrimary,
+                               note: tf("保护阈值 {p}°C", "\(Int(engine.highTemperature))"))
+                    metricTile(t("剩余容量"), String(format: "%.0f", engine.remainingCapacityMAh), "mAh",
+                               symbol: "battery.50", tint: theme.textPrimary)
+                    metricTile(t("SoC 功耗"),
+                               engine.socPowerQuality == .unavailable
+                                   ? "--" : String(format: "%.1f", engine.socPowerWatts),
+                               "W", symbol: "cpu", tint: theme.chartOrange, note: socNote)
+                    metricTile(t("屏幕功耗"),
+                               engine.displayPowerQuality == .unavailable
+                                   ? "--" : String(format: "%.1f", engine.displayPowerWatts),
+                               "W", symbol: "display", tint: theme.chartBlue,
+                               note: engine.displayPowerQuality.badge)
+                    metricTile(t("CPU 温度"),
+                               engine.cpuTemperature > 0 ? String(format: "%.0f", engine.cpuTemperature) : "--",
+                               "°C", symbol: "thermometer.sun",
+                               tint: engine.cpuTemperature >= 85 ? theme.danger : theme.chartOrange,
+                               note: engine.cpuTemperature >= 85 ? t("偏高") : nil)
+                    metricTile(t("风扇转速"),
+                               hasFan ? "\(fanRPM)" : "--", "RPM",
+                               symbol: "fanblades.fill",
+                               tint: hasFan ? theme.chartPurple : theme.textTertiary,
+                               note: hasFan
+                                   ? (fanRPM > 0
+                                      ? tf("上限 {p} RPM", "\(fanCeiling)")
+                                      : t("已停转（正常待机）"))
+                                   : t("此机型无风扇"))
+                }
             }
         }
     }
@@ -793,54 +719,184 @@ struct CalibrationPanel: View {
         let low = cells.min() ?? 0
         let high = cells.max() ?? 1
         let span = max(0.001, high - low)
-        return Card(padding: .compact) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 5) {
-                    Circle().fill(theme.chartGreen).frame(width: 5, height: 5)
-                    Text(t("电芯电压"))
-                        .font(Typography.label.weight(.semibold))
-                        .foregroundColor(theme.textPrimary)
-                    Spacer(minLength: 6)
-                    Text(tf("压差 {p} mV", String(format: "%.1f", engine.cellDeltaMillivolts)))
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 5) {
+                Circle().fill(theme.chartGreen).frame(width: 5, height: 5)
+                Text(t("电芯电压"))
+                    .font(Typography.label.weight(.semibold))
+                    .foregroundColor(theme.textPrimary)
+                Spacer(minLength: 6)
+                Text(tf("压差 {p} mV", String(format: "%.1f", engine.cellDeltaMillivolts)))
+                    .font(Typography.micro.monospaced())
+                    .foregroundColor(theme.textSecondary)
+            }
+            ForEach(Array(cells.enumerated()), id: \.offset) { index, volts in
+                HStack(spacing: 6) {
+                    Text("C\(index + 1)")
+                        .font(Typography.micro.monospaced())
+                        .foregroundColor(theme.textTertiary)
+                        .frame(width: 18, alignment: .leading)
+                    GeometryReader { geo in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(theme.innerControl)
+                            Capsule()
+                                .fill(theme.chartGreen.opacity(0.85))
+                                .frame(width: max(2, geo.size.width * CGFloat((volts - low) / span)))
+                        }
+                    }
+                    .frame(height: 4)
+                    Text(String(format: "%.3f", volts))
                         .font(Typography.micro.monospaced())
                         .foregroundColor(theme.textSecondary)
                 }
-                ForEach(Array(cells.enumerated()), id: \.offset) { index, volts in
-                    HStack(spacing: 6) {
-                        Text("C\(index + 1)")
-                            .font(Typography.micro.monospaced())
-                            .foregroundColor(theme.textTertiary)
-                            .frame(width: 18, alignment: .leading)
-                        GeometryReader { geo in
-                            ZStack(alignment: .leading) {
-                                Capsule().fill(theme.innerControl)
-                                Capsule()
-                                    .fill(theme.chartGreen.opacity(0.85))
-                                    .frame(width: max(2, geo.size.width * CGFloat((volts - low) / span)))
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    // MARK: - Curves
+
+    private enum CurveCell: String, Identifiable {
+        case soc, power, voltage, current, temperature, cellDelta, cellBalance
+        var id: String { rawValue }
+    }
+
+    /// All six scopes in one card, three per row. Six cards with six badges and
+    /// six separate borders was the single biggest source of visual noise on
+    /// this page; the scopes themselves are unchanged.
+    private var curvesCard: some View {
+        let cells: [CurveCell] = engine.cellVoltages.count >= 2
+            ? [.soc, .power, .voltage, .current, .temperature, .cellDelta, .cellBalance]
+            : [.soc, .power, .voltage, .current, .temperature]
+
+        return Card {
+            VStack(alignment: .leading, spacing: Spacing.m) {
+                CardHeader(title: t("实时曲线"), symbol: "chart.xyaxis.line",
+                           tint: theme.textSecondary) {
+                    Text(t("悬停查看数值"))
+                        .font(Typography.micro)
+                        .foregroundColor(theme.textTertiary)
+                }
+
+                VStack(spacing: Spacing.m) {
+                    ForEach(Array(chunked(cells, 3).enumerated()), id: \.offset) { row in
+                        HStack(alignment: .top, spacing: Spacing.m) {
+                            ForEach(row.element) { cell in
+                                curveCell(cell).frame(height: 110)
                             }
                         }
-                        .frame(height: 4)
-                        Text(String(format: "%.3f", volts))
-                            .font(Typography.micro.monospaced())
-                            .foregroundColor(theme.textSecondary)
                     }
                 }
-                Spacer(minLength: 0)
             }
         }
-        .frame(maxWidth: .infinity)
+    }
+
+    /// Rows of at most `size`, so a trailing row of one or two cells expands to
+    /// fill the width instead of leaving a hole.
+    private func chunked<T>(_ items: [T], _ size: Int) -> [[T]] {
+        stride(from: 0, to: items.count, by: size).map {
+            Array(items[$0..<min($0 + size, items.count)])
+        }
+    }
+
+    @ViewBuilder
+    private func curveCell(_ cell: CurveCell) -> some View {
+        switch cell {
+        case .soc:
+            scopeCard(title: engine.phase == .discharging
+                      ? tf("放电曲线（{p}% → {p}%）", "\(engine.dischargeStartPercentage)", "\(engine.dischargeTarget)")
+                      : t("电量趋势"),
+                      badge: "\(engine.percentage)",
+                      badgeUnit: "%",
+                      tint: theme.chartBlue,
+                      domain: 0...100,
+                      steps: [Double(engine.dischargeTarget), 50, 100],
+                      unit: "%",
+                      points: engine.dischargeCurve.isEmpty ? engine.chartPoints : engine.dischargeCurve,
+                      keyPath: \.percentage)
+        case .power:
+            scopeCard(title: t("瞬时功率"),
+                      badge: String(format: "%.2f", engine.batteryPower),
+                      badgeUnit: "W",
+                      tint: theme.chartOrange,
+                      domain: 0...max(35, (engine.chartPoints.map(\.power).max() ?? 20) + 5),
+                      steps: [0, max(35, (engine.chartPoints.map(\.power).max() ?? 20) + 5) / 2],
+                      unit: "W",
+                      points: engine.chartPoints,
+                      keyPath: \.power)
+        case .voltage:
+            scopeCard(title: t("电压"),
+                      badge: String(format: "%.2f", engine.voltage),
+                      badgeUnit: "V",
+                      tint: theme.chartBlue,
+                      domain: voltageDomain,
+                      steps: [voltageDomain.lowerBound,
+                              (voltageDomain.lowerBound + voltageDomain.upperBound) / 2,
+                              voltageDomain.upperBound],
+                      unit: "V",
+                      points: engine.chartPoints,
+                      keyPath: \.voltage)
+        case .current:
+            scopeCard(title: t("电流"),
+                      badge: String(format: "%.2f", engine.signedAmperage),
+                      badgeUnit: "A",
+                      tint: theme.chartOrange,
+                      domain: currentDomain,
+                      steps: [currentDomain.lowerBound, 0, currentDomain.upperBound],
+                      unit: "A",
+                      points: engine.chartPoints,
+                      keyPath: \.amperage)
+        case .temperature:
+            scopeCard(title: t("温度"),
+                      badge: String(format: "%.1f", engine.temperature),
+                      badgeUnit: "°C",
+                      tint: theme.chartGreen,
+                      domain: temperatureDomain,
+                      steps: [temperatureDomain.lowerBound,
+                              (temperatureDomain.lowerBound + temperatureDomain.upperBound) / 2,
+                              temperatureDomain.upperBound],
+                      unit: "°C",
+                      points: engine.chartPoints,
+                      keyPath: \.temperature)
+        case .cellDelta:
+            scopeCard(title: t("电芯压差"),
+                      badge: String(format: "%.1f", engine.cellDeltaMillivolts),
+                      badgeUnit: "mV",
+                      tint: theme.chartOrange,
+                      domain: 0...cellDeltaCeiling,
+                      steps: [0, cellDeltaCeiling / 2],
+                      unit: "mV",
+                      points: engine.chartPoints,
+                      keyPath: \.cellDeltaMillivolts)
+        case .cellBalance:
+            cellBalanceCard
+        }
     }
 
     private func scopeCard(title: String, badge: String, badgeUnit: String, tint: Color,
                            domain: ClosedRange<Double>, steps: [Double], unit: String,
                            points: [CalibrationSample],
                            keyPath: KeyPath<CalibrationSample, Double>) -> some View {
-        Card(padding: .compact) {
-            CalibrationScopeCard(title: title, badge: badge, badgeUnit: badgeUnit, tint: tint,
-                                 domain: domain, steps: steps, unit: unit,
-                                 points: points, keyPath: keyPath)
+        CalibrationScopeCard(title: title, badge: badge, badgeUnit: badgeUnit, tint: tint,
+                             domain: domain, steps: steps, unit: unit,
+                             points: points, keyPath: keyPath)
+            .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - Export
+
+    private var exportCard: some View {
+        Card {
+            CardHeader(title: t("报告与数据导出")) {
+                HStack(spacing: Spacing.s) {
+                    ForEach(["txt", "csv", "json"], id: \.self) { format in
+                        Button(format.uppercased()) { engine.exportSession(format: format) }
+                            .disabled(!engine.hasExportSamples)
+                    }
+                }
+            }
         }
-        .frame(maxWidth: .infinity)
     }
 
     // MARK: - Control bar
