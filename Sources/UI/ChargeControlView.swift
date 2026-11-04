@@ -18,7 +18,8 @@ struct ChargeControlView: View {
                         .foregroundColor(theme.textPrimary)
                     HelpDot(text: t("设置电池允许充到的最高电量。达到该数值后 InfiniCal 会暂停充电，让 MacBook 直接使用电源适配器供电。"))
                     Spacer()
-                    ValueStepper(value: $state.chargeVal,
+                    ValueStepper(value: Binding(get: { state.chargeVal },
+                                                set: { state.userSetLimit($0) }),
                                  range: state.allowBelow80 && ChargeController.shared.canSetBelow80 ? 1...100 : 80...100,
                                  step: 5)
                         .frame(width: 108)

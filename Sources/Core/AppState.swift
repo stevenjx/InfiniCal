@@ -79,6 +79,9 @@ final class AppState: ObservableObject {
     @Published var calibration: CalibrationRun?
     @Published var tasks: [ScheduledTask] = []
     @Published var taskHistory: [TaskLogEntry] = []
+    /// The last control the user performed by hand. Automation of the same
+    /// lever stands down for a while afterwards instead of undoing it.
+    private var lastManualAction: TaskContext.ManualOverride?
     @Published var lastMessage: String?
     @Published var statusNote: String = ""
 
@@ -830,7 +833,7 @@ final class AppState: ObservableObject {
         return true
     }
 
-    func topUp() {
+    func topUp(origin: ControlOrigin = .user) {
         guard ordinaryControlAllowed() else { return }
         if topUpRestore == nil { topUpRestore = chargeVal }
         let restore = topUpRestore ?? chargeVal
@@ -841,6 +844,7 @@ final class AppState: ObservableObject {
         topUpDeadline = Date().addingTimeInterval(4 * 3600)
         persistTopUp()
         lastChargingAllowed = nil
+        noteManual(origin, .topUp)
         statusNote = tf("一次性充满至 100%，完成后恢复 {p}%", "\(restore)")
         log(t("充满"), tf("一次性充满至 100%，完成后恢复 {p}%", "\(restore)"))
     }
@@ -967,7 +971,7 @@ final class AppState: ObservableObject {
               Date() >= start else { return }
 
         smartChargeStartedFor = target
-        topUp()
+        topUp(origin: .automatic)
         statusNote = tf("按时间充满：已开始充电，预计 {p} 充满", Self.clock.string(from: target))
     }
 
@@ -1027,7 +1031,7 @@ final class AppState: ObservableObject {
         return formatter
     }()
 
-    func pauseCharging() {
+    func pauseCharging(origin: ControlOrigin = .user) {
         guard ordinaryControlAllowed() else { return }
         userPaused = true
         // Pausing overrides a running top-up: the user asked for it to stop.
@@ -1037,6 +1041,7 @@ final class AppState: ObservableObject {
         smartChargeStartedFor = nil
         lastChargingAllowed = nil
         if setCharging(false) { statusNote = t("充电已暂停") }
+        noteManual(origin, .stopCharging)
     }
 
 
@@ -1065,6 +1070,7 @@ final class AppState: ObservableObject {
         calibrationEngine.preset = preset
         calibrationEngine.stressMode = mode
         calibrationEngine.dischargeTarget = preset.dischargeTarget
+        noteManual(.user, .calibrate)
         beginCalibration()
     }
 
@@ -1148,7 +1154,7 @@ final class AppState: ObservableObject {
     /// BCLM and then called `setChargingAllowed(false)`, which on a BCLM Mac
     /// immediately re-pinned the ceiling to the current charge and cancelled the
     /// discharge it had just started.
-    func startDischarge(to target: Int) {
+    func startDischarge(to target: Int, origin: ControlOrigin = .user) {
         guard ordinaryControlAllowed() else { return }
         guard target >= 1, target < snapshot.percentage else { return }
         userPaused = false
@@ -1162,6 +1168,7 @@ final class AppState: ObservableObject {
             return
         }
         manualDischargeTarget = target
+        noteManual(origin, .startDischarge)
         statusNote = tf("放电至 {p}%", "\(target)")
         log(t("放电"), tf("开始放电至 {p}%", "\(target)"))
     }
@@ -1170,14 +1177,35 @@ final class AppState: ObservableObject {
 
     /// `catchUp` is the 「自动补做未完成的任务」 path: a task whose time passed
     /// while the Mac slept, or while the app was closed, still runs — once.
+    ///
+    /// Every task that comes due is decided before any of them runs, so two
+    /// tasks landing on the same minute cannot fight over the same lever. The
+    /// ones that lose are written to the history with the reason, which is the
+    /// only way a user can tell "did not fire" from "fired and lost".
     func checkScheduledTasks(catchUp: Bool = false) {
         guard !updatePreparationActive, !calibrationEngine.isRunning, !calibrationEngine.needsRecovery else { return }
         let now = Date()
+        let due = tasks.filter { isDue($0, at: now, catchUp: catchUp) }
+        guard !due.isEmpty else { return }
+
+        let context = TaskContext(percentage: snapshot.percentage,
+                                  temperature: snapshot.temperature,
+                                  onAdapter: snapshot.isPluggedIn,
+                                  manualOverride: lastManualAction,
+                                  now: now)
         var changed = false
-        for index in tasks.indices where isDue(tasks[index], at: now, catchUp: catchUp) {
-            let task = tasks[index]
-            run(task)
-            tasks[index].lastRun = now
+        for decision in TaskPolicy.decide(due, context: context) {
+            switch decision.verdict {
+            case .run:
+                run(decision.task, catchUp: catchUp)
+            case .skipped(let reason):
+                record(decision.task, catchUp: catchUp, outcome: .skipped, reason: reason)
+            }
+            // A skipped task counts as handled for this occurrence too: leaving
+            // it due would re-log the same skip every 30 seconds.
+            if let index = tasks.firstIndex(where: { $0.id == decision.task.id }) {
+                tasks[index].lastRun = now
+            }
             changed = true
         }
         if changed { saveTasks() }
@@ -1205,15 +1233,15 @@ final class AppState: ObservableObject {
         return now.timeIntervalSince(last) > 300
     }
 
-    func run(_ task: ScheduledTask) {
+    func run(_ task: ScheduledTask, catchUp: Bool = false) {
         guard ordinaryControlAllowed() else { return }
         switch task.kind {
         case .topUp:
-            topUp()
+            topUp(origin: .scheduled)
         case .stopCharging:
-            pauseCharging()
+            pauseCharging(origin: .scheduled)
         case .startDischarge:
-            startDischarge(to: task.value)
+            startDischarge(to: task.value, origin: .scheduled)
         case .calibrate:
             startCalibration()
         case .setLimit:
@@ -1221,9 +1249,31 @@ final class AppState: ObservableObject {
             lastAppliedLimit = nil
             log(t("设置充电限制"), tf("已设为 {p}%", "\(task.value)"))
         }
-        taskHistory.insert(TaskLogEntry(date: Date(), title: task.kind.title, detail: "\(task.timeText) · \(task.weekdayText)"), at: 0)
+        record(task, catchUp: catchUp, outcome: .executed, reason: nil)
+    }
+
+    /// One history row per decision, executed or not.
+    private func record(_ task: ScheduledTask, catchUp: Bool,
+                        outcome: TaskOutcome, reason: String?) {
+        var detail = "\(task.timeText) · \(task.weekdayText)"
+        if catchUp { detail += " · " + t("补做") }
+        if let reason { detail += " · " + reason }
+        taskHistory.insert(TaskLogEntry(title: task.kind.title, detail: detail, outcome: outcome), at: 0)
         if taskHistory.count > 50 { taskHistory.removeLast() }
-        saveTasks()
+    }
+
+    /// Only the user's own actions count. A task running, or smart charge
+    /// topping up on its own schedule, must not look like a manual override.
+    private func noteManual(_ origin: ControlOrigin, _ kind: TaskKind) {
+        guard origin == .user else { return }
+        lastManualAction = TaskContext.ManualOverride(kind: kind, at: Date())
+    }
+
+    /// Raising or lowering the ceiling by hand. Goes through here rather than
+    /// the bare setter so the automation knows to stand down.
+    func userSetLimit(_ value: Int) {
+        chargeVal = value
+        noteManual(.user, .setLimit)
     }
 
     func addTask(_ task: ScheduledTask) {

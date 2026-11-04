@@ -776,5 +776,20 @@
  "“已回读确认”表示读回值与目标一致；“已接受”只表示写入未报错，硬件是否照做未知。": "\"Read back\" means the value the hardware reported matches the target; \"accepted\" only means the write did not error, so whether the hardware complied is unknown.",
  "系统拒绝了防睡眠断言": "The system refused the sleep-prevention assertion",
  "系统拒绝了防息屏断言": "The system refused the display-sleep assertion",
- "锁屏调用已交给系统，无法回读结果": "Handed the lock request to the system; the result cannot be read back"
+ "锁屏调用已交给系统，无法回读结果": "Handed the lock request to the system; the result cannot be read back",
+ "未连接充电器": "No charger is connected",
+ "电量 {p}% 不低于 {p}%，本次跳过": "Battery is at {p}%, not below {p}% — skipped this time",
+ "电池温度 {p}°C 已达上限 {p}°C，本次跳过": "Battery is at {p}°C, past the {p}°C limit — skipped this time",
+ "你 {p} 分钟前手动操作过，本次不覆盖": "You controlled this by hand {p} min ago, so it is left alone",
+ "与「{p}」同时到点，它优先": "Due at the same time as \"{p}\", which takes precedence",
+ "补做": "caught up",
+ "已跳过": "Skipped",
+ "执行条件（可选）": "Conditions (optional)",
+ "仅在连接充电器时": "Only while charging",
+ "仅在电量低于": "Only below",
+ "电池温度低于": "Battery under",
+ "仅插电": "plugged in only",
+ "电量低于 {p}%": "below {p}%",
+ "温度低于 {p}°C": "under {p}°C",
+ "同一时间写同一项设置，只会执行一个：「{p}」优先。": "Writes the same setting at the same time as another task, so only one runs — \"{p}\" wins."
 }

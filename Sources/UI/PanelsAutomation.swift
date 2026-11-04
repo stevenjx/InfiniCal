@@ -135,12 +135,24 @@ struct ScheduleView: View {
                                     ForEach(state.taskHistory) { entry in
                                         HStack {
                                             VStack(alignment: .leading, spacing: 2) {
-                                                Text(entry.title).font(.system(size: 12))
+                                                HStack(spacing: 5) {
+                                                    Text(entry.title).font(.system(size: 12))
+                                                    if entry.outcome == .skipped {
+                                                        Text(t("已跳过"))
+                                                            .font(.system(size: 9, weight: .medium))
+                                                            .foregroundColor(theme.chartOrange)
+                                                            .padding(.horizontal, 4)
+                                                            .padding(.vertical, 1)
+                                                            .background(RoundedRectangle(cornerRadius: 3)
+                                                                            .fill(theme.chartOrange.opacity(0.14)))
+                                                    }
+                                                }
                                                 Text(entry.detail)
                                                     .font(.system(size: 10))
                                                     .foregroundColor(theme.textSecondary)
+                                                    .fixedSize(horizontal: false, vertical: true)
                                             }
-                                            Spacer()
+                                            Spacer(minLength: 8)
                                             Text(Self.formatter.string(from: entry.date))
                                                 .font(.system(size: 10))
                                                 .foregroundColor(theme.textSecondary)
@@ -179,6 +191,11 @@ struct ScheduleView: View {
                 Text("\(task.timeText) · \(task.weekdayText)")
                     .font(.system(size: 10))
                     .foregroundColor(theme.textSecondary)
+                if let summary = Self.conditionText(task) {
+                    Text(summary)
+                        .font(.system(size: 10))
+                        .foregroundColor(theme.textTertiary)
+                }
             }
             Spacer()
             Toggle("", isOn: Binding(get: { task.enabled }, set: { value in
@@ -209,6 +226,17 @@ struct ScheduleView: View {
         f.dateFormat = "MM/dd HH:mm"
         return f
     }()
+
+    /// Conditions only show when they are actually set, so the common case of a
+    /// plain "every day at 09:00" task stays one line.
+    static func conditionText(_ task: ScheduledTask) -> String? {
+        guard let conditions = task.conditions else { return nil }
+        var parts: [String] = []
+        if conditions.onlyOnAdapter == true { parts.append(t("仅插电")) }
+        if let value = conditions.onlyBelowPercentage { parts.append(tf("电量低于 {p}%", "\(value)")) }
+        if let value = conditions.maxTemperature { parts.append(tf("温度低于 {p}°C", "\(value)")) }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
 }
 
 final class ScheduleEditorModel: ObservableObject {
@@ -222,6 +250,9 @@ final class TaskDraft: ObservableObject {
     @Published var hour: Int = 9
     @Published var minute: Int = 0
     @Published var weekdays: Set<Int> = Set(1...7)
+    @Published var onlyOnAdapter: Bool = false
+    @Published var onlyBelow: Int?
+    @Published var maxTemperature: Int?
 
     func reset() {
         kind = .topUp
@@ -229,15 +260,29 @@ final class TaskDraft: ObservableObject {
         hour = 9
         minute = 0
         weekdays = Set(1...7)
+        onlyOnAdapter = false
+        onlyBelow = nil
+        maxTemperature = nil
+    }
+
+    var conditions: TaskConditions? {
+        guard onlyOnAdapter || onlyBelow != nil || maxTemperature != nil else { return nil }
+        return TaskConditions(onlyBelowPercentage: onlyBelow,
+                             onlyOnAdapter: onlyOnAdapter ? true : nil,
+                             maxTemperature: maxTemperature)
     }
 
     var task: ScheduledTask {
-        ScheduledTask(kind: kind, value: value, hour: hour, minute: minute, weekdays: weekdays)
+        var task = ScheduledTask(kind: kind, value: value, hour: hour,
+                                 minute: minute, weekdays: weekdays)
+        task.conditions = conditions
+        return task
     }
 }
 
 struct TaskEditor: View {
     private var theme: Theme { Theme.current }
+    @EnvironmentObject private var state: AppState
     @ObservedObject var draft: TaskDraft
     var onSave: (ScheduledTask) -> Void
     var onCancel: () -> Void
@@ -298,6 +343,65 @@ struct TaskEditor: View {
                 }
             }
 
+            Divider().background(theme.divider)
+
+            Text(t("执行条件（可选）"))
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(theme.textSecondary)
+
+            HStack(spacing: 8) {
+                Text(t("仅在连接充电器时")).font(.system(size: 12))
+                Spacer()
+                Toggle("", isOn: Binding(get: { draft.onlyOnAdapter },
+                                         set: { draft.onlyOnAdapter = $0 }))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .tint(theme.accent)
+                    .scaleEffect(0.7)
+                    .frame(width: 38, height: 20)
+            }
+
+            HStack(spacing: 8) {
+                Text(t("仅在电量低于")).font(.system(size: 12))
+                Spacer()
+                if let value = draft.onlyBelow {
+                    ValueStepper(value: Binding(get: { value }, set: { draft.onlyBelow = $0 }),
+                                 range: 5...95, step: 5)
+                        .frame(width: 100)
+                }
+                Toggle("", isOn: Binding(get: { draft.onlyBelow != nil },
+                                         set: { draft.onlyBelow = $0 ? 40 : nil }))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .tint(theme.accent)
+                    .scaleEffect(0.7)
+                    .frame(width: 38, height: 20)
+            }
+
+            HStack(spacing: 8) {
+                Text(t("电池温度低于")).font(.system(size: 12))
+                Spacer()
+                if let value = draft.maxTemperature {
+                    ValueStepper(value: Binding(get: { value }, set: { draft.maxTemperature = $0 }),
+                                 range: 20...60, step: 1, suffix: "°C")
+                        .frame(width: 106)
+                }
+                Toggle("", isOn: Binding(get: { draft.maxTemperature != nil },
+                                         set: { draft.maxTemperature = $0 ? 40 : nil }))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .tint(theme.accent)
+                    .scaleEffect(0.7)
+                    .frame(width: 38, height: 20)
+            }
+
+            if let hint = conflictHint {
+                Text(hint)
+                    .font(.system(size: 10))
+                    .foregroundColor(theme.chartOrange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             HStack {
                 Spacer()
                 Button(t("取消")) { onCancel() }
@@ -312,6 +416,21 @@ struct TaskEditor: View {
         }
         .padding(20)
         .frame(width: 360)
+    }
+
+    /// Two tasks due at the same time that write the same lever cannot both
+    /// run. Say so while the task is being created, instead of letting the user
+    /// find out from a 「已跳过」 row later.
+    private var conflictHint: String? {
+        let candidate = draft.task
+        guard let rival = state.tasks.first(where: { other in
+            other.enabled
+                && TaskPolicy.lever(other.kind) == TaskPolicy.lever(candidate.kind)
+                && other.hour == candidate.hour && other.minute == candidate.minute
+                && !other.weekdays.isDisjoint(with: candidate.weekdays)
+        }) else { return nil }
+        let winner = TaskPolicy.rank(rival.kind) <= TaskPolicy.rank(candidate.kind) ? rival.kind : candidate.kind
+        return tf("同一时间写同一项设置，只会执行一个：「{p}」优先。", winner.title)
     }
 }
 

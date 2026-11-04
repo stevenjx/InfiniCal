@@ -76,6 +76,7 @@ def source_gate():
 def tests():
     models = (ROOT / "Sources/Core/Models.swift").read_text()
     policy = models[models.index("enum ChargePolicy {"):models.index("\nstruct CalibrationRun {")]
+    tasks_src = models[models.index("enum TaskKind:"):models.index("struct HistoryPoint:")]
     checkpoint_file = (ROOT / "Sources/Core/CalibrationModel.swift").read_text()
     checkpoint = checkpoint_file[checkpoint_file.index("struct CalibrationCheckpoint:"):checkpoint_file.index("/// One 1 Hz")]
     helper = (ROOT / "Helper/main.swift").read_text()
@@ -88,7 +89,7 @@ def tests():
     smc_info = smc_source[smc_source.index("struct SMCKeyInfo {"):smc_source.index("enum SMCError:")]
     smc_loads = smc_source[smc_source.index("    fileprivate static func loadU8"):smc_source.index("    // MARK: - Typed helpers")]
     smc_decode = smc_source[smc_source.index("    static func decode("):smc_source.index("    func writeUInt8(")]
-    swift = "import Foundation\n" + policy + checkpoint + quality + conditions + export + record
+    swift = "import Foundation\n" + policy + tasks_src + checkpoint + quality + conditions + export + record
     swift += smc_info + "enum SMCError: Error { case unsupportedType(String) }\nenum SMC {\n" + smc_loads + smc_decode + "}\n" + validation
     write_branch = helper[helper.index('    case "write":'):helper.index('    case "socpower":')]
     swift += '''
@@ -120,6 +121,14 @@ func handleWrite(_ request: [String: Any]) -> [String: Any] {
     swift += '''
 // 只抽取生产入口与成功取消方法；所有外部依赖均为内存桩。
 func t(_ text: String) -> String { text }
+func tf(_ text: String, _ values: String...) -> String {
+    var result = text
+    for value in values {
+        guard let range = result.range(of: "{p}") else { break }
+        result.replaceSubrange(range, with: value)
+    }
+    return result
+}
 struct TestCapabilities { var hasHelper = false; var protocolVersion = 0; var features: Set<String> = [] }
 final class HelperClient {
     static let shared = HelperClient()
@@ -573,6 +582,101 @@ _ = gate.evaluate(rule, trigger: false, recover: true, now: anchor.addingTimeInt
 check(!gate.evaluate(rule, trigger: true, recover: false, now: anchor.addingTimeInterval(32)), "fresh episode duration")
 gate.beginSample(at: anchor.addingTimeInterval(100))
 check(!gate.evaluate(rule, trigger: true, recover: false, now: anchor.addingTimeInterval(100)), "gap resets evidence")
+// MARK: - 定时任务：优先级、冲突、条件与手动覆盖
+let taskBase = Date(timeIntervalSince1970: 1_700_000_000)
+func makeTask(_ kind: TaskKind, hour: Int = 9, minute: Int = 0,
+              conditions: TaskConditions? = nil) -> ScheduledTask {
+    var task = ScheduledTask(kind: kind, value: 80, hour: hour, minute: minute, weekdays: Set(1...7))
+    task.conditions = conditions
+    return task
+}
+let taskCtx = TaskContext(percentage: 50, temperature: 30, onAdapter: true,
+                          manualOverride: nil, now: taskBase)
+
+check(TaskPolicy.rank(.stopCharging) < TaskPolicy.rank(.startDischarge), "stopping outranks draining")
+check(TaskPolicy.rank(.startDischarge) < TaskPolicy.rank(.calibrate), "draining outranks calibration")
+check(TaskPolicy.rank(.calibrate) < TaskPolicy.rank(.setLimit), "calibration outranks a ceiling")
+check(TaskPolicy.rank(.setLimit) < TaskPolicy.rank(.topUp), "a ceiling outranks a top-up")
+check(TaskPolicy.lever(.topUp) == TaskPolicy.lever(.calibrate), "top-up and calibration share a lever")
+check(TaskPolicy.lever(.stopCharging) == TaskPolicy.lever(.startDischarge), "pause and discharge share a lever")
+check(TaskPolicy.lever(.stopCharging) == TaskPolicy.lever(.topUp), "stopping and topping up fight over the same lever")
+check(TaskPolicy.lever(.setLimit) != TaskPolicy.lever(.topUp), "a ceiling and a top-up touch different levers")
+
+let taskClash = TaskPolicy.decide([makeTask(.topUp), makeTask(.stopCharging)], context: taskCtx)
+check(taskClash.count == 2, "every due task gets a decision")
+check(taskClash[0].task.kind == .stopCharging, "the safety task runs first")
+check(taskClash[0].verdict == .run, "the winner runs")
+if case .skipped(let clashReason) = taskClash[1].verdict {
+    check(clashReason.contains("暂停充电"), "skip reason names the winner")
+} else {
+    check(false, "a conflicting task must be skipped")
+}
+
+let taskBoth = TaskPolicy.decide([makeTask(.topUp), makeTask(.setLimit)], context: taskCtx)
+check(taskBoth.count == 2, "both decisions present")
+check(taskBoth[0].verdict == .run && taskBoth[1].verdict == .run, "different levers both run")
+check(taskBoth[0].task.kind == .setLimit, "the ceiling is applied before the top-up that restores it")
+
+let belowOnly = TaskConditions(onlyBelowPercentage: 40, onlyOnAdapter: nil, maxTemperature: nil)
+let heldTask = TaskPolicy.decide([makeTask(.topUp, conditions: belowOnly)], context: taskCtx)
+if case .skipped(let belowReason) = heldTask[0].verdict {
+    check(belowReason.contains("40"), "battery condition names the threshold")
+} else {
+    check(false, "battery condition must hold the task")
+}
+var lowCtx = taskCtx
+lowCtx.percentage = 20
+check(TaskPolicy.decide([makeTask(.topUp, conditions: belowOnly)], context: lowCtx)[0].verdict == .run,
+      "battery condition passes when low enough")
+
+let heatLimit = TaskConditions(onlyBelowPercentage: nil, onlyOnAdapter: nil, maxTemperature: 35)
+var hotCtx = taskCtx
+hotCtx.temperature = 41
+if case .skipped(let heatReason) = TaskPolicy.decide([makeTask(.topUp, conditions: heatLimit)], context: hotCtx)[0].verdict {
+    check(heatReason.contains("35"), "heat condition names the ceiling")
+} else {
+    check(false, "heat condition must hold the task")
+}
+
+let adapterOnly = TaskConditions(onlyBelowPercentage: nil, onlyOnAdapter: true, maxTemperature: nil)
+var unplugged = taskCtx
+unplugged.onAdapter = false
+if case .skipped = TaskPolicy.decide([makeTask(.topUp, conditions: adapterOnly)], context: unplugged)[0].verdict {
+    check(true, "adapter condition blocks when unplugged")
+} else {
+    check(false, "adapter condition blocks when unplugged")
+}
+check(TaskPolicy.decide([makeTask(.topUp, conditions: adapterOnly)], context: taskCtx)[0].verdict == .run,
+      "adapter condition passes when plugged in")
+
+var manualCtx = taskCtx
+manualCtx.manualOverride = TaskContext.ManualOverride(kind: .stopCharging,
+                                                      at: taskBase.addingTimeInterval(-600))
+if case .skipped(let manualReason) = TaskPolicy.decide([makeTask(.topUp)], context: manualCtx)[0].verdict {
+    check(manualReason.contains("10"), "manual override names how long ago")
+} else {
+    check(false, "a manual pause must block a scheduled top-up")
+}
+var staleCtx = taskCtx
+staleCtx.manualOverride = TaskContext.ManualOverride(
+    kind: .stopCharging, at: taskBase.addingTimeInterval(-TaskPolicy.manualOverrideWindow - 60))
+check(TaskPolicy.decide([makeTask(.topUp)], context: staleCtx)[0].verdict == .run,
+      "the override window expires")
+
+var otherLever = taskCtx
+otherLever.manualOverride = TaskContext.ManualOverride(kind: .setLimit, at: taskBase.addingTimeInterval(-60))
+check(TaskPolicy.decide([makeTask(.topUp)], context: otherLever)[0].verdict == .run,
+      "a manual ceiling does not block a top-up")
+
+let three = [makeTask(.setLimit), makeTask(.stopCharging), makeTask(.topUp)]
+let forward = TaskPolicy.decide(three, context: taskCtx).map { $0.task.kind }
+let backward = TaskPolicy.decide(Array(three.reversed()), context: taskCtx).map { $0.task.kind }
+check(forward == backward, "decision order does not depend on input order")
+check(TaskPolicy.decide([makeTask(.topUp)], context: taskCtx).count == 1, "a single task gets one decision")
+
+let legacyLog = TaskLogEntry(title: "充满", detail: "09:00")
+let legacyRoundTrip = (try? JSONEncoder().encode(legacyLog)).flatMap { try? JSONDecoder().decode(TaskLogEntry.self, from: $0) }
+check(legacyRoundTrip?.outcome == nil, "history entries written before outcomes still decode")
 print("PASS pure policy/math/checkpoint/helper-validation/quality/trend/anomaly tests (no hardware)")
 '''
     with tempfile.TemporaryDirectory(prefix="infinical-tests-") as directory:

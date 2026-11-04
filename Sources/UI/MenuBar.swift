@@ -207,7 +207,7 @@ final class MenuBarController: NSObject {
 
     @objc private func topUp() { state.topUp() }
     @objc private func pauseCharging() { state.pauseCharging() }
-    @objc private func setLimit80() { state.chargeVal = 80 }
+    @objc private func setLimit80() { state.userSetLimit(80) }
     @objc private func fanAuto() { FanController.shared.setAllAuto() }
     @objc private func quit() { NSApp.terminate(nil) }
 }
@@ -357,7 +357,7 @@ struct MenuBarPanel: View {
                 SmallActionButton(title: t("暂停"), symbol: "pause.fill") { state.pauseCharging() }
             }
             HStack(spacing: 6) {
-                SmallActionButton(title: t("设为 80%"), symbol: "battery.75") { state.chargeVal = 80 }
+                SmallActionButton(title: t("设为 80%"), symbol: "battery.75") { state.userSetLimit(80) }
                 SmallActionButton(title: t("风扇自动"), symbol: "fanblades") {
                     FanController.shared.setAllAuto()
                 }
