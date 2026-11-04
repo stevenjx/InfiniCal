@@ -11,16 +11,22 @@ struct HistoryView: View {
     @ObservedObject private var history = DailyHistory.shared
     @ObservedObject private var alerts = AnomalyAlerts.shared
     @ObservedObject private var calibration = CalibrationEngine.shared
+    @EnvironmentObject private var state: AppState
     @StateObject private var range = UIValue<Int>(7)
     private var theme: Theme { Theme.current }
 
     private var stats: [DailyStat] { history.series(days: range.value) }
     private var isEmpty: Bool { stats.allSatisfy { $0.isEmpty } }
+    private var advice: AdviceReport {
+        AdviceProvider.report(days: history.days, records: calibration.records,
+                              chargeLimit: state.chargeVal)
+    }
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(alignment: .leading, spacing: 12) {
                 header
+                AdviceCard(report: advice)
                 alertCenter
 
                 if isEmpty {

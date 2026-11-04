@@ -114,6 +114,7 @@ func handleWrite(_ request: [String: Any]) -> [String: Any] {
 '''
     swift += (ROOT / "Sources/Core/ControlResult.swift").read_text()
     swift += (ROOT / "Sources/Core/DeviceProfile.swift").read_text()
+    swift += (ROOT / "Sources/Core/Advice.swift").read_text()
     app_state = (ROOT / "Sources/Core/AppState.swift").read_text()
     fan_source = (ROOT / "Sources/Core/FanController.swift").read_text()
     update_methods = app_state[app_state.index("    func prepareForUpdate()"):app_state.index("    private func tick()", app_state.index("    func prepareForUpdate()"))]
@@ -779,7 +780,104 @@ let profileFields = Set(Mirror(reflecting: laptop).children.compactMap { $0.labe
 let allowedFields: Set<String> = ["model", "chip", "family", "macOSMajor", "chargeStrategy",
                                   "helperAvailable", "fanCount", "hasBattery", "sensorKeys"]
 check(profileFields == allowedFields, "画像不含序列号等额外字段")
-print("PASS pure policy/math/checkpoint/helper-validation/quality/trend/anomaly/profile tests (no hardware)")
+// MARK: - 本地专家建议：阈值、证据、窗口与"数据不足就不给建议"
+let adviceNow = Date(timeIntervalSince1970: 1_700_000_000)
+func adviceDay(_ offset: Int, high: Double = 0, peak: Double = 30,
+               maxPct: Int = 60, plugged: Double = 3600,
+               observed: Double = 3600) -> AdviceInput.Day {
+    AdviceInput.Day(date: adviceNow.addingTimeInterval(-Double(offset) * 86400),
+                    highTemperatureSeconds: high, maxTemperature: peak,
+                    maxPercentage: maxPct, pluggedSeconds: plugged,
+                    observedSeconds: observed)
+}
+func adviceSession(_ offset: Int, resistance: Double = 0, capacity: Double = 5000,
+                   cycles: Int = 100, preset: String? = nil,
+                   start: Int = 100, eligible: Bool = true) -> AdviceInput.Session {
+    AdviceInput.Session(date: adviceNow.addingTimeInterval(-Double(offset) * 86400),
+                        capacityMAh: capacity, resistanceMilliohm: resistance,
+                        healthPercent: 90, cycleCount: cycles, preset: preset,
+                        startPercentage: start, eligible: eligible)
+}
+func adviceInput(_ days: [AdviceInput.Day], _ sessions: [AdviceInput.Session] = [],
+                 limit: Int = 100) -> AdviceInput {
+    AdviceInput(days: days, sessions: sessions, chargeLimit: limit, now: adviceNow)
+}
+
+// 数据不足时不能凭猜测给建议。
+let thinAdvice = AdviceEngine.evaluate(adviceInput([adviceDay(1), adviceDay(2)]))
+check(thinAdvice.items.isEmpty, "记录不足 7 天时不发布建议")
+check(thinAdvice.observedDays == 2, "报告如实统计观测天数")
+check(thinAdvice.windowDays == 30, "报告标注统计窗口")
+check(thinAdvice.generatedAt == adviceNow, "报告带生成时间")
+let unobserved = AdviceEngine.evaluate(adviceInput((0..<10).map { adviceDay($0, high: 9000, observed: 0) }))
+check(unobserved.items.isEmpty, "没有观测数据的日子不计入高温时长")
+
+// 高温：10 天各 1.5 小时 = 15 小时，达到阈值；9 天 1.5 小时 = 13.5 小时也达到，
+// 因此用 8 小时以下验证不触发。
+let hotDays = (0..<10).map { adviceDay($0, high: 5400, peak: 44) }
+let hotAdvice = AdviceEngine.evaluate(adviceInput(hotDays))
+check(hotAdvice.items.count == 1, "高温达到阈值时只给一条建议")
+check(hotAdvice.items.first?.id == "high-temperature", "高温建议的 id 稳定")
+check(hotAdvice.items.first?.level == .attention, "高温建议属于需要注意")
+check(hotAdvice.items.first?.evidence.count == 3, "高温建议列出三条证据")
+check(hotAdvice.items.first?.evidence.allSatisfy { !$0.isEmpty } == true, "证据不能为空")
+let warmDays = (0..<10).map { adviceDay($0, high: 2800, peak: 41) }
+check(AdviceEngine.evaluate(adviceInput(warmDays)).items.isEmpty, "未到阈值不发布高温建议")
+
+// 充电上限：上限 80% 时 4 天插电冲到 90% 才触发；上限 100% 或未插电都不算。
+let overshootDays = (0..<10).map { adviceDay($0, maxPct: $0 < 4 ? 90 : 70) }
+let overshootAdvice = AdviceEngine.evaluate(adviceInput(overshootDays, limit: 80))
+check(overshootAdvice.items.contains { $0.id == "limit-overshoot" }, "上限未生效时给出建议")
+check(AdviceEngine.evaluate(adviceInput(overshootDays, limit: 100)).items.isEmpty,
+      "没有上限时不谈超出上限")
+let unpluggedDays = (0..<10).map { adviceDay($0, maxPct: 95, plugged: 0) }
+check(AdviceEngine.evaluate(adviceInput(unpluggedDays, limit: 80)).items.isEmpty,
+      "未插电的放电不当作上限失效")
+let briefOvershoot = (0..<10).map { adviceDay($0, maxPct: $0 < 2 ? 90 : 70) }
+check(AdviceEngine.evaluate(adviceInput(briefOvershoot, limit: 80)).items.isEmpty,
+      "偶发一次超出不发布建议")
+
+// 内阻：三次有效校准从 40 mΩ 升到 50 mΩ（+25%）触发；+10% 不触发。
+let risingSessions = [adviceSession(60, resistance: 40, cycles: 100),
+                      adviceSession(30, resistance: 45, cycles: 110),
+                      adviceSession(5, resistance: 50, cycles: 120)]
+let risingAdvice = AdviceEngine.evaluate(adviceInput([], risingSessions))
+check(risingAdvice.items.contains { $0.id == "resistance-rise" }, "内阻明显上升时给出建议")
+check(risingAdvice.eligibleSessions == 3, "报告统计有效校准次数")
+let flatSessions = [adviceSession(60, resistance: 40), adviceSession(30, resistance: 42),
+                    adviceSession(5, resistance: 44)]
+check(!AdviceEngine.evaluate(adviceInput([], flatSessions)).items.contains { $0.id == "resistance-rise" },
+      "内阻小幅波动不发布建议")
+let ineligibleSessions = risingSessions.map {
+    AdviceInput.Session(date: $0.date, capacityMAh: $0.capacityMAh,
+                        resistanceMilliohm: $0.resistanceMilliohm,
+                        healthPercent: $0.healthPercent, cycleCount: $0.cycleCount,
+                        preset: $0.preset, startPercentage: $0.startPercentage,
+                        eligible: false)
+}
+check(AdviceEngine.evaluate(adviceInput([], ineligibleSessions)).eligibleSessions == 0,
+      "低置信度校准不计入内阻比较")
+
+// 深度校准冷却：30 天内做过深度校准就提醒；旧记录按起始电量识别。
+let deepAdvice = AdviceEngine.evaluate(adviceInput([], [adviceSession(5, preset: "deep")]))
+check(deepAdvice.items.contains { $0.id == "deep-calibration-cooldown" }, "近期深度校准给出冷却建议")
+check(deepAdvice.items.first { $0.id == "deep-calibration-cooldown" }?.level == .suggestion,
+      "冷却属于建议而非警告")
+let legacyDeep = AdviceEngine.evaluate(adviceInput([], [adviceSession(3, start: 10)]))
+check(legacyDeep.items.contains { $0.id == "deep-calibration-cooldown" }, "旧记录按起始电量识别深度校准")
+let oldDeep = AdviceEngine.evaluate(adviceInput([], [adviceSession(40, preset: "deep")]))
+check(!oldDeep.items.contains { $0.id == "deep-calibration-cooldown" }, "超过冷却期不再提醒")
+let futureDeep = AdviceEngine.evaluate(adviceInput([], [adviceSession(-2, preset: "deep")]))
+check(!futureDeep.items.contains { $0.id == "deep-calibration-cooldown" }, "未来时间的记录不参与判断")
+
+// 排序与窗口：注意类排在建议类之前；30 天外的记录不参与。
+let mixedAdvice = AdviceEngine.evaluate(adviceInput(hotDays, [adviceSession(5, preset: "deep")]))
+check(mixedAdvice.items.count == 2, "两类建议同时出现")
+check(mixedAdvice.items[0].level == .attention, "需要注意的建议排在前面")
+let staleDays = (31...40).map { adviceDay($0, high: 9000, peak: 46) }
+check(AdviceEngine.evaluate(adviceInput(staleDays)).observedDays == 0, "30 天外的记录不计入窗口")
+check(AdviceEngine.evaluate(adviceInput(staleDays)).items.isEmpty, "窗口外的历史不触发建议")
+print("PASS pure policy/math/checkpoint/helper-validation/quality/trend/anomaly/profile/advice tests (no hardware)")
 '''
     with tempfile.TemporaryDirectory(prefix="infinical-tests-") as directory:
         main = Path(directory) / "main.swift"
