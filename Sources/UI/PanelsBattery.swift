@@ -34,7 +34,7 @@ struct SleepEnergyView: View {
                 HStack(spacing: 10) {
                     IconBadge(symbol: "moon")
                     Text(t("防止睡眠期间过度充电"))
-                        .font(.system(size: 13))
+                        .font(Typography.title)
                         .foregroundColor(theme.textPrimary)
                     HelpDot(text: t("MacBook 在睡眠时仍可能继续充电。选择一个行为，避免睡眠期间超出充电限制。"))
                     Spacer()
@@ -44,7 +44,7 @@ struct SleepEnergyView: View {
                 Card(padding: 14) {
                     VStack(alignment: .leading, spacing: 12) {
                         Text(t("选择 InfiniCal 在睡眠和充电时的行为方式"))
-                            .font(.system(size: 11))
+                            .font(Typography.caption)
                             .foregroundColor(theme.textSecondary)
                         Picker("", selection: Binding(get: { state.sleepMode }, set: { state.sleepMode = $0 })) {
                             ForEach(Array(options.enumerated()), id: \.offset) { option in
@@ -57,10 +57,10 @@ struct SleepEnergyView: View {
 
                         HStack(alignment: .top, spacing: 8) {
                             Image(systemName: "info.circle")
-                                .font(.system(size: 12))
+                                .font(Glyph.row)
                                 .foregroundColor(theme.textSecondary)
                             Text(t("注意：在睡眠状态下，InfiniCal 检查充电状态的时间会减少，因此如果您的 MacBook 在充电过程中进入睡眠状态，您可能会发现电量略微超过了限制。"))
-                                .font(.system(size: 11))
+                                .font(Typography.caption)
                                 .foregroundColor(theme.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -72,9 +72,9 @@ struct SleepEnergyView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: advanced.value ? "chevron.down" : "chevron.right")
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(Glyph.inline.weight(.semibold))
                         Text(t("显示高级设置"))
-                            .font(.system(size: 12))
+                            .font(Typography.body)
                     }
                     .foregroundColor(theme.textSecondary)
                 }
@@ -105,7 +105,7 @@ struct SleepEnergyView: View {
 
                 HStack(spacing: 10) {
                     IconBadge(symbol: "bolt.fill")
-                    Text(t("高功耗的应用程序")).font(.system(size: 13)).foregroundColor(theme.textPrimary)
+                    Text(t("高功耗的应用程序")).font(Typography.headline).foregroundColor(theme.textPrimary)
                     Spacer()
                 }
                 .frame(height: 34)
@@ -125,9 +125,9 @@ struct SleepEnergyView: View {
                             ForEach(state.highUsageApps.prefix(6)) { app in
                                 HStack(spacing: 8) {
                                     if let icon = app.icon { Image(nsImage: icon).resizable().frame(width: 22, height: 22) }
-                                    Text(app.name).font(.system(size: 12))
+                                    Text(app.name).font(Typography.body)
                                     Spacer()
-                                    Text(String(format: "%.1f%%", app.energyImpact)).font(.system(size: 11).monospacedDigit()).foregroundColor(theme.textSecondary)
+                                    Text(String(format: "%.1f%%", app.energyImpact)).font(Typography.caption.monospacedDigit()).foregroundColor(theme.textSecondary)
                                 }
                             }
                         }

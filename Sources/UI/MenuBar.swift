@@ -231,12 +231,12 @@ struct MenuBarPanel: View {
             metrics
             controlSummary
             Button(t("检查更新")) { showUpdates.value = true }
-                .buttonStyle(.plain).font(.system(size: 11)).foregroundColor(theme.accent)
+                .buttonStyle(.plain).font(Typography.caption).foregroundColor(theme.accent)
             actions
             Button(t("导出当前诊断")) { exportDiagnostics() }
-                .buttonStyle(.plain).font(.system(size: 11)).foregroundColor(theme.accent)
+                .buttonStyle(.plain).font(Typography.caption).foregroundColor(theme.accent)
             if let message = exportMessage.value {
-                Text(message).font(.system(size: 10)).foregroundColor(theme.textSecondary)
+                Text(message).font(Typography.caption).foregroundColor(theme.textSecondary)
             }
             footer
         }
@@ -261,17 +261,17 @@ struct MenuBarPanel: View {
                     .stroke(theme.chartGreen, style: StrokeStyle(lineWidth: 5, lineCap: .round))
                     .rotationEffect(.degrees(-90))
                 Text(state.snapshot.isPresent ? "\(state.snapshot.percentage)" : "—")
-                    .font(.system(size: 15, weight: .semibold).monospacedDigit())
+                    .font(Typography.title.monospacedDigit())
                     .foregroundColor(theme.textPrimary)
             }
             .frame(width: 50, height: 50)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(state.chargeState.title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(Typography.headline)
                     .foregroundColor(theme.textPrimary)
                 Text(summaryLine)
-                    .font(.system(size: 11))
+                    .font(Typography.caption)
                     .foregroundColor(theme.textSecondary)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -293,23 +293,23 @@ struct MenuBarPanel: View {
     private var controlSummary: some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(state.capabilities.strategy.title)
-                .font(.system(size: 11, weight: .medium))
+                .font(Typography.label)
             Text(state.capabilities.summary)
-                .font(.system(size: 10)).foregroundColor(theme.textSecondary)
+                .font(Typography.caption).foregroundColor(theme.textSecondary)
             Text(tf("策略：{p}", policyText))
-                .font(.system(size: 11))
+                .font(Typography.caption)
             Text(tf("请求上限 {p}% · 实际电量 {p}%", "\(state.chargeVal)", "\(state.snapshot.percentage)"))
-                .font(.system(size: 11))
-            Text(actualText).font(.system(size: 11))
+                .font(Typography.caption)
+            Text(actualText).font(Typography.caption)
             Text(tf("采样时间：{p}", state.snapshot.timestamp.formatted(date: .omitted, time: .standard)))
-                .font(.system(size: 10)).foregroundColor(theme.textSecondary)
+                .font(Typography.caption).foregroundColor(theme.textSecondary)
             if !state.statusNote.isEmpty {
-                Text(state.statusNote).font(.system(size: 10)).foregroundColor(theme.chartOrange)
+                Text(state.statusNote).font(Typography.caption).foregroundColor(theme.chartOrange)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if !alerts.events.isEmpty {
                 Text(tf("异常记录：{p}（历史页查看）", "\(alerts.events.count)"))
-                    .font(.system(size: 10)).foregroundColor(theme.chartOrange)
+                    .font(Typography.caption).foregroundColor(theme.chartOrange)
             }
         }
         .padding(10)
@@ -370,7 +370,7 @@ struct MenuBarPanel: View {
             Button {
                 openWindow()
             } label: {
-                Text(t("打开 InfiniCal")).font(.system(size: 12, weight: .medium))
+                Text(t("打开 InfiniCal")).font(Typography.headline)
             }
             .buttonStyle(.plain)
             .foregroundColor(theme.accent)
@@ -380,7 +380,7 @@ struct MenuBarPanel: View {
             Button {
                 NSApp.terminate(nil)
             } label: {
-                Text(t("退出")).font(.system(size: 11))
+                Text(t("退出")).font(Typography.caption)
             }
             .buttonStyle(.plain)
             .foregroundColor(theme.textSecondary)
@@ -390,15 +390,15 @@ struct MenuBarPanel: View {
     private func metricRow(_ symbol: String, _ title: String, _ value: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: symbol)
-                .font(.system(size: 10))
+                .font(Glyph.inline)
                 .foregroundColor(theme.textSecondary)
                 .frame(width: 14)
             Text(title)
-                .font(.system(size: 11))
+                .font(Typography.caption)
                 .foregroundColor(theme.textSecondary)
             Spacer(minLength: 6)
             Text(value)
-                .font(.system(size: 11, weight: .medium).monospacedDigit())
+                .font(Typography.label.monospacedDigit())
                 .foregroundColor(theme.textPrimary)
         }
     }

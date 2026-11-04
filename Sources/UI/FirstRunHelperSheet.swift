@@ -7,13 +7,13 @@ struct FirstRunHelperSheet: View {
     var body: some View {
         VStack(spacing: 14) {
             Image(systemName: "lock.shield.fill")
-                .font(.system(size: 34))
+                .font(Glyph.hero)
                 .foregroundColor(theme.accent)
             Text(t(HelperClient.shared.needsUpdate ? "更新特权助手" : "安装特权助手"))
-                .font(.system(size: 16, weight: .semibold))
+                .font(Typography.title)
                 .foregroundColor(theme.textPrimary)
             Text(t("InfiniCal 需要特权助手才能精确读取 SMC 数据，并执行充电限制、放电和电池校准。助手只用于本机电池控制，不联网。"))
-                .font(.system(size: 12))
+                .font(Typography.body)
                 .foregroundColor(theme.textSecondary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)

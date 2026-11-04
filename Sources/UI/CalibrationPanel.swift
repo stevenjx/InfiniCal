@@ -35,11 +35,11 @@ struct CalibrationPanel: View {
                 Card(padding: 12) {
                     VStack(alignment: .leading, spacing: 5) {
                         Text(tf("校准质量等级：{p}", t(quality.label)))
-                            .font(.system(size: 13, weight: .medium))
+                            .font(Typography.headline)
                         Text(t("质量等级基于过程证据，不代表统计概率或测量精度保证"))
-                            .font(.system(size: 11)).foregroundColor(theme.textSecondary)
+                            .font(Typography.caption).foregroundColor(theme.textSecondary)
                         ForEach(quality.reasons, id: \.self) { reason in
-                            Text(t(reason)).font(.system(size: 11))
+                            Text(t(reason)).font(Typography.caption)
                         }
                     }
                 }
@@ -48,14 +48,14 @@ struct CalibrationPanel: View {
                 Card(padding: 12) {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(t("检测到未完成的校准"))
-                            .font(.system(size: 13, weight: .medium))
+                            .font(Typography.headline)
                         if let checkpoint = engine.pendingRecovery {
                             Text((CalibrationPhase(rawValue: checkpoint.phase)?.title ?? checkpoint.phase)
                                  + " · " + checkpoint.lastSampleAt.formatted())
-                                .font(.system(size: 11))
+                                .font(Typography.caption)
                         }
                         Text(t("中断期间无法测量。继续将从预充重新测量，不拼接旧积分；不会自动启动放电。"))
-                            .font(.system(size: 11))
+                            .font(Typography.caption)
                         if let error = engine.recoveryError {
                             Text(error).foregroundColor(theme.chartOrange)
                         }
@@ -65,7 +65,7 @@ struct CalibrationPanel: View {
                             Button(t("安全清理 / 重试")) { _ = engine.cleanInterruptedSession() }
                             Button(t("放弃并恢复系统控制")) { _ = engine.cleanInterruptedSession(discard: true) }
                         }
-                        .font(.system(size: 11))
+                        .font(Typography.caption)
                     }
                 }
             }
@@ -75,7 +75,7 @@ struct CalibrationPanel: View {
             if let issue = engine.chargingIssue {
                 Card(padding: 12) {
                     Text(issue)
-                        .font(.system(size: 11))
+                        .font(Typography.caption)
                         .foregroundColor(theme.chartOrange)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -189,7 +189,7 @@ struct CalibrationPanel: View {
             Card(padding: 12) {
                 HStack(spacing: 10) {
                     Text(t("报告与数据导出"))
-                        .font(.system(size: 12, weight: .medium))
+                        .font(Typography.headline)
                     Spacer()
                     ForEach(["txt", "csv", "json"], id: \.self) { format in
                         Button(format.uppercased()) { engine.exportSession(format: format) }
@@ -219,12 +219,12 @@ struct CalibrationPanel: View {
         HStack(spacing: 10) {
             IconBadge(symbol: "wrench.and.screwdriver")
             Text(t("电池校准"))
-                .font(.system(size: 13))
+                .font(Typography.title)
                 .foregroundColor(theme.textPrimary)
             HelpDot(text: t("完整走一遍 满充 → 受控放电 → 复充 → 静置 → 回落 的循环，用库仑积分算出电池真实的满充容量与健康度。全过程本地完成，不依赖任何第三方 App。"))
             if let last = engine.lastCalibrationDate {
                 Text(tf("上次校准 {p}", Self.lastRun.string(from: last)))
-                    .font(.system(size: 10))
+                    .font(Typography.caption)
                     .foregroundColor(theme.textTertiary)
             }
             Spacer()
@@ -234,9 +234,9 @@ struct CalibrationPanel: View {
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: engine.isRunning ? "stop.fill" : "play.fill")
-                        .font(.system(size: 10))
+                        .font(Glyph.inline)
                     Text(engine.isRunning ? t("停止校准") : t("开始校准"))
-                        .font(.system(size: 12, weight: .medium))
+                        .font(Typography.headline)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 7)
@@ -251,9 +251,9 @@ struct CalibrationPanel: View {
     private var statusPill: some View {
         HStack(spacing: 5) {
             Image(systemName: engine.phase.symbol)
-                .font(.system(size: 9, weight: .bold))
+                .font(Glyph.inline.weight(.bold))
             Text(engine.phase.title)
-                .font(.system(size: 11, weight: .medium))
+                .font(Typography.label)
         }
         .foregroundColor(phaseTint)
         .padding(.horizontal, 9)
@@ -283,10 +283,10 @@ struct CalibrationPanel: View {
             Card(padding: 12) {
                 HStack(spacing: 9) {
                     Image(systemName: "powerplug.fill")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(Glyph.row.weight(.semibold))
                         .foregroundColor(theme.chartOrange)
                     Text(t("放电指令已下发，但 60 秒内仍未测到放电电流。放电指令保持生效，也可以拔掉电源适配器让它立即开始。"))
-                        .font(.system(size: 11))
+                        .font(Typography.caption)
                         .foregroundColor(theme.textPrimary)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer(minLength: 0)
@@ -306,16 +306,16 @@ struct CalibrationPanel: View {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack(spacing: 8) {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(Glyph.row.weight(.semibold))
                             .foregroundColor(theme.chartOrange)
                         Text(tf("系统正在限制充电（当前 {p}%），校准可能充不到满电", "\(engine.percentage)"))
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(Typography.headline)
                             .foregroundColor(theme.textPrimary)
                         Spacer(minLength: 6)
                     }
 
                     Text(t("「优化电池充电」会在 80% 附近暂停充电，新版 macOS 的「充电上限」也会把电量锁在设定值；适配器功率不足或温度过高同样会暂停。校准需要连续充到满电，请先按以下步骤关闭。若设置里已经是 100% 仍不充电，拔插一次电源后再点「刷新状态」："))
-                        .font(.system(size: 11))
+                        .font(Typography.caption)
                         .foregroundColor(theme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
 
@@ -342,10 +342,10 @@ struct CalibrationPanel: View {
     private func stepLine(_ index: Int, _ text: String) -> some View {
         HStack(alignment: .top, spacing: 6) {
             Text("\(index).")
-                .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                .font(Typography.label.weight(.semibold).monospacedDigit())
                 .foregroundColor(theme.textTertiary)
             Text(text)
-                .font(.system(size: 11))
+                .font(Typography.caption)
                 .foregroundColor(theme.textSecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -377,15 +377,15 @@ struct CalibrationPanel: View {
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(alignment: .firstTextBaseline, spacing: 2) {
                             Text("\(engine.percentage)")
-                                .font(.system(size: 28, weight: .bold, design: .rounded))
+                                .font(Typography.display.weight(.bold))
                                 .foregroundColor(theme.textPrimary)
                                 .monospacedDigit()
                             Text("%")
-                                .font(.system(size: 11, weight: .semibold))
+                                .font(Typography.label.weight(.semibold))
                                 .foregroundColor(theme.textSecondary)
                         }
                         Text(powerStateText)
-                            .font(.system(size: 10.5))
+                            .font(Typography.caption)
                             .foregroundColor(theme.textSecondary)
                             .lineLimit(1)
                         HStack(spacing: 5) {
@@ -393,7 +393,7 @@ struct CalibrationPanel: View {
                                 .fill(engine.isExternalConnected ? theme.chartGreen : theme.textTertiary)
                                 .frame(width: 5, height: 5)
                             Text(tf("设计 {p} mAh · 系统满充容量 {p} mAh", "\(Int(engine.designCapacityMAh))", "\(Int(engine.rawMaxCapacityMAh))"))
-                                .font(.system(size: 9.5))
+                                .font(Typography.micro)
                                 .foregroundColor(theme.textTertiary)
                                 .lineLimit(1)
                         }
@@ -440,22 +440,22 @@ struct CalibrationPanel: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 4) {
                 Image(systemName: symbol)
-                    .font(.system(size: 8.5, weight: .semibold))
+                    .font(Glyph.inline.weight(.semibold))
                     .foregroundColor(theme.textTertiary)
                 Text(title)
-                    .font(.system(size: 10))
+                    .font(Typography.caption)
                     .foregroundColor(theme.textSecondary)
                     .lineLimit(1)
             }
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(value)
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .font(Typography.headline)
                     .foregroundColor(tint)
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
                 Text(unit)
-                    .font(.system(size: 9))
+                    .font(Typography.micro)
                     .foregroundColor(theme.textSecondary)
             }
         }
@@ -485,14 +485,14 @@ struct CalibrationPanel: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     Image(systemName: "arrow.triangle.branch")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(Glyph.inline.weight(.semibold))
                         .foregroundColor(theme.textSecondary)
                     Text(t("校准流程"))
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(Typography.headline)
                         .foregroundColor(theme.textPrimary)
                     Spacer()
                     Text(pipelineProgressText)
-                        .font(.system(size: 10))
+                        .font(Typography.caption)
                         .foregroundColor(theme.textSecondary)
                 }
 
@@ -534,14 +534,17 @@ struct CalibrationPanel: View {
                                   lineWidth: isActive ? 1.4 : 1)
                     .frame(width: 32, height: 32)
                 Image(systemName: phase.symbol)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(Glyph.row.weight(.semibold))
                     .foregroundColor(tint)
             }
             Text(stepTitle(phase))
-                .font(.system(size: 9.5, weight: isActive ? .bold : .regular))
+                .font(Typography.micro.weight(isActive ? .bold : .regular))
                 .foregroundColor(isActive ? theme.textPrimary : theme.textSecondary)
                 .multilineTextAlignment(.center)
-                .frame(height: 24, alignment: .top)
+                // Two lines at micro: a fixed 24 pt frame clipped the second
+                // line once the label moved up from 9.5 pt.
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(minHeight: 24, alignment: .top)
         }
         .frame(maxWidth: .infinity)
     }
@@ -565,7 +568,7 @@ struct CalibrationPanel: View {
                 cardTitle("clock", t("续航评估"), tint: theme.chartOrange) {
                     if engine.aiRemainingMinutes > 0 {
                         Text(t("AI 预测"))
-                            .font(.system(size: 9, weight: .semibold))
+                            .font(Typography.micro.weight(.semibold))
                             .foregroundColor(theme.chartPurple)
                     }
                 }
@@ -573,11 +576,11 @@ struct CalibrationPanel: View {
                 let minutes = engine.aiRemainingMinutes > 0 ? engine.aiRemainingMinutes : engine.estimatedRemainingMinutes
                 HStack(alignment: .firstTextBaseline, spacing: 5) {
                     Text(Self.duration(minutes))
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .font(Typography.figure.weight(.bold))
                         .foregroundColor(minutes > 0 ? theme.chartOrange : theme.textSecondary)
                         .monospacedDigit()
                     Text(t("预计可用"))
-                        .font(.system(size: 9))
+                        .font(Typography.micro)
                         .foregroundColor(theme.textSecondary)
                     Spacer(minLength: 0)
                 }
@@ -598,7 +601,7 @@ struct CalibrationPanel: View {
                 cardTitle("heart", t("健康度与容量"), tint: theme.chartBlue) {
                     if engine.aiConfidence > 0 {
                         Text(tf("置信度 {p}%", "\(Int(engine.aiConfidence))"))
-                            .font(.system(size: 9))
+                            .font(Typography.micro)
                             .foregroundColor(theme.textSecondary)
                     }
                 }
@@ -606,16 +609,16 @@ struct CalibrationPanel: View {
                 let health = engine.measuredHealth > 0 ? engine.measuredHealth : engine.aiTrueHealthPercent
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text(health > 0 ? String(format: "%.1f", health) : "--")
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .font(Typography.figure.weight(.bold))
                         .foregroundColor(health >= 80 ? theme.chartGreen : (health > 0 ? theme.chartOrange : theme.textSecondary))
                         .monospacedDigit()
                     if health > 0 {
                         Text("%")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(Typography.label.weight(.semibold))
                             .foregroundColor(theme.textSecondary)
                     }
                     Text(t("电池健康度"))
-                        .font(.system(size: 9))
+                        .font(Typography.micro)
                         .foregroundColor(theme.textSecondary)
                     Spacer(minLength: 0)
                 }
@@ -631,7 +634,7 @@ struct CalibrationPanel: View {
 
                 if !engine.cellVoltages.isEmpty {
                     Text(tf("电芯 {p} V · 压差 {p} mV", engine.cellVoltages.map { String(format: "%.3f", $0) }.joined(separator: " / "), String(format: "%.1f", engine.cellDeltaMillivolts)))
-                        .font(.system(size: 9.5, design: .monospaced))
+                        .font(Typography.micro.monospaced())
                         .foregroundColor(theme.textTertiary)
                         .lineLimit(1)
                 }
@@ -650,18 +653,18 @@ struct CalibrationPanel: View {
         if let trend = engine.trend {
             HStack(spacing: 5) {
                 Image(systemName: trend.isAccelerating ? "arrow.down.right" : "arrow.down.forward")
-                    .font(.system(size: 8, weight: .bold))
+                    .font(Glyph.inline.weight(.bold))
                     .foregroundColor(trend.isAccelerating ? theme.chartOrange : theme.textTertiary)
                 Text(tf("衰减 {p} ± {p} %/100 次循环 · {p} 个样本",
                         String(format: "%.2f", trend.slopePer100Cycles),
                         String(format: "%.2f", trend.slopeMargin),
                         "\(trend.sampleCount)"))
-                    .font(.system(size: 9.5))
+                    .font(Typography.micro)
                     .foregroundColor(theme.textTertiary)
                     .lineLimit(1)
                 if let cycles = trend.cyclesToThreshold, cycles > 0 {
                     Text(tf("· 约 {p} 次循环后降至 {p}%", "\(cycles)", "\(Int(trend.threshold))"))
-                        .font(.system(size: 9.5))
+                        .font(Typography.micro)
                         .foregroundColor(theme.textTertiary)
                         .lineLimit(1)
                 }
@@ -669,7 +672,7 @@ struct CalibrationPanel: View {
             }
         } else {
             Text(t("衰减趋势: 样本不足（至少 8 个不同循环数、跨度 20 次），继续使用后可推算"))
-                .font(.system(size: 9.5))
+                .font(Typography.micro)
                 .foregroundColor(theme.textTertiary)
                 .lineLimit(1)
         }
@@ -679,10 +682,10 @@ struct CalibrationPanel: View {
                                     @ViewBuilder trailing: () -> T) -> some View {
         HStack(spacing: 6) {
             Image(systemName: symbol)
-                .font(.system(size: 10, weight: .semibold))
+                .font(Glyph.inline.weight(.semibold))
                 .foregroundColor(tint)
             Text(title)
-                .font(.system(size: 12, weight: .semibold))
+                .font(Typography.headline)
                 .foregroundColor(theme.textPrimary)
             Spacer(minLength: 6)
             trailing()
@@ -713,27 +716,27 @@ struct CalibrationPanel: View {
                         .stroke(tint, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                         .rotationEffect(.degrees(-90))
                     Image(systemName: symbol)
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(Glyph.inline.weight(.semibold))
                         .foregroundColor(tint)
                 }
                 .frame(width: 30, height: 30)
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title)
-                        .font(.system(size: 10))
+                        .font(Typography.caption)
                         .foregroundColor(theme.textSecondary)
                     HStack(alignment: .firstTextBaseline, spacing: 2) {
                         Text(value)
-                            .font(.system(size: 14, weight: .bold, design: .rounded))
+                            .font(Typography.headline.weight(.bold))
                             .foregroundColor(theme.textPrimary)
                             .monospacedDigit()
                         Text(unit)
-                            .font(.system(size: 9))
+                            .font(Typography.micro)
                             .foregroundColor(theme.textSecondary)
                     }
                     if let note {
                         Text(note)
-                            .font(.system(size: 9))
+                            .font(Typography.micro)
                             .foregroundColor(theme.textTertiary)
                             .lineLimit(1)
                     }
@@ -760,28 +763,28 @@ struct CalibrationPanel: View {
                         .stroke(theme.chartPurple, style: StrokeStyle(lineWidth: 3, lineCap: .round))
                         .rotationEffect(.degrees(-90))
                     Image(systemName: "fanblades.fill")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(Glyph.row.weight(.semibold))
                         .foregroundColor(hasFan ? theme.chartPurple : theme.textTertiary)
                 }
                 .frame(width: 30, height: 30)
 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(t("风扇转速"))
-                        .font(.system(size: 10))
+                        .font(Typography.caption)
                         .foregroundColor(theme.textSecondary)
                     HStack(alignment: .firstTextBaseline, spacing: 2) {
                         Text(hasFan ? "\(current)" : "--")
-                            .font(.system(size: 14, weight: .bold, design: .rounded))
+                            .font(Typography.headline.weight(.bold))
                             .foregroundColor(hasFan ? theme.textPrimary : theme.textSecondary)
                             .monospacedDigit()
                         Text("RPM")
-                            .font(.system(size: 9))
+                            .font(Typography.micro)
                             .foregroundColor(theme.textSecondary)
                     }
                     Text(hasFan
                          ? (current > 0 ? tf("最高 · {p} 个风扇", "\(readings.count)") : t("已停转（正常待机）"))
                          : t("此机型无风扇"))
-                        .font(.system(size: 9))
+                        .font(Typography.micro)
                         .foregroundColor(theme.textTertiary)
                         .lineLimit(1)
                 }
@@ -840,17 +843,17 @@ struct CalibrationPanel: View {
                 HStack(spacing: 5) {
                     Circle().fill(theme.chartGreen).frame(width: 5, height: 5)
                     Text(t("电芯电压"))
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(Typography.label.weight(.semibold))
                         .foregroundColor(theme.textPrimary)
                     Spacer(minLength: 6)
                     Text(tf("压差 {p} mV", String(format: "%.1f", engine.cellDeltaMillivolts)))
-                        .font(.system(size: 9.5, design: .monospaced))
+                        .font(Typography.micro.monospaced())
                         .foregroundColor(theme.textSecondary)
                 }
                 ForEach(Array(cells.enumerated()), id: \.offset) { index, volts in
                     HStack(spacing: 6) {
                         Text("C\(index + 1)")
-                            .font(.system(size: 9, design: .monospaced))
+                            .font(Typography.micro.monospaced())
                             .foregroundColor(theme.textTertiary)
                             .frame(width: 18, alignment: .leading)
                         GeometryReader { geo in
@@ -863,7 +866,7 @@ struct CalibrationPanel: View {
                         }
                         .frame(height: 4)
                         Text(String(format: "%.3f", volts))
-                            .font(.system(size: 9, design: .monospaced))
+                            .font(Typography.micro.monospaced())
                             .foregroundColor(theme.textSecondary)
                     }
                 }
@@ -891,10 +894,10 @@ struct CalibrationPanel: View {
         HStack(spacing: 10) {
             HStack(spacing: 7) {
                 Image(systemName: "slider.horizontal.3")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(Glyph.inline.weight(.semibold))
                     .foregroundColor(theme.textSecondary)
                 Text(t("放电负载"))
-                    .font(.system(size: 11))
+                    .font(Typography.caption)
                     .foregroundColor(theme.textSecondary)
                     .fixedSize()
                 Picker("", selection: Binding(get: { engine.stressMode },
@@ -913,7 +916,7 @@ struct CalibrationPanel: View {
 
             HStack(spacing: 6) {
                 Text(t("放电至"))
-                    .font(.system(size: 11))
+                    .font(Typography.caption)
                     .foregroundColor(theme.textSecondary)
                 Picker("", selection: Binding(get: { engine.dischargeTarget },
                                               set: { engine.dischargeTarget = $0 })) {
@@ -928,7 +931,7 @@ struct CalibrationPanel: View {
 
             HStack(spacing: 6) {
                 Text(t("温度保护"))
-                    .font(.system(size: 11))
+                    .font(Typography.caption)
                     .foregroundColor(theme.textSecondary)
                 Picker("", selection: Binding(get: { Int(engine.highTemperature) },
                                               set: {
@@ -947,8 +950,8 @@ struct CalibrationPanel: View {
 
             if engine.isGPUStressActive {
                 HStack(spacing: 4) {
-                    Image(systemName: "bolt.horizontal.circle.fill").font(.system(size: 9, weight: .bold))
-                    Text(t("GPU 加压中")).font(.system(size: 10, weight: .medium))
+                    Image(systemName: "bolt.horizontal.circle.fill").font(Glyph.inline.weight(.bold))
+                    Text(t("GPU 加压中")).font(Typography.micro)
                 }
                 .foregroundColor(theme.chartOrange)
                 .padding(.horizontal, 8)
@@ -958,8 +961,8 @@ struct CalibrationPanel: View {
 
             if engine.isThermalCutoffActive {
                 HStack(spacing: 4) {
-                    Image(systemName: "thermometer.sun.fill").font(.system(size: 9, weight: .bold))
-                    Text(t("温度保护中")).font(.system(size: 10, weight: .medium))
+                    Image(systemName: "thermometer.sun.fill").font(Glyph.inline.weight(.bold))
+                    Text(t("温度保护中")).font(Typography.micro)
                 }
                 .foregroundColor(.red)
                 .padding(.horizontal, 8)
@@ -1006,7 +1009,7 @@ private struct CalibrationRing: View {
                         style: StrokeStyle(lineWidth: 5, lineCap: .round))
                 .rotationEffect(.degrees(-90))
             Image(systemName: isCharging ? "bolt.fill" : (isDischarging ? "flame.fill" : "leaf.fill"))
-                .font(.system(size: 12, weight: .semibold))
+                .font(Glyph.row.weight(.semibold))
                 .foregroundColor(isCharging ? .green : (isDischarging ? .orange : accent))
         }
         .frame(width: 54, height: 54)
@@ -1041,26 +1044,26 @@ private struct CalibrationScopeCard: View {
             HStack(spacing: 5) {
                 Circle().fill(tint).frame(width: 5, height: 5)
                 Text(title)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(Typography.label.weight(.semibold))
                     .foregroundColor(theme.textPrimary)
                     .lineLimit(1)
                 Spacer(minLength: 6)
                 if let selected = probe.value {
                     HStack(spacing: 5) {
                         Text(Self.time.string(from: selected.timestamp))
-                            .font(.system(size: 9, design: .monospaced))
+                            .font(Typography.micro.monospaced())
                             .foregroundColor(theme.textSecondary)
                         Text("\(String(format: "%.1f", selected[keyPath: keyPath])) \(unit)")
-                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .font(Typography.micro.weight(.semibold).monospaced())
                             .foregroundColor(tint)
                     }
                 } else {
                     HStack(alignment: .firstTextBaseline, spacing: 2) {
                         Text(badge)
-                            .font(.system(size: 11, weight: .bold, design: .monospaced))
+                            .font(Typography.label.weight(.bold).monospaced())
                             .foregroundColor(tint)
                         Text(badgeUnit)
-                            .font(.system(size: 9))
+                            .font(Typography.micro)
                             .foregroundColor(theme.textSecondary)
                     }
                     .padding(.horizontal, 6)
@@ -1087,7 +1090,7 @@ private struct CalibrationScopeCard: View {
 
                     if let selected = probe.value, let x = probeX.value {
                         Text("\(Self.time.string(from: selected.timestamp)) · \(String(format: "%.1f", selected[keyPath: keyPath]))\(unit)")
-                            .font(.system(size: 8.5, weight: .semibold, design: .monospaced))
+                            .font(Typography.micro.weight(.semibold).monospaced())
                             .foregroundColor(theme.textPrimary)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 2)
@@ -1238,7 +1241,7 @@ private struct CalibrationScopeChart: View {
             context.stroke(line, with: .color(gridColor), style: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
 
             let label = Text(String(format: "%.0f%@", step, unit))
-                .font(.system(size: 8, design: .monospaced))
+                .font(Typography.micro.monospaced())
                 .foregroundColor(Color.secondary)
             context.draw(label, at: CGPoint(x: plot.minX - 5, y: position), anchor: .trailing)
         }
@@ -1262,7 +1265,7 @@ private struct CalibrationScopeChart: View {
             let date = first.timestamp.addingTimeInterval(span * Double(ratio))
             let anchor: UnitPoint = index == 0 ? .topLeading : (index == tickCount - 1 ? .topTrailing : .top)
             let label = Text(formatter.string(from: date))
-                .font(.system(size: 8, design: .monospaced))
+                .font(Typography.micro.monospaced())
                 .foregroundColor(Color.secondary)
             context.draw(label, at: CGPoint(x: position, y: plot.maxY + 4), anchor: anchor)
         }
@@ -1330,12 +1333,12 @@ private struct CalibrationLogView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Text(t("保留本次运行最近 800 条记录"))
-                    .font(.system(size: 10))
+                    .font(Typography.caption)
                     .foregroundColor(theme.textTertiary)
                 Spacer(minLength: 8)
                 Toggle(t("跟随最新"), isOn: $follow.value)
                     .toggleStyle(.checkbox)
-                    .font(.system(size: 11))
+                    .font(Typography.caption)
                     .foregroundColor(theme.textSecondary)
                 Button(t("复制")) {
                     NSPasteboard.general.clearContents()
@@ -1349,7 +1352,7 @@ private struct CalibrationLogView: View {
             ScrollViewReader { reader in
                 ScrollView(.vertical) {
                     Text(engine.log.isEmpty ? t("暂无日志，开始校准后将在此显示。") : engine.log.joined(separator: "\n"))
-                        .font(.system(size: 11, design: .monospaced))
+                        .font(Typography.caption.monospaced())
                         .foregroundColor(theme.textSecondary)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -1370,7 +1373,7 @@ private struct CalibrationLogView: View {
 
             if let error = exportError.value {
                 Text(error)
-                    .font(.system(size: 10.5))
+                    .font(Typography.caption)
                     .foregroundColor(.red)
                     .padding(.horizontal, 14)
                     .padding(.bottom, 10)
@@ -1415,14 +1418,14 @@ private struct CalibrationHistorySheet: View {
                 Image(systemName: "clock.arrow.circlepath")
                     .foregroundColor(theme.accent)
                 Text(t("历史校准记录"))
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(Typography.headline)
                     .foregroundColor(theme.textPrimary)
                 Spacer()
                 if !engine.records.isEmpty, tab.value == 0 {
                     Button(t("清空")) { engine.clearHistory() }
                         .buttonStyle(.plain)
                         .foregroundColor(.red)
-                        .font(.system(size: 12))
+                        .font(Typography.body)
                 }
                 Button(t("完成")) { isPresented = false }
                     .keyboardShortcut(.cancelAction)
@@ -1462,13 +1465,13 @@ private struct CalibrationHistorySheet: View {
             VStack(spacing: 10) {
                 Spacer()
                 Image(systemName: "archivebox")
-                    .font(.system(size: 32))
+                    .font(Glyph.hero)
                     .foregroundColor(theme.textTertiary)
                 Text(t("还没有校准记录"))
-                    .font(.system(size: 12))
+                    .font(Typography.body)
                     .foregroundColor(theme.textSecondary)
                 Text(t("完成一次校准后，结果会自动保存在这里"))
-                    .font(.system(size: 10.5))
+                    .font(Typography.caption)
                     .foregroundColor(theme.textTertiary)
                 Spacer()
             }
@@ -1534,11 +1537,11 @@ private struct CalibrationHistorySheet: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Text(Self.date.string(from: record.startDate))
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(Typography.headline)
                     .foregroundColor(theme.textPrimary)
                 Spacer()
                 Text(String(format: "SOH %.1f%%", record.batteryHealthPercentage))
-                    .font(.system(size: 10.5, weight: .semibold, design: .rounded))
+                    .font(Typography.micro.weight(.semibold))
                     .padding(.horizontal, 7)
                     .padding(.vertical, 2.5)
                     .background(Capsule().fill((record.batteryHealthPercentage >= 80 ? Color.green : Color.orange).opacity(0.14)))
@@ -1547,17 +1550,17 @@ private struct CalibrationHistorySheet: View {
                     engine.deleteRecord(record)
                 } label: {
                     Image(systemName: "trash")
-                        .font(.system(size: 11))
+                        .font(Glyph.row)
                         .foregroundColor(theme.textTertiary)
                 }
                 .buttonStyle(.plain)
             }
 
             Text(tf("校准质量等级：{p}", record.quality.map { t($0.label) } ?? t("未评估（旧记录）")))
-                .font(.system(size: 11)).foregroundColor(theme.textSecondary)
+                .font(Typography.caption).foregroundColor(theme.textSecondary)
             if let quality = record.quality, !quality.reasons.isEmpty {
                 Text(quality.reasons.map { t($0) }.joined(separator: "; "))
-                    .font(.system(size: 11)).foregroundColor(theme.textSecondary)
+                    .font(Typography.caption).foregroundColor(theme.textSecondary)
             }
             HStack(spacing: 14) {
                 value(t("实测容量"), "\(Int(record.calculatedCapacityMAh)) mAh")
@@ -1593,7 +1596,7 @@ private struct CalibrationHistorySheet: View {
                     NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: report)])
                 }
                 .buttonStyle(.link)
-                .font(.system(size: 10))
+                .font(Typography.caption)
             }
         }
         .padding(11)
@@ -1605,10 +1608,10 @@ private struct CalibrationHistorySheet: View {
     private func value(_ title: String, _ text: String) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(title)
-                .font(.system(size: 9))
+                .font(Typography.micro)
                 .foregroundColor(theme.textSecondary)
             Text(text)
-                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .font(Typography.label.weight(.semibold).monospaced())
                 .foregroundColor(theme.textPrimary)
         }
     }
@@ -1641,10 +1644,10 @@ struct CalibrationModeSheet: View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(t("选择校准方式"))
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(Typography.headline)
                     .foregroundColor(theme.textPrimary)
                 Text(t("深度决定测量是否完整，负载决定放电快慢。深度越深，耗时和损耗越大。"))
-                    .font(.system(size: 11))
+                    .font(Typography.caption)
                     .foregroundColor(theme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -1663,7 +1666,7 @@ struct CalibrationModeSheet: View {
 
             HStack(spacing: 7) {
                 Text(t("放电负载"))
-                    .font(.system(size: 11))
+                    .font(Typography.caption)
                     .foregroundColor(theme.textSecondary)
                 ForEach(DischargeStressMode.allCases) { mode in
                     ChipButton(title: mode.title, symbol: symbol(mode),
@@ -1674,7 +1677,7 @@ struct CalibrationModeSheet: View {
 
             if preset.requiresExplicitUserAction {
                 Text(t("深度校准会把电量放到约 10%，电池将在接近放空的状态下工作。非必要不建议频繁执行。"))
-                    .font(.system(size: 10))
+                    .font(Typography.caption)
                     .foregroundColor(theme.chartOrange)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -1683,7 +1686,7 @@ struct CalibrationModeSheet: View {
                 Spacer(minLength: 0)
                 Button(t("取消")) { dismiss() }
                     .buttonStyle(.plain)
-                    .font(.system(size: 12))
+                    .font(Typography.body)
                     .foregroundColor(theme.textSecondary)
                 Button(confirmingDeep ? t("确认开始深度校准") : t("开始校准")) {
                     guard !(preset.requiresExplicitUserAction && !confirmingDeep) else {
@@ -1694,7 +1697,7 @@ struct CalibrationModeSheet: View {
                     dismiss()
                 }
                 .buttonStyle(.plain)
-                .font(.system(size: 12, weight: .medium))
+                .font(Typography.headline)
                 .foregroundColor(confirmingDeep ? theme.chartOrange : theme.accent)
             }
         }
@@ -1707,30 +1710,30 @@ struct CalibrationModeSheet: View {
         let selected = preset == item
         return HStack(spacing: 10) {
             Image(systemName: symbol(item))
-                .font(.system(size: 12, weight: .medium))
+                .font(Glyph.row)
                 .frame(width: 20)
                 .foregroundColor(selected ? theme.accent : theme.textTertiary)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(item.title)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(Typography.headline)
                         .foregroundColor(theme.textPrimary)
                     Text(item.estimatedHours)
-                        .font(.system(size: 10))
+                        .font(Typography.caption)
                         .foregroundColor(theme.textTertiary)
                 }
                 Text(item.detail)
-                    .font(.system(size: 10))
+                    .font(Typography.caption)
                     .foregroundColor(theme.textTertiary)
                 Text(item.risk)
-                    .font(.system(size: 10))
+                    .font(Typography.caption)
                     .foregroundColor(item.capsQualityAtLow || item.requiresExplicitUserAction
                                      ? theme.chartOrange : theme.textTertiary)
             }
             Spacer(minLength: 6)
             if selected {
                 Image(systemName: "checkmark")
-                    .font(.system(size: 10, weight: .bold))
+                    .font(Glyph.inline.weight(.bold))
                     .foregroundColor(theme.accent)
             }
         }

@@ -1,23 +1,6 @@
 {
  "rules": {
-  "bare-font": {
-   "AdviceCard.swift": 8,
-   "CalibrationPanel.swift": 109,
-   "ChargeControlView.swift": 23,
-   "Charts.swift": 4,
-   "DashboardView.swift": 20,
-   "DeviceProfileCard.swift": 13,
-   "FanControlView.swift": 46,
-   "FirstRunHelperSheet.swift": 3,
-   "HardwareDiagnosticsView.swift": 11,
-   "HistoryPanel.swift": 36,
-   "MenuBar.swift": 19,
-   "PanelsAppearance.swift": 17,
-   "PanelsAutomation.swift": 27,
-   "PanelsBattery.swift": 9,
-   "PowerFlowView.swift": 8,
-   "RootView.swift": 9
-  },
+  "bare-font": {},
   "card-padding": {
    "AdviceCard.swift": 1,
    "CalibrationPanel.swift": 15,

@@ -29,22 +29,22 @@ struct MiniChart: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
                 Text(title)
-                    .font(.system(size: 11))
+                    .font(Typography.caption)
                     .foregroundColor(theme.textSecondary)
                 Spacer(minLength: 4)
                 if let symbol {
                     Image(systemName: symbol)
-                        .font(.system(size: 10))
+                        .font(Glyph.inline)
                         .foregroundColor(theme.textTertiary)
                 }
             }
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(valueText)
-                    .font(.system(size: 15, weight: .semibold).monospacedDigit())
+                    .font(Typography.title.monospacedDigit())
                     .foregroundColor(theme.textPrimary)
                 if let caption {
                     Text(caption)
-                        .font(.system(size: 10))
+                        .font(Typography.caption)
                         .foregroundColor(theme.textTertiary)
                         .lineLimit(1)
                 }

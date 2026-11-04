@@ -29,7 +29,13 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-UI = ROOT / "Sources/UI"
+# Sources/UI plus the shared building blocks in Theme.swift. Typography.swift and
+# Metrics.swift are deliberately out of scope: they are where the numbers live.
+SCAN = [ROOT / "Sources/UI", ROOT / "Sources/Core/Theme.swift"]
+
+# Theme.swift *defines* the colours, radii and card padding, so only the font
+# rule applies to it; the other three would flag their own source of truth.
+THEME_RULES = {"bare-font"}
 BASELINE = Path(__file__).resolve().parent / "ui_lint_baseline.json"
 
 RULES = {
@@ -47,11 +53,20 @@ HINTS = {
 }
 
 
+def scanned_files():
+    files = []
+    for entry in SCAN:
+        files.extend(sorted(entry.glob("*.swift")) if entry.is_dir() else [entry])
+    return files
+
+
 def counts():
     result = {rule: {} for rule in RULES}
-    for path in sorted(UI.glob("*.swift")):
+    for path in scanned_files():
         text = path.read_text()
         for rule, pattern in RULES.items():
+            if path.name == "Theme.swift" and rule not in THEME_RULES:
+                continue
             found = len(pattern.findall(text))
             if found:
                 result[rule][path.name] = found

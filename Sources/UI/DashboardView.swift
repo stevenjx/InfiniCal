@@ -110,7 +110,7 @@ struct DashboardView: View {
                 cardHeader("powerplug.fill", t("电源适配器规格"))
                 if state.snapshot.adapter.isEmpty {
                     Text(t("未连接电源适配器"))
-                        .font(.system(size: 12))
+                        .font(Typography.body)
                         .foregroundColor(theme.textSecondary)
                         .padding(.top, 8)
                 } else {
@@ -138,10 +138,10 @@ struct DashboardView: View {
     private func cardHeader(_ symbol: String, _ title: String) -> some View {
         HStack(spacing: 6) {
             Image(systemName: symbol)
-                .font(.system(size: 11, weight: .medium))
+                .font(Glyph.row)
                 .foregroundColor(theme.textPrimary)
             Text(title)
-                .font(.system(size: 12, weight: .semibold))
+                .font(Typography.headline)
                 .foregroundColor(theme.textPrimary)
         }
         .padding(.bottom, 2)
@@ -150,17 +150,17 @@ struct DashboardView: View {
     private func spec(_ title: String, _ value: String, trailing: String? = nil) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(title)
-                .font(.system(size: 11))
+                .font(Typography.caption)
                 .foregroundColor(theme.textSecondary)
             Spacer(minLength: 6)
             Text(value)
-                .font(.system(size: 11, weight: .medium).monospacedDigit())
+                .font(Typography.label.monospacedDigit())
                 .foregroundColor(theme.textPrimary)
                 .lineLimit(1)
                 .truncationMode(.middle)
             if let trailing {
                 Text(trailing)
-                    .font(.system(size: 10).monospacedDigit())
+                    .font(Typography.caption.monospacedDigit())
                     .foregroundColor(theme.textTertiary)
             }
         }
@@ -215,16 +215,16 @@ struct DashboardView: View {
         Card(padding: 12) {
             VStack(alignment: .leading, spacing: 8) {
                 Text(t("高功耗的应用程序"))
-                    .font(.system(size: 11))
+                    .font(Typography.caption)
                     .foregroundColor(theme.textSecondary)
                 if state.highUsageApps.isEmpty {
                     HStack(spacing: 8) {
                         RoundedRectangle(cornerRadius: 7)
                             .fill(theme.innerControl)
                             .frame(width: 26, height: 26)
-                            .overlay(Image(systemName: "app.dashed").font(.system(size: 12)).foregroundColor(theme.textTertiary))
+                            .overlay(Image(systemName: "app.dashed").font(Glyph.row).foregroundColor(theme.textTertiary))
                         Text(t("暂无"))
-                            .font(.system(size: 12))
+                            .font(Typography.body)
                             .foregroundColor(theme.textSecondary)
                     }
                 } else {
@@ -235,19 +235,19 @@ struct DashboardView: View {
                             }
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(app.name)
-                                    .font(.system(size: 12))
+                                    .font(Typography.body)
                                     .foregroundColor(theme.textPrimary)
                                     .lineLimit(1)
                                 if app.estimatedWatts > 0 {
                                     Text(gainText(app))
-                                        .font(.system(size: 9.5))
+                                        .font(Typography.micro)
                                         .foregroundColor(theme.textTertiary)
                                         .lineLimit(1)
                                 }
                             }
                             Spacer()
                             Text(String(format: "%.1f%%", app.energyImpact))
-                                .font(.system(size: 11).monospacedDigit())
+                                .font(Typography.caption.monospacedDigit())
                                 .foregroundColor(theme.textSecondary)
                         }
                     }
@@ -262,11 +262,11 @@ struct DashboardView: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text(t("上一次校准"))
-                        .font(.system(size: 11))
+                        .font(Typography.caption)
                         .foregroundColor(theme.textSecondary)
                     Spacer()
                     Text(state.lastCalibrationDate.map { Self.dateFormatter.string(from: $0) } ?? "-")
-                        .font(.system(size: 11))
+                        .font(Typography.caption)
                         .foregroundColor(theme.textPrimary)
                 }
                 Button {
@@ -274,11 +274,11 @@ struct DashboardView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: state.calibration == nil ? "play.fill" : "stop.fill")
-                            .font(.system(size: 10))
+                            .font(Glyph.inline)
                         Text(state.calibration == nil ? t("开始校准") : t("停止校准"))
-                            .font(.system(size: 12, weight: .medium))
+                            .font(Typography.headline)
                         Spacer()
-                        Image(systemName: "chevron.right").font(.system(size: 9))
+                        Image(systemName: "chevron.right").font(Glyph.inline)
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 9)
@@ -332,9 +332,9 @@ private struct PowerFlowCard: View {
 
     private func chip(_ symbol: String, _ title: String, _ value: String, tint: Color? = nil) -> some View {
         HStack(spacing: 5) {
-            Image(systemName: symbol).font(.system(size: 10)).foregroundColor(tint ?? theme.textSecondary)
-            Text(title).font(.system(size: 10)).foregroundColor(theme.textSecondary)
-            if !value.isEmpty { Text(value).font(.system(size: 10, weight: .semibold).monospacedDigit()).foregroundColor(theme.textPrimary) }
+            Image(systemName: symbol).font(Glyph.inline).foregroundColor(tint ?? theme.textSecondary)
+            Text(title).font(Typography.micro).foregroundColor(theme.textSecondary)
+            if !value.isEmpty { Text(value).font(Typography.micro.weight(.semibold).monospacedDigit()).foregroundColor(theme.textPrimary) }
         }
         .fixedSize()
     }

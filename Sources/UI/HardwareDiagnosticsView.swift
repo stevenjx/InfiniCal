@@ -161,29 +161,29 @@ struct HardwareDiagnosticsView: View {
                 Button(t("关闭")) { dismiss() }
             }
             Text(t("只读探测，不试写硬件。候选可用不等于实机验证；传感器列表并非完整清单。"))
-                .font(.system(size: 11)).foregroundColor(theme.textSecondary)
+                .font(Typography.caption).foregroundColor(theme.textSecondary)
             if data.busy { ProgressView() }
             if !journal.entries.isEmpty {
                 Text(t("最近的控制结果"))
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(Typography.headline)
                 VStack(spacing: 4) {
                     ForEach(Array(journal.entries.prefix(6).enumerated()), id: \.offset) { _, entry in
                         HStack(spacing: 8) {
                             Text(entry.operation)
-                                .font(.system(size: 10, design: .monospaced))
+                                .font(Typography.caption.monospaced())
                                 .foregroundColor(theme.textSecondary)
                                 .frame(width: 108, alignment: .leading)
                             Text(t(entry.phase.label))
-                                .font(.system(size: 10, weight: .medium))
+                                .font(Typography.micro)
                                 .foregroundColor(color(for: entry.phase))
                                 .frame(width: 74, alignment: .leading)
                             Text(entry.target ?? "--")
-                                .font(.system(size: 10))
+                                .font(Typography.caption)
                                 .foregroundColor(theme.textTertiary)
                                 .lineLimit(1)
                             Spacer(minLength: 0)
                             Text(Self.time.string(from: entry.date))
-                                .font(.system(size: 9, design: .monospaced))
+                                .font(Typography.micro.monospaced())
                                 .foregroundColor(theme.textTertiary)
                         }
                     }
@@ -191,12 +191,12 @@ struct HardwareDiagnosticsView: View {
                 .padding(8)
                 .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(theme.innerControl))
                 Text(t("“已回读确认”表示读回值与目标一致；“已接受”只表示写入未报错，硬件是否照做未知。"))
-                    .font(.system(size: 10)).foregroundColor(theme.textTertiary)
+                    .font(Typography.caption).foregroundColor(theme.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if let report = data.report {
                 Text("\(report.model) · \(report.architecture) · InfiniCal \(report.appVersion)")
-                Text(report.operatingSystem).font(.system(size: 11))
+                Text(report.operatingSystem).font(Typography.caption)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
                         if let assessment = report.assessment {
@@ -207,8 +207,8 @@ struct HardwareDiagnosticsView: View {
                             Card(padding: 10) {
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack { Text(t(row.label)); Spacer(); Text(t(row.status)) }
-                                        .font(.system(size: 12))
-                                    Text(row.detail).font(.system(size: 11)).foregroundColor(theme.textSecondary)
+                                        .font(Typography.body)
+                                    Text(row.detail).font(Typography.caption).foregroundColor(theme.textSecondary)
                                         .textSelection(.enabled)
                                 }
                             }
@@ -218,7 +218,7 @@ struct HardwareDiagnosticsView: View {
             }
             if let exportError = data.exportError { Text(exportError).foregroundColor(theme.chartOrange) }
             Text(t("导出不包含序列号、用户名或原始 IORegistry 数据。"))
-                .font(.system(size: 11)).foregroundColor(theme.textSecondary)
+                .font(Typography.caption).foregroundColor(theme.textSecondary)
         }
         .padding(20).frame(width: 700, height: 620)
         .background(theme.windowBackground)

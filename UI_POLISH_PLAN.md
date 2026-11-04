@@ -1,6 +1,6 @@
 # InfiniCal 界面美化开发规划
 
-> 版本基线：InfiniCal 1.0.22（build 27）
+> 版本基线：InfiniCal 1.0.23（build 28）
 >
 > 审查方式：逐个读 `Sources/UI/` 下 18 个源文件（6290 行），并在 1080×720 深色模式下
 > 实机截图 8 个面板（仪表板、充电控制、电池校准、风扇控制、历史、定时设置、其他、
@@ -45,14 +45,22 @@
 
 | 令牌 | 字号 / 字重 | 用途 | 替代现状 |
 | --- | --- | --- | --- |
-| `display` | 28 semibold，等宽数字 | 一屏一个的核心数字（电量、RPM、健康度） | 15 / 20 / 22 / 28 / 30 / 32 / 34 |
-| `title` | 15 semibold | 页面标题、弹窗标题 | 14 / 15 / 16 / 18 |
-| `headline` | 13 semibold | 卡片标题、分组标题 | 11 semibold / 12 medium / 13 |
+| `display` | 28 semibold，等宽数字 | 一屏一个的核心数字（电量、健康度） | 28 / 30 / 32 / 34 |
+| `figure` | 20 semibold，等宽数字 | 卡片内的大数值（RPM、续航、健康度） | 20 / 22 |
+| `title` | 15 semibold | 页面标题、弹窗标题 | 15 / 16 / 18 |
+| `headline` | 13 semibold | 卡片标题、分组标题、行标题 | 12 medium / 12 semibold / 13 / 14 |
 | `body` | 12 regular | 正文、设置项、表格单元格 | 11.5 / 12 / 12.5 |
-| `label` | 11 medium | 行标签、图例、按钮文字 | 10.5 / 11 |
-| `caption` | 11 regular | 说明、单位、时间戳 | 10 / 10.5 |
-| `micro` | 10 medium | 只用于徽标与单位后缀，**不允许承载句子** | 8 / 8.5 / 9 / 9.5 / 10 |
-| `mono` | 跟随所属层级，等宽数字 | 所有会跳动的数值 | 分散在各处的 `.monospacedDigit()` |
+| `label` | 11 medium | 行标签、图例、按钮文字 | 11 medium / 11 semibold |
+| `caption` | 11 regular | 说明、单位、时间戳 | 10 / 10.5 / 11 |
+| `micro` | 10 medium | 徽标与单位后缀，**不允许承载句子** | 8 / 8.5 / 9 / 9.5 / 10 medium |
+
+> 实施时从 8 级变成 9 级：原表让 `display` 同时接管 20–34，但实测 20pt 是「卡片内的
+> 数值」、28pt 是「一屏一个的主角」，合成一级后卡片数值要么撑破卡片，要么所有卡片
+> 一样大、失去主次。所以拆出 `figure`（20）。`mono` 没有做成独立令牌 —— 它不是一个
+> 字号，而是「跟随所属层级 + 等宽数字」，用 `Font.monospacedDigit()` 组合即可。
+>
+> 图标另有一套 `Glyph`（inline 10 / row 12 / block 18 / hero 30），能量流动图另有一套
+> `FlowType`（随图缩放的两档）。它们不是文字，塞进文字阶梯只会让阶梯失去意义。
 
 规则：
 - 任何视图不得再出现 `.system(size:)`，只能用 `Typography.display` 这类令牌。
@@ -124,15 +132,41 @@ PageScaffold(title, symbol, help?, toolbar: { ... }) { scrollContent }
 
 ### 第一批：地基（U0，必须先做）
 
-#### U0-01 设计令牌层 — ❌ 未开始
+#### U0-01 设计令牌层 — ✅ 已完成（1.0.23）
 
 - **目标**：把字号、间距、圆角从视图里收进一处，让「改一次、全站生效」成立。
 - **交付**：
-  - 新增 `Sources/Core/Typography.swift`：`Typography.display/title/headline/body/label/caption/micro/mono`，内部映射到 `Font.system(size:weight:design:)`。
+  - 新增 `Sources/Core/Typography.swift`：`Typography.display/figure/title/headline/body/label/caption/micro`，内部映射到 `Font.system(size:weight:design:)`。
   - 新增 `Sources/Core/Metrics.swift`：`Spacing`、`Radius`、`CardPadding` 常量。
   - 迁移 18 个 UI 文件共 354 处 `.system(size:)`，按 §2.1 的映射表批量替换（脚本 + 人工复核）。
 - **验收**：`ui_lint` 报 0 处裸字号；同一页面内不再出现 9 / 9.5 / 10.5 / 11.5 / 12.5 这类半档字号；全部面板截图与迁移前逐张比对，只允许出现预期的字号变化。
 - **依赖**：无。
+
+**实现说明**
+
+- 实际迁移 **376 处**：`Sources/UI` 354 + `Theme.swift` 的共享组件 13 + `PowerFlowView`
+  的 8 处 `compact ? a : b` 动态字号 + `IconBadge` 的 `size * 0.62`。后 22 处不在原统计里，
+  因为原来的正则只认字面数字。
+- 映射规则写在 `Typography.swift` 头部注释里，逐档可查。三处判断是**人工**定的，没有交给脚本：
+  - 6 个页面头部（校准 / 风扇 / 历史 / 充电控制 / 任务 / 睡眠）从 13 regular 提到 `title`
+    15 semibold —— 这是全站唯一「字号真的变了」的一档，换来页头与卡片标题的层级差。
+  - 12 medium / 12 semibold 归入 `headline`（13 semibold），因为它们都是卡片标题或行标题，
+    保持 12 会让「标题」和「正文」只差一个字重。
+  - 10 regular 归入 `caption`（11 regular），9 / 9.5 归入 `micro`（10 medium）—— 这就是
+    「144 处小于 11pt」的主要来源，现在只剩徽标与单位后缀。
+- 图标与流动图各自成一套（`Glyph`、`FlowType`）：图标的光学尺寸不是字号，能量流动图的
+  标签随图缩放，硬塞进文字阶梯会让阶梯失去意义。`FlowType` 仍放在 `Typography.swift`，
+  「所有字号只在一个文件里」这条不破。
+- `ui_lint` 的扫描范围扩到 `Sources/Core/Theme.swift`（只查字号，不查颜色/圆角 —— 那是它
+  自己的定义），所以共享组件也不可能退回裸字号。基线：`bare-font 362 → 0`。
+- 顺带把 `Card` 的圆角与默认内边距接到 `Radius.card`（13 → 12）与 `CardPadding.regular`
+  （16 → 14），让 `Metrics` 一落地就有真实调用者。**39 处显式 `Card(padding:)` 没有动**，
+  留给 U0-03 统一，所以现在卡片内边距仍是 10/12/14/16 四种。
+- 截图复核抓到两个真问题：① 校准页六步流程的标签从 9.5 涨到 10 后，固定 24pt 高度装不下
+  两行，被截成「预充至…」—— 改成 `fixedSize` + `minHeight`；② 迁移脚本把 5 处 `Text` 判成
+  了图标（上一行是 `Image(systemName:)`），已逐个改回文字令牌。两处都不是编译错误，
+  只能靠看图发现。
+- 16 张基线截图在逐张确认无裁切、无重叠后重新录制。
 
 #### U0-02 语义色与对比度 — ❌ 未开始
 
@@ -252,10 +286,10 @@ PageScaffold(title, symbol, help?, toolbar: { ... }) { scrollContent }
 
 - `Tools/ui_lint.py` 是**棘轮**而不是硬规则：四条规则按「文件 → 计数」比对
   `Tools/ui_lint_baseline.json`，只允许下降。迁移前一次性录基线，改完一页跑
-  `--update-baseline` 把数字压低；任何新增写法立刻失败。当前基线：
-  `bare-font=362 / literal-color=18 / literal-radius=30 / card-padding=39`。
+  `--update-baseline` 把数字压低；任何新增写法立刻失败。U0-01 之后的基线：
+  `bare-font=0 / literal-color=18 / literal-radius=30 / card-padding=39`。
 - 接入 `quality_gate.py source`：每次源码门禁都会打印
-  `PASS ui_lint bare-font=362, ...`，回归时直接给出「文件: 现在 N（基线 M）」与改法提示。
+  `PASS ui_lint bare-font=0, ...`，回归时直接给出「文件: 现在 N（基线 M）」与改法提示。
 - 截图取样的坑：本机 `open -a ... --args --panel X` **不会把参数传给应用**（实测进程 argv
   只有 argv[0]），而 `osascript ... activate` 会另起一个不带参数的实例 —— 这就是之前
   「`--panel` 不生效」的真正原因。改成直接执行 `Contents/MacOS/InfiniCal --panel X` 保留
@@ -276,7 +310,7 @@ PageScaffold(title, symbol, help?, toolbar: { ... }) { scrollContent }
 
 | 编号 | 项目 | 状态 |
 | --- | --- | --- |
-| U0-01 | 设计令牌层 | ❌ 未开始 |
+| U0-01 | 设计令牌层 | ✅ 完成 |
 | U0-02 | 语义色与对比度 | ❌ 未开始 |
 | U0-03 | 卡片与标题收口 | ❌ 未开始 |
 | U0-04 | 页面骨架与空态 | ❌ 未开始 |
@@ -295,7 +329,7 @@ PageScaffold(title, symbol, help?, toolbar: { ... }) { scrollContent }
 | U2-04 | 浅色模式 | ❌ 未开始 |
 | U2-05 | 视觉回归门禁 | ✅ 完成 |
 
-**统计：1 项完成 / 0 项部分完成 / 17 项未开始。**
+**统计：2 项完成 / 0 项部分完成 / 16 项未开始。**
 
 ---
 

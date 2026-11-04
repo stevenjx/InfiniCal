@@ -586,7 +586,7 @@ struct PowerFlowView: View {
 
     private func label(_ item: Placed) -> some View {
         Text(item.labelText)
-            .font(.system(size: compact ? 9 : 10, weight: .semibold).monospacedDigit())
+            .font(FlowType.label(compact))
             .foregroundColor(theme.textPrimary)
             .shadow(color: Color.black.opacity(theme.isDark ? 0.55 : 0.12), radius: 2, y: 1)
             .fixedSize()
@@ -613,21 +613,21 @@ struct PowerFlowView: View {
             VStack(alignment: .leading, spacing: compact ? 4 : 6) {
                 HStack(spacing: 4) {
                     Image(systemName: isAdapter ? "powerplug.fill" : "battery.75")
-                        .font(.system(size: compact ? 8 : 9, weight: .semibold))
+                        .font(FlowType.sourceIcon(compact))
                         .foregroundColor(tint)
                         .opacity(isAdapter ? pulse : 1)
                     Text(isAdapter ? t("电源适配器") : t("电池供电"))
-                        .font(.system(size: compact ? 8.5 : 9.5, weight: .medium))
+                        .font(FlowType.sourceCaption(compact))
                         .foregroundColor(theme.textTertiary)
                         .lineLimit(1)
                 }
                 Text(PowerFormat.watts(watts))
-                    .font(.system(size: compact ? 17 : 22, weight: .semibold).monospacedDigit())
+                    .font(FlowType.sourceValue(compact))
                     .foregroundColor(theme.textPrimary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.55)
                 Text(isAdapter ? t("已接入电源") : t("放电中"))
-                    .font(.system(size: compact ? 8 : 9))
+                    .font(FlowType.sourceStatus(compact))
                     .foregroundColor(theme.textTertiary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
@@ -654,7 +654,7 @@ struct PowerFlowView: View {
                 .strokeBorder(theme.cardStroke, lineWidth: 1)
 
             Image(systemName: "laptopcomputer")
-                .font(.system(size: compact ? 18 : 22, weight: .regular))
+                .font(FlowType.laptopIcon(compact))
                 .foregroundColor(theme.textSecondary)
         }
         .frame(width: layout.laptopW, height: layout.laptopH)
@@ -674,10 +674,10 @@ struct PowerFlowView: View {
 
             VStack(spacing: compact ? 2 : 3) {
                 Image(systemName: item.sink.symbol)
-                    .font(.system(size: compact ? 10 : 11, weight: .semibold))
+                    .font(FlowType.sinkIcon(compact))
                     .foregroundColor(item.sink.color)
                 Text(item.sink.title)
-                    .font(.system(size: compact ? 7.5 : 8, weight: .medium))
+                    .font(FlowType.sinkTitle(compact))
                     .foregroundColor(active ? theme.textSecondary : theme.textTertiary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.65)

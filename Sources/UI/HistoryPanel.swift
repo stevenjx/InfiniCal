@@ -39,7 +39,7 @@ struct HistoryView: View {
                 healthTrends
 
                 Text(t("按自然日聚合，数据来自本机电池的电压 × 电流积分；App 未运行时不计入。"))
-                    .font(.system(size: 10))
+                    .font(Typography.caption)
                     .foregroundColor(theme.textTertiary)
                     .padding(.top, 2)
             }
@@ -53,7 +53,7 @@ struct HistoryView: View {
         HStack(spacing: 10) {
             IconBadge(symbol: "chart.bar.xaxis")
             Text(t("电池历史"))
-                .font(.system(size: 13))
+                .font(Typography.title)
                 .foregroundColor(theme.textPrimary)
             HelpDot(text: t("每天充入与放出的电量、温度区间和接电时长。用于观察长期使用习惯，不参与健康度计算。"))
             Spacer()
@@ -65,7 +65,7 @@ struct HistoryView: View {
             if !history.days.isEmpty {
                 Button(t("清除")) { confirmClear() }
                     .buttonStyle(.plain)
-                    .font(.system(size: 11))
+                    .font(Typography.caption)
                     .foregroundColor(theme.textTertiary)
             }
         }
@@ -75,10 +75,10 @@ struct HistoryView: View {
     private var alertCenter: some View {
         Card(padding: 14) {
             VStack(alignment: .leading, spacing: 8) {
-                Text(t("异常告警")).font(.system(size: 13, weight: .medium))
+                Text(t("异常告警")).font(Typography.headline)
                 Text(t("仅在 App 运行并持续观测时判断；提醒是异常证据，不是硬件故障诊断。"))
-                    .font(.system(size: 11)).foregroundColor(theme.textSecondary)
-                if alerts.events.isEmpty { Text(t("暂无异常记录")).font(.system(size: 11)) }
+                    .font(Typography.caption).foregroundColor(theme.textSecondary)
+                if alerts.events.isEmpty { Text(t("暂无异常记录")).font(Typography.caption) }
                 ForEach(alerts.events) { event in
                     VStack(alignment: .leading, spacing: 4) {
                         HStack {
@@ -89,11 +89,11 @@ struct HistoryView: View {
                             Button(t("关闭此类")) { alerts.setDisabled(event.id, true) }
                         }
                         Text(event.detail).textSelection(.enabled)
-                    }.font(.system(size: 11))
+                    }.font(Typography.caption)
                 }
                 ForEach(AnomalyAlerts.rules.filter { alerts.disabled.contains($0.id) }, id: \.id) { rule in
                     Button(t("重新启用") + " · " + t(rule.title)) { alerts.setDisabled(rule.id, false) }
-                        .font(.system(size: 11))
+                        .font(Typography.caption)
                 }
             }
         }
@@ -103,10 +103,10 @@ struct HistoryView: View {
         let window = HealthWindow(days: history.days, records: calibration.records, count: range.value)
         return Card(padding: 14) {
             VStack(alignment: .leading, spacing: 10) {
-                Text(t("电池健康趋势")).font(.system(size: 13, weight: .medium))
+                Text(t("电池健康趋势")).font(Typography.headline)
                 Text(tf("有效日样本 {p} · 有效校准 {p} · 未评估或低质量 {p}",
                         "\(window.days.count)", "\(window.records.count)", "\(window.excludedRecords)"))
-                    .font(.system(size: 11)).foregroundColor(theme.textSecondary)
+                    .font(Typography.caption).foregroundColor(theme.textSecondary)
                 trendLine(t("系统满充容量变化"), window.reportedDelta, "mAh")
                 trendLine(t("校准实测容量变化"), window.capacityDelta, "mAh")
                 trendLine(t("DCIR 变化"), window.resistanceDelta, "mΩ")
@@ -119,15 +119,15 @@ struct HistoryView: View {
                 rateLine(t("DCIR 拟合变化率"), window.resistanceRate, unit: "mΩ/30d")
                 Text(tf("条件匹配 {p}/{p}：同机型、后端、负载模式和目标；温差≤3°C，功率差≤20%，起始电量差≤2%。旧记录条件未知，不参与匹配。",
                         "\(window.comparableRecords.count)", "\(window.records.count)"))
-                    .font(.system(size: 11)).foregroundColor(theme.textSecondary)
+                    .font(Typography.caption).foregroundColor(theme.textSecondary)
                 Text(t("拟合至少需要4个不同日期样本、跨度14天；正值也可能是容量回升。R²仅表示拟合程度，不是置信概率。曲线不插值补样本，长间隔断线。"))
-                    .font(.system(size: 11)).foregroundColor(theme.textSecondary)
+                    .font(Typography.caption).foregroundColor(theme.textSecondary)
                 trendLine(t("循环次数变化"), window.cycleDelta, "")
                 HStack {
                     Text(t("已观测高温时长（≥40°C）"))
                     Spacer()
                     Text(window.highTemperatureHours.map { String(format: "%.2f h", $0) } ?? "--")
-                }.font(.system(size: 11))
+                }.font(Typography.caption)
                 if window.records.count >= 2 {
                     ForEach(Array(window.records.suffix(5))) { record in
                         HStack {
@@ -136,13 +136,13 @@ struct HistoryView: View {
                             Text(String(format: "%.0f mAh · %.1f%% · %.1f mΩ", record.calculatedCapacityMAh,
                                         record.batteryHealthPercentage, record.internalResistanceMilliohm))
                             Text(record.quality.map { t($0.label) } ?? "--")
-                        }.font(.system(size: 11)).foregroundColor(theme.textSecondary)
+                        }.font(Typography.caption).foregroundColor(theme.textSecondary)
                     }
                 }
                 Text(t("变化为窗口内首末有效样本之差，不是衰减速度；温度、负载和测量协议不同会影响比较。少于两个样本显示 --。"))
-                    .font(.system(size: 11)).foregroundColor(theme.textSecondary)
+                    .font(Typography.caption).foregroundColor(theme.textSecondary)
                 Text(t("高温时长仅统计 App 运行且温度有效的区间；旧记录缺失值不补零。系统容量与校准实测值不混合。"))
-                    .font(.system(size: 11)).foregroundColor(theme.textSecondary)
+                    .font(Typography.caption).foregroundColor(theme.textSecondary)
             }
         }
     }
@@ -152,7 +152,7 @@ struct HistoryView: View {
             trendLine(label, rate?.changePer30Days, unit)
             if let rate {
                 Text(String(format: "n=%d · %.0f d · R²=%.2f", rate.sampleCount, rate.spanDays, rate.rSquared))
-                    .font(.system(size: 11)).foregroundColor(theme.textSecondary)
+                    .font(Typography.caption).foregroundColor(theme.textSecondary)
             }
         }
     }
@@ -160,12 +160,12 @@ struct HistoryView: View {
     private func datedCurve(_ title: String, points: [(Date, Double)], gapDays: Double, unit: String) -> some View {
         let valid = points.filter { $0.1.isFinite && $0.1 > 0 }.sorted { $0.0 < $1.0 }
         return VStack(alignment: .leading, spacing: 4) {
-            Text(t(title) + " · " + unit).font(.system(size: 11))
+            Text(t(title) + " · " + unit).font(Typography.caption)
             if let first = valid.first, let last = valid.last {
                 let low = valid.map { $0.1 }.min() ?? first.1
                 let high = valid.map { $0.1 }.max() ?? first.1
                 Text(String(format: "%.1f–%.1f %@ · n=%d", low, high, unit, valid.count))
-                    .font(.system(size: 11)).foregroundColor(theme.textSecondary)
+                    .font(Typography.caption).foregroundColor(theme.textSecondary)
                 GeometryReader { geometry in
                     let duration = max(1, last.0.timeIntervalSince(first.0))
                     let span = max(1, high - low)
@@ -189,8 +189,8 @@ struct HistoryView: View {
                     Text(first.0, style: .date)
                     Spacer()
                     Text(last.0, style: .date)
-                }.font(.system(size: 11)).foregroundColor(theme.textSecondary)
-            } else { Text("--").font(.system(size: 12)) }
+                }.font(Typography.caption).foregroundColor(theme.textSecondary)
+            } else { Text("--").font(Typography.body) }
         }
     }
 
@@ -199,7 +199,7 @@ struct HistoryView: View {
             Text(label)
             Spacer()
             Text(value.map { String(format: "%+.1f %@", $0, unit) } ?? "--")
-        }.font(.system(size: 12)).foregroundColor(theme.textPrimary)
+        }.font(Typography.body).foregroundColor(theme.textPrimary)
     }
 
     // MARK: - Summary
@@ -218,18 +218,18 @@ struct HistoryView: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 5) {
                     Image(systemName: symbol)
-                        .font(.system(size: 10))
+                        .font(Glyph.inline)
                         .foregroundColor(tint)
                     Text(title)
-                        .font(.system(size: 11))
+                        .font(Typography.caption)
                         .foregroundColor(theme.textSecondary)
                     Spacer(minLength: 0)
                 }
                 Text(value)
-                    .font(.system(size: 16, weight: .semibold).monospacedDigit())
+                    .font(Typography.title.monospacedDigit())
                     .foregroundColor(theme.textPrimary)
                 Text(tf("近 {p} 天", "\(range.value)"))
-                    .font(.system(size: 9))
+                    .font(Typography.micro)
                     .foregroundColor(theme.textTertiary)
             }
         }
@@ -243,24 +243,24 @@ struct HistoryView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 10) {
                     Text(t("每日充放电"))
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(Typography.headline)
                         .foregroundColor(theme.textPrimary)
                     legend(t("充入"), theme.chartGreen)
                     legend(t("放出"), theme.chartOrange)
                     Spacer()
                     Text(peakText)
-                        .font(.system(size: 10))
+                        .font(Typography.caption)
                         .foregroundColor(theme.textTertiary)
                 }
                 DailyBarChart(stats: stats)
                     .frame(height: 132)
                 HStack {
                     Text(Self.dayLabel(stats.first?.day))
-                        .font(.system(size: 9))
+                        .font(Typography.micro)
                         .foregroundColor(theme.textTertiary)
                     Spacer()
                     Text(Self.dayLabel(stats.last?.day))
-                        .font(.system(size: 9))
+                        .font(Typography.micro)
                         .foregroundColor(theme.textTertiary)
                 }
             }
@@ -271,7 +271,7 @@ struct HistoryView: View {
         HStack(spacing: 4) {
             Circle().fill(color).frame(width: 6, height: 6)
             Text(title)
-                .font(.system(size: 10))
+                .font(Typography.caption)
                 .foregroundColor(theme.textSecondary)
         }
     }
@@ -294,7 +294,7 @@ struct HistoryView: View {
                     Text(t("电量区间")).frame(maxWidth: .infinity, alignment: .trailing)
                     Text(t("接电")).frame(maxWidth: .infinity, alignment: .trailing)
                 }
-                .font(.system(size: 10))
+                .font(Typography.caption)
                 .foregroundColor(theme.textTertiary)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
@@ -322,7 +322,7 @@ struct HistoryView: View {
                             .frame(maxWidth: .infinity, alignment: .trailing)
                             .foregroundColor(theme.textSecondary)
                     }
-                    .font(.system(size: 11).monospacedDigit())
+                    .font(Typography.caption.monospacedDigit())
                     .padding(.horizontal, 14)
                     .padding(.vertical, 7)
                     .opacity(stat.isEmpty ? 0.45 : 1)
@@ -337,13 +337,13 @@ struct HistoryView: View {
         Card {
             VStack(spacing: 10) {
                 Image(systemName: "chart.bar.xaxis")
-                    .font(.system(size: 30))
+                    .font(Glyph.hero)
                     .foregroundColor(theme.textTertiary)
                 Text(t("还没有历史数据"))
-                    .font(.system(size: 13, weight: .medium))
+                    .font(Typography.headline)
                     .foregroundColor(theme.textPrimary)
                 Text(t("InfiniCal 每 2 秒采样一次电池功率，按天累加。保持运行一天后，这里会出现第一根柱子。"))
-                    .font(.system(size: 11))
+                    .font(Typography.caption)
                     .foregroundColor(theme.textSecondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)

@@ -14,7 +14,7 @@ struct ChargeControlView: View {
                 HStack(spacing: 10) {
                     IconBadge(symbol: "battery.75")
                     Text(t("充电限制"))
-                        .font(.system(size: 13))
+                        .font(Typography.title)
                         .foregroundColor(theme.textPrimary)
                     HelpDot(text: t("设置电池允许充到的最高电量。达到该数值后 InfiniCal 会暂停充电，让 MacBook 直接使用电源适配器供电。"))
                     Spacer()
@@ -29,15 +29,15 @@ struct ChargeControlView: View {
                 if let restore = state.topUpRestoreLimit {
                     HStack(spacing: 8) {
                         Image(systemName: "bolt.fill")
-                            .font(.system(size: 11))
+                            .font(Glyph.row)
                             .foregroundColor(theme.accent)
                         Text(tf("一次性充满至 100%，完成后恢复 {p}%", "\(restore)"))
-                            .font(.system(size: 11))
+                            .font(Typography.caption)
                             .foregroundColor(theme.textSecondary)
                         Spacer()
                         Button(t("取消")) { state.cancelTopUp() }
                             .buttonStyle(.plain)
-                            .font(.system(size: 11, weight: .medium))
+                            .font(Typography.label)
                             .foregroundColor(theme.accent)
                     }
                     .padding(.horizontal, 12)
@@ -66,12 +66,12 @@ struct ChargeControlView: View {
                         HStack(spacing: 8) {
                             Spacer()
                             Text(t("差异:"))
-                                .font(.system(size: 12))
+                                .font(Typography.body)
                                 .foregroundColor(theme.textSecondary)
                             ValueStepper(value: $state.sailingLevel, range: 1...max(1, min(30, state.chargeVal - 1)), step: 1)
                                 .frame(width: 92)
                             Text(tf("→ 将航海至 {p}%.", "\(max(1, state.chargeVal - state.sailingLevel))"))
-                                .font(.system(size: 12))
+                                .font(Typography.body)
                                 .foregroundColor(theme.textPrimary)
                             Spacer()
                         }
@@ -89,7 +89,7 @@ struct ChargeControlView: View {
                         Text(state.heatProtectMode
                              ? tf("过热保护已开启。 温度上限: {p}°C。 当前温度: {p}", "\(state.maxTemperature)", String(format: "%.1f°C", state.snapshot.temperature))
                              : tf("过热保护已关闭。 当前温度: {p}", String(format: "%.1f°C", state.snapshot.temperature)))
-                            .font(.system(size: 12))
+                            .font(Typography.body)
                             .foregroundColor(theme.textSecondary)
                         if state.heatProtectMode {
                             ValueStepper(value: $state.maxTemperature, range: 25...60, step: 1, suffix: "°C")
@@ -113,17 +113,17 @@ struct ChargeControlView: View {
                 if !state.helperInstalled {
                     HStack(spacing: 8) {
                         Image(systemName: "lock.shield")
-                            .font(.system(size: 11))
+                            .font(Glyph.row)
                             .foregroundColor(theme.textSecondary)
                         Text(tf("写入 SMC 需要特权助手（当前策略：{p}）", state.capabilities.strategy.title))
-                            .font(.system(size: 11))
+                            .font(Typography.caption)
                             .foregroundColor(theme.textSecondary)
                         Spacer()
                         Button {
                             state.installHelper()
                         } label: {
                             Text(t("安装"))
-                                .font(.system(size: 11, weight: .medium))
+                                .font(Typography.label)
                                 .padding(.horizontal, 10)
                                 .padding(.vertical, 4)
                                 .background(Capsule().fill(theme.accent))
@@ -136,7 +136,7 @@ struct ChargeControlView: View {
 
                 if state.statusNote.isEmpty == false {
                     Text(state.statusNote)
-                        .font(.system(size: 11))
+                        .font(Typography.caption)
                         .foregroundColor(theme.textTertiary)
                         .padding(.top, 6)
                 }
@@ -146,12 +146,12 @@ struct ChargeControlView: View {
                 if let arbitration = state.chargeArbitration, arbitration.isConflict {
                     HStack(alignment: .top, spacing: 6) {
                         Image(systemName: "arrow.triangle.branch")
-                            .font(.system(size: 10))
+                            .font(Glyph.inline)
                             .foregroundColor(theme.textTertiary)
                         Text(tf("当前生效：{p}；已覆盖：{p}",
                                 arbitration.winner.strategy.title,
                                 arbitration.suppressedTitles))
-                            .font(.system(size: 11))
+                            .font(Typography.caption)
                             .foregroundColor(theme.textTertiary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -170,16 +170,16 @@ struct ChargeControlView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     Text(tf("输入 {p}", watts(adapter.inputWatts)))
-                        .font(.system(size: 12, weight: .medium).monospacedDigit())
+                        .font(Typography.headline.monospacedDigit())
                         .foregroundColor(theme.textPrimary)
                     if adapter.ratedWatts > 0 {
                         Text(tf("· 额定 {p} W", "\(Int(adapter.ratedWatts))"))
-                            .font(.system(size: 10))
+                            .font(Typography.caption)
                             .foregroundColor(theme.textTertiary)
                     }
                     Spacer()
                     Text(status.0)
-                        .font(.system(size: 10, weight: .medium))
+                        .font(Typography.micro)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
                         .background(Capsule().fill(status.1.opacity(0.15)))
@@ -200,13 +200,13 @@ struct ChargeControlView: View {
 
                 if adapter.lossWatts > 0.05 {
                     Text(String(format: t("适配器转换损耗 %.1f W（%.0f%%）"), adapter.lossWatts, adapter.lossPercent))
-                        .font(.system(size: 9))
+                        .font(Typography.micro)
                         .foregroundColor(theme.textTertiary)
                 }
 
                 if adapter.level == .insufficient {
                     Text(t("当前适配器功率低于系统负载，电池正在放电。换用更大功率的适配器或降低负载。"))
-                        .font(.system(size: 10))
+                        .font(Typography.caption)
                         .foregroundColor(Color(red: 1, green: 0.27, blue: 0.23))
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -217,10 +217,10 @@ struct ChargeControlView: View {
     private func adapterMetric(_ title: String, _ value: String, _ color: Color) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title)
-                .font(.system(size: 9))
+                .font(Typography.micro)
                 .foregroundColor(theme.textSecondary)
             Text(value)
-                .font(.system(size: 12, weight: .medium).monospacedDigit())
+                .font(Typography.headline.monospacedDigit())
                 .foregroundColor(color)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -257,7 +257,7 @@ struct ChargeControlView: View {
                 if state.smartChargeEnabled {
                     HStack(spacing: 8) {
                         Text(t("目标时间"))
-                            .font(.system(size: 11))
+                            .font(Typography.caption)
                             .foregroundColor(theme.textSecondary)
                         Spacer()
                         Picker("", selection: $state.smartChargeHour) {
@@ -273,13 +273,13 @@ struct ChargeControlView: View {
                     }
 
                     Text(state.smartChargeStatusText)
-                        .font(.system(size: 10))
+                        .font(Typography.caption)
                         .foregroundColor(theme.textTertiary)
                         .fixedSize(horizontal: false, vertical: true)
 
                     if state.chargeRateWatts > 0.5 {
                         Text(String(format: t("按实测充电功率 %.0f W 估算"), state.chargeRateWatts))
-                            .font(.system(size: 9))
+                            .font(Typography.micro)
                             .foregroundColor(theme.textTertiary)
                     }
                 }

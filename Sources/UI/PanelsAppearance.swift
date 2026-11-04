@@ -26,7 +26,7 @@ struct OtherView: View {
                 HStack(spacing: 10) {
                     IconBadge(symbol: "circle.lefthalf.filled")
                     Text(t("外观模式"))
-                        .font(.system(size: 13))
+                        .font(Typography.headline)
                         .foregroundColor(theme.textPrimary)
                     Spacer()
                     segmentControl(selection: $state.colorMode,
@@ -39,7 +39,7 @@ struct OtherView: View {
                 HStack(spacing: 10) {
                     IconBadge(symbol: "globe")
                     Text(t("语言"))
-                        .font(.system(size: 13))
+                        .font(Typography.headline)
                         .foregroundColor(theme.textPrimary)
                     Spacer()
                     segmentControl(selection: $state.languageMode,
@@ -50,7 +50,7 @@ struct OtherView: View {
                 .frame(height: 46)
 
                 Text(t("合盖模式"))
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(Typography.label.weight(.semibold))
                     .foregroundColor(theme.textTertiary)
                     .padding(.leading, 4)
                     .padding(.top, 6)
@@ -66,7 +66,7 @@ struct OtherView: View {
                 }
 
                 Text(t("通用"))
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(Typography.label.weight(.semibold))
                     .foregroundColor(theme.textTertiary)
                     .padding(.leading, 4)
                     .padding(.top, 6)
@@ -91,7 +91,7 @@ struct OtherView: View {
                 }
 
                 Text(t("功率数据源"))
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(Typography.label.weight(.semibold))
                     .foregroundColor(theme.textTertiary)
                     .padding(.leading, 4)
                     .padding(.top, 6)
@@ -107,9 +107,9 @@ struct OtherView: View {
                         powerSourceRow("USB", t("无可用数据源"), quality: .unavailable)
                         Divider().background(theme.divider)
                         HStack(alignment: .top, spacing: 6) {
-                            Image(systemName: "info.circle").font(.system(size: 9))
+                            Image(systemName: "info.circle").font(Glyph.inline)
                             Text(t("「其他」= MacBook 总功耗 − 已知分项，属于残差而不是独立测量值。"))
-                                .font(.system(size: 10))
+                                .font(Typography.caption)
                                 .fixedSize(horizontal: false, vertical: true)
                             Spacer(minLength: 0)
                         }
@@ -121,15 +121,15 @@ struct OtherView: View {
                     Card {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(t("充电控制状态"))
-                                .font(.system(size: 12, weight: .semibold))
+                                .font(Typography.headline)
                                 .foregroundColor(theme.textPrimary)
                             Text(state.capabilities.summary)
-                                .font(.system(size: 11))
+                                .font(Typography.caption)
                                 .foregroundColor(theme.textSecondary)
                             if !state.helperInstalled {
                                 Button { state.installHelper() } label: {
                                     Text(t("安装特权助手"))
-                                        .font(.system(size: 11, weight: .medium))
+                                        .font(Typography.label)
                                         .padding(.horizontal, 12)
                                         .padding(.vertical, 6)
                                         .background(Capsule().fill(theme.accent))
@@ -144,11 +144,11 @@ struct OtherView: View {
 
                 HStack(spacing: 6) {
                     Text("InfiniCal \(Self.appVersion)")
-                        .font(.system(size: 10))
+                        .font(Typography.caption)
                         .foregroundColor(theme.textTertiary)
                     Spacer()
                     Text("© 2026 Infinity Computer")
-                        .font(.system(size: 10))
+                        .font(Typography.caption)
                         .foregroundColor(theme.textTertiary)
                 }
                 .padding(.top, 10)
@@ -168,10 +168,10 @@ struct OtherView: View {
     private func powerSourceRow(_ title: String, _ source: String, quality: PowerQuality) -> some View {
         HStack(spacing: 8) {
             Circle().fill(color(for: quality)).frame(width: 6, height: 6)
-            Text(title).font(.system(size: 11)).foregroundColor(theme.textPrimary)
+            Text(title).font(Typography.caption).foregroundColor(theme.textPrimary)
             Spacer()
-            Text(source).font(.system(size: 9, design: .monospaced)).foregroundColor(theme.textTertiary)
-            Text(quality.badge).font(.system(size: 9, weight: .medium)).foregroundColor(color(for: quality)).frame(width: 34, alignment: .trailing)
+            Text(source).font(Typography.micro.monospaced()).foregroundColor(theme.textTertiary)
+            Text(quality.badge).font(Typography.micro).foregroundColor(color(for: quality)).frame(width: 34, alignment: .trailing)
         }
     }
 
@@ -206,10 +206,10 @@ struct OtherView: View {
                     HStack(spacing: 4) {
                         if let symbol = option.symbol {
                             Image(systemName: symbol)
-                                .font(.system(size: 9, weight: .semibold))
+                                .font(Glyph.inline.weight(.semibold))
                         }
                         Text(option.title)
-                            .font(.system(size: 11))
+                            .font(Typography.caption)
                             .lineLimit(1)
                     }
                     .foregroundColor(selection.wrappedValue == option.id ? .white : theme.textSecondary)

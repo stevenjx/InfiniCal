@@ -39,7 +39,7 @@ struct RootView: View {
                 let panel = item.element
                 if let category = panel.category, category != previousCategory(item.offset) {
                     Text(category)
-                        .font(.system(size: 11))
+                        .font(Typography.caption)
                         .foregroundColor(theme.textTertiary)
                         .padding(.leading, 12)
                         .padding(.top, item.offset == 1 ? 16 : 14)
@@ -50,10 +50,10 @@ struct RootView: View {
                 } label: {
                     HStack(spacing: 9) {
                         Image(systemName: panel.symbol)
-                            .font(.system(size: 12, weight: .regular))
+                            .font(Glyph.row)
                             .frame(width: 18)
                         Text(panel.title)
-                            .font(.system(size: 12.5))
+                            .font(Typography.body)
                         Spacer(minLength: 0)
                     }
                     .foregroundColor(state.selectedPanel == panel ? theme.accent : theme.textPrimary)
@@ -75,12 +75,12 @@ struct RootView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Button { showingUpdates.value = true } label: {
                         Label(tf("发现新版本 {p}", version), systemImage: "arrow.down.circle.fill")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(Typography.label)
                     }
                     .buttonStyle(.plain).foregroundColor(theme.accent)
                     .sheet(isPresented: $showingUpdates.value) { UpdateSheet() }
                     Button(t("立即更新")) { updater.checkForUpdates() }
-                        .buttonStyle(.plain).font(.system(size: 10)).foregroundColor(theme.textSecondary)
+                        .buttonStyle(.plain).font(Typography.caption).foregroundColor(theme.textSecondary)
                 }
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -92,10 +92,10 @@ struct RootView: View {
                 // Centred in the sidebar regardless of what sits at either end.
                 VStack(spacing: 1) {
                     Text("Infinity Computer")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(Typography.micro)
                         .foregroundColor(theme.textSecondary)
                     Text(t("开发者 Steven Yang"))
-                        .font(.system(size: 9))
+                        .font(Typography.micro)
                         .foregroundColor(theme.textTertiary)
                 }
                 .fixedSize()
@@ -107,7 +107,7 @@ struct RootView: View {
                         openReleasePage()
                     } label: {
                         Text("v\(appVersion)")
-                            .font(.system(size: 11).monospacedDigit())
+                            .font(Typography.caption.monospacedDigit())
                             .foregroundColor(theme.textTertiary)
                     }
                     .buttonStyle(.plain)
@@ -138,7 +138,7 @@ struct RootView: View {
     private func circleButton(_ symbol: String, highlighted: Bool = false, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 12, weight: .medium))
+                .font(Glyph.row)
                 .foregroundColor(highlighted ? theme.accent : theme.textSecondary)
                 .frame(width: 28, height: 28)
                 .background(Circle().fill(theme.isDark ? Color.white.opacity(0.07) : Color.black.opacity(0.05)))

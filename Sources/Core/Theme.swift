@@ -46,7 +46,7 @@ final class UIValue<T>: ObservableObject {
 
 struct Card<Content: View>: View {
     private var theme: Theme { Theme.current }
-    var padding: CGFloat = 16
+    var padding: CGFloat = CardPadding.regular
     @ViewBuilder var content: Content
 
     var body: some View {
@@ -54,10 +54,10 @@ struct Card<Content: View>: View {
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
                     .fill(theme.card)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
                             .strokeBorder(theme.cardStroke, lineWidth: 1)
                     )
             )
@@ -69,7 +69,7 @@ struct SectionLabel: View {
     let text: String
     var body: some View {
         Text(text)
-            .font(.system(size: 11, weight: .semibold))
+            .font(Typography.label.weight(.semibold))
             .foregroundColor(theme.textTertiary)
             .padding(.leading, 4)
     }
@@ -83,7 +83,7 @@ struct IconBadge: View {
 
     var body: some View {
         Image(systemName: symbol)
-            .font(.system(size: size * 0.62, weight: .medium))
+            .font(Glyph.row)
             .foregroundColor(color ?? theme.textPrimary)
             .frame(width: size + 6, height: size)
     }
@@ -99,15 +99,15 @@ struct HelpDot: View {
             flag.value.toggle()
         } label: {
             Image(systemName: "questionmark.circle")
-                .font(.system(size: 13))
+                .font(Glyph.row)
                 .foregroundColor(theme.textTertiary)
         }
         .buttonStyle(.plain)
         .popover(isPresented: $flag.value, arrowEdge: .bottom) {
             Text(text)
-                .font(.system(size: 12))
+                .font(Typography.body)
                 .foregroundColor(.primary)
-                .padding(12)
+                .padding(Spacing.m)
                 .frame(width: 260, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -123,10 +123,10 @@ struct ToggleRow: View {
     var disabled = false
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Spacing.s) {
             IconBadge(symbol: symbol)
             Text(title)
-                .font(.system(size: 13))
+                .font(Typography.headline)
                 .foregroundColor(disabled ? theme.textTertiary : theme.textPrimary)
             if let help { HelpDot(text: help) }
             Spacer(minLength: 8)
@@ -152,10 +152,10 @@ struct PickerRow<T: Hashable>: View {
     var width: CGFloat = 200
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Spacing.s) {
             IconBadge(symbol: symbol)
             Text(title)
-                .font(.system(size: 13))
+                .font(Typography.headline)
                 .foregroundColor(theme.textPrimary)
             if let help { HelpDot(text: help) }
             Spacer(minLength: 8)
@@ -181,11 +181,11 @@ struct ChipButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 5) {
+            HStack(spacing: Spacing.xs) {
                 if let symbol {
-                    Image(systemName: symbol).font(.system(size: 11, weight: .medium))
+                    Image(systemName: symbol).font(Glyph.row)
                 }
-                Text(title).font(.system(size: 12, weight: .medium))
+                Text(title).font(Typography.headline)
             }
             .padding(.horizontal, 11)
             .padding(.vertical, 5)
@@ -210,13 +210,13 @@ struct SmallActionButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 5) {
-                if let symbol { Image(systemName: symbol).font(.system(size: 11)) }
-                Text(title).font(.system(size: 12, weight: .medium))
+            HStack(spacing: Spacing.xs) {
+                if let symbol { Image(systemName: symbol).font(Glyph.row) }
+                Text(title).font(Typography.body.weight(.medium))
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 7)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(theme.innerControl))
+            .background(RoundedRectangle(cornerRadius: Radius.control, style: .continuous).fill(theme.innerControl))
             .foregroundColor(destructive ? Color(red: 1, green: 0.27, blue: 0.23) : theme.textPrimary)
         }
         .buttonStyle(.plain)
@@ -236,7 +236,7 @@ struct ValueStepper: View {
                 value = max(range.lowerBound, value - step)
             } label: {
                 Image(systemName: "minus")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(Glyph.inline.weight(.semibold))
                     .frame(width: 26, height: 24)
                     .contentShape(Rectangle())
             }
@@ -244,7 +244,7 @@ struct ValueStepper: View {
             .foregroundColor(theme.textSecondary)
 
             Text("\(value)")
-                .font(.system(size: 12, weight: .medium).monospacedDigit())
+                .font(Typography.headline.monospacedDigit())
                 .frame(minWidth: 30)
                 .foregroundColor(theme.textPrimary)
 
@@ -252,7 +252,7 @@ struct ValueStepper: View {
                 value = min(range.upperBound, value + step)
             } label: {
                 Image(systemName: "plus")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(Glyph.inline.weight(.semibold))
                     .frame(width: 26, height: 24)
                     .contentShape(Rectangle())
             }
@@ -260,10 +260,10 @@ struct ValueStepper: View {
             .foregroundColor(theme.textSecondary)
 
             Text(suffix)
-                .font(.system(size: 11))
+                .font(Typography.caption)
                 .foregroundColor(theme.textSecondary)
                 .padding(.trailing, 8)
         }
-        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(theme.innerControl))
+        .background(RoundedRectangle(cornerRadius: Radius.control, style: .continuous).fill(theme.innerControl))
     }
 }

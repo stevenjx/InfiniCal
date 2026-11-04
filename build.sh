@@ -55,6 +55,8 @@ SOURCES=(
   "$ROOT/Sources/Core/AnomalyAlerts.swift"
   "$ROOT/Sources/Core/SleepControl.swift"
   "$ROOT/Sources/Core/FanController.swift"
+  "$ROOT/Sources/Core/Typography.swift"
+  "$ROOT/Sources/Core/Metrics.swift"
   "$ROOT/Sources/Core/Theme.swift"
   "$ROOT/Sources/Core/AppState.swift"
   "$ROOT/Sources/UI/Charts.swift"

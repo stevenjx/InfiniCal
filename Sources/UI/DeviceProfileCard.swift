@@ -23,7 +23,7 @@ struct DeviceProfileCard: View {
             VStack(alignment: .leading, spacing: 8) {
                 header
                 Text(assessment.profile.summary)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(Typography.headline)
                     .foregroundColor(theme.textPrimary)
                     .textSelection(.enabled)
                 chips
@@ -31,14 +31,14 @@ struct DeviceProfileCard: View {
                 block(t("已知限制"), assessment.limitations, theme.chartOrange)
                 block(t("推荐策略"), assessment.recommendations, theme.textPrimary)
                 Text(t("规则离线内置，不上传任何数据；画像只包含机型代码、芯片名称与系统版本。"))
-                    .font(.system(size: 10))
+                    .font(Typography.caption)
                     .foregroundColor(theme.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
                 if let message = store.message {
-                    Text(message).font(.system(size: 10)).foregroundColor(theme.chartGreen)
+                    Text(message).font(Typography.caption).foregroundColor(theme.chartGreen)
                 }
                 if let error = error.value {
-                    Text(error).font(.system(size: 10)).foregroundColor(theme.chartOrange)
+                    Text(error).font(Typography.caption).foregroundColor(theme.chartOrange)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -47,18 +47,18 @@ struct DeviceProfileCard: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Text(t("跨机型能力画像")).font(.system(size: 12, weight: .semibold))
+            Text(t("跨机型能力画像")).font(Typography.headline)
             Text(tf("规则库 v{p}", "\(assessment.libraryVersion)"))
-                .font(.system(size: 10, design: .monospaced))
+                .font(Typography.caption.monospaced())
                 .foregroundColor(theme.textTertiary)
             Text(tf("命中 {p} 条", "\(assessment.ruleIDs.count)"))
-                .font(.system(size: 10))
+                .font(Typography.caption)
                 .foregroundColor(theme.textTertiary)
             Spacer()
             Button(t("导入规则…")) { importRules() }
-                .font(.system(size: 10))
+                .font(Typography.caption)
             Button(t("回滚")) { rollBack() }
-                .font(.system(size: 10))
+                .font(Typography.caption)
                 .disabled(!store.canRollBack)
         }
     }
@@ -78,7 +78,7 @@ struct DeviceProfileCard: View {
             Text(label).foregroundColor(theme.textTertiary)
             Text(value).foregroundColor(theme.textSecondary)
         }
-        .font(.system(size: 10))
+        .font(Typography.caption)
         .padding(.horizontal, 6)
         .padding(.vertical, 2)
         .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(theme.innerControl))
@@ -88,11 +88,11 @@ struct DeviceProfileCard: View {
     private func block(_ title: String, _ items: [String], _ color: Color) -> some View {
         if !items.isEmpty {
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 10, weight: .semibold)).foregroundColor(theme.textTertiary)
+                Text(title).font(Typography.micro.weight(.semibold)).foregroundColor(theme.textTertiary)
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                     HStack(alignment: .top, spacing: 4) {
-                        Text("·").font(.system(size: 11)).foregroundColor(color)
-                        Text(t(item)).font(.system(size: 11)).foregroundColor(color)
+                        Text("·").font(Typography.caption).foregroundColor(color)
+                        Text(t(item)).font(Typography.caption).foregroundColor(color)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }

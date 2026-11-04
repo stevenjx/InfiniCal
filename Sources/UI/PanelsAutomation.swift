@@ -15,7 +15,7 @@ struct ScheduleView: View {
                 HStack(spacing: 10) {
                     IconBadge(symbol: "calendar.badge.clock")
                     Text(t("任务"))
-                        .font(.system(size: 13))
+                        .font(Typography.title)
                         .foregroundColor(theme.textPrimary)
                     HelpDot(text: t("在指定时间自动执行充电、放电或校准操作。"))
                     Spacer()
@@ -26,7 +26,7 @@ struct ScheduleView: View {
                     Group {
                         if state.tasks.isEmpty {
                             Text(t("点击 “+” 按钮添加新任务，或从现有模板中选择。"))
-                                .font(.system(size: 12))
+                                .font(Typography.body)
                                 .foregroundColor(theme.textSecondary)
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                         } else {
@@ -49,7 +49,7 @@ struct ScheduleView: View {
                         editor.isPresented = true
                     } label: {
                         Image(systemName: "plus")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(Glyph.row.weight(.semibold))
                             .frame(width: 30, height: 26)
                             .background(RoundedRectangle(cornerRadius: 7).fill(theme.innerControl))
                             .foregroundColor(theme.textPrimary)
@@ -87,8 +87,8 @@ struct ScheduleView: View {
                         }
                     } label: {
                         HStack(spacing: 5) {
-                            Image(systemName: "doc.on.doc").font(.system(size: 11))
-                            Text(t("模板")).font(.system(size: 12, weight: .medium))
+                            Image(systemName: "doc.on.doc").font(Glyph.row)
+                            Text(t("模板")).font(Typography.body.weight(.medium))
                         }
                         .padding(.horizontal, 12)
                         .frame(height: 26)
@@ -108,14 +108,14 @@ struct ScheduleView: View {
                 HStack(spacing: 10) {
                     IconBadge(symbol: "list.bullet.rectangle")
                     Text(t("任务历史"))
-                        .font(.system(size: 13))
+                        .font(Typography.headline)
                         .foregroundColor(theme.textPrimary)
                     HelpDot(text: t("已执行的任务会记录在此处。"))
                     Spacer()
                     if !state.taskHistory.isEmpty {
                         Button(t("清除")) { state.clearTaskHistory() }
                             .buttonStyle(.plain)
-                            .font(.system(size: 11))
+                            .font(Typography.caption)
                             .foregroundColor(theme.textSecondary)
                     }
                 }
@@ -126,7 +126,7 @@ struct ScheduleView: View {
                     Group {
                         if state.taskHistory.isEmpty {
                             Text(t("已执行的任务将显示在此处。"))
-                                .font(.system(size: 12))
+                                .font(Typography.body)
                                 .foregroundColor(theme.textSecondary)
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                         } else {
@@ -136,10 +136,10 @@ struct ScheduleView: View {
                                         HStack {
                                             VStack(alignment: .leading, spacing: 2) {
                                                 HStack(spacing: 5) {
-                                                    Text(entry.title).font(.system(size: 12))
+                                                    Text(entry.title).font(Typography.body)
                                                     if entry.outcome == .skipped {
                                                         Text(t("已跳过"))
-                                                            .font(.system(size: 9, weight: .medium))
+                                                            .font(Typography.micro)
                                                             .foregroundColor(theme.chartOrange)
                                                             .padding(.horizontal, 4)
                                                             .padding(.vertical, 1)
@@ -148,13 +148,13 @@ struct ScheduleView: View {
                                                     }
                                                 }
                                                 Text(entry.detail)
-                                                    .font(.system(size: 10))
+                                                    .font(Typography.caption)
                                                     .foregroundColor(theme.textSecondary)
                                                     .fixedSize(horizontal: false, vertical: true)
                                             }
                                             Spacer(minLength: 8)
                                             Text(Self.formatter.string(from: entry.date))
-                                                .font(.system(size: 10))
+                                                .font(Typography.caption)
                                                 .foregroundColor(theme.textSecondary)
                                         }
                                         .padding(.horizontal, 14)
@@ -183,17 +183,17 @@ struct ScheduleView: View {
     private func taskRow(_ task: ScheduledTask) -> some View {
         HStack(spacing: 10) {
             Image(systemName: task.kind.symbol)
-                .font(.system(size: 12))
+                .font(Glyph.row)
                 .foregroundColor(theme.textSecondary)
                 .frame(width: 18)
             VStack(alignment: .leading, spacing: 2) {
-                Text(task.kind.title).font(.system(size: 12))
+                Text(task.kind.title).font(Typography.body)
                 Text("\(task.timeText) · \(task.weekdayText)")
-                    .font(.system(size: 10))
+                    .font(Typography.caption)
                     .foregroundColor(theme.textSecondary)
                 if let summary = Self.conditionText(task) {
                     Text(summary)
-                        .font(.system(size: 10))
+                        .font(Typography.caption)
                         .foregroundColor(theme.textTertiary)
                 }
             }
@@ -212,7 +212,7 @@ struct ScheduleView: View {
                 state.removeTask(task)
             } label: {
                 Image(systemName: "trash")
-                    .font(.system(size: 11))
+                    .font(Glyph.row)
                     .foregroundColor(theme.textTertiary)
             }
             .buttonStyle(.plain)
@@ -292,7 +292,7 @@ struct TaskEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(t("新建任务"))
-                .font(.system(size: 14, weight: .semibold))
+                .font(Typography.headline)
                 .foregroundColor(theme.textPrimary)
 
             Picker(t("操作"), selection: $draft.kind) {
@@ -304,7 +304,7 @@ struct TaskEditor: View {
 
             if draft.kind == .setLimit || draft.kind == .startDischarge {
                 HStack {
-                    Text(t("目标电量")).font(.system(size: 12))
+                    Text(t("目标电量")).font(Typography.body)
                     Spacer()
                     ValueStepper(value: $draft.value, range: 10...100, step: 5)
                         .frame(width: 110)
@@ -312,7 +312,7 @@ struct TaskEditor: View {
             }
 
             HStack {
-                Text(t("时间")).font(.system(size: 12))
+                Text(t("时间")).font(Typography.body)
                 Spacer()
                 Picker("", selection: $draft.hour) {
                     ForEach(0..<24, id: \.self) { Text(String(format: "%02d", $0)).tag($0) }
@@ -334,7 +334,7 @@ struct TaskEditor: View {
                         else { draft.weekdays.insert(day) }
                     } label: {
                         Text(weekdays[index])
-                            .font(.system(size: 11, weight: .medium))
+                            .font(Typography.label)
                             .frame(width: 26, height: 26)
                             .background(Circle().fill(draft.weekdays.contains(day) ? theme.accent : theme.innerControl))
                             .foregroundColor(draft.weekdays.contains(day) ? .white : theme.textPrimary)
@@ -346,11 +346,11 @@ struct TaskEditor: View {
             Divider().background(theme.divider)
 
             Text(t("执行条件（可选）"))
-                .font(.system(size: 11, weight: .medium))
+                .font(Typography.label)
                 .foregroundColor(theme.textSecondary)
 
             HStack(spacing: 8) {
-                Text(t("仅在连接充电器时")).font(.system(size: 12))
+                Text(t("仅在连接充电器时")).font(Typography.body)
                 Spacer()
                 Toggle("", isOn: Binding(get: { draft.onlyOnAdapter },
                                          set: { draft.onlyOnAdapter = $0 }))
@@ -362,7 +362,7 @@ struct TaskEditor: View {
             }
 
             HStack(spacing: 8) {
-                Text(t("仅在电量低于")).font(.system(size: 12))
+                Text(t("仅在电量低于")).font(Typography.body)
                 Spacer()
                 if let value = draft.onlyBelow {
                     ValueStepper(value: Binding(get: { value }, set: { draft.onlyBelow = $0 }),
@@ -379,7 +379,7 @@ struct TaskEditor: View {
             }
 
             HStack(spacing: 8) {
-                Text(t("电池温度低于")).font(.system(size: 12))
+                Text(t("电池温度低于")).font(Typography.body)
                 Spacer()
                 if let value = draft.maxTemperature {
                     ValueStepper(value: Binding(get: { value }, set: { draft.maxTemperature = $0 }),
@@ -397,7 +397,7 @@ struct TaskEditor: View {
 
             if let hint = conflictHint {
                 Text(hint)
-                    .font(.system(size: 10))
+                    .font(Typography.caption)
                     .foregroundColor(theme.chartOrange)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -412,7 +412,7 @@ struct TaskEditor: View {
                     .foregroundColor(theme.accent)
                     .padding(.leading, 14)
             }
-            .font(.system(size: 12, weight: .medium))
+            .font(Typography.headline)
         }
         .padding(20)
         .frame(width: 360)
