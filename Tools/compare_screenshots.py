@@ -131,6 +131,12 @@ def main():
               file=sys.stderr)
         return 1
 
+    # A zero-difference run leaves `worst` untouched, and printing "worst None"
+    # reads like a bug in the check rather than a perfect match.
+    if worst[1] is None:
+        print(f"PASS screenshots: {len(names)} panel(s) identical to the baseline")
+        return 0
+
     print(f"PASS screenshots: {len(names)} panel(s) within their limits "
           f"(worst {worst[1]} at {worst[0] * 100:.2f}%)")
     return 0

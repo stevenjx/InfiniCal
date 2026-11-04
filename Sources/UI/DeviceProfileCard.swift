@@ -19,7 +19,7 @@ struct DeviceProfileCard: View {
     private var theme: Theme { Theme.current }
 
     var body: some View {
-        Card(padding: 12) {
+        Card {
             VStack(alignment: .leading, spacing: 8) {
                 header
                 Text(assessment.profile.summary)

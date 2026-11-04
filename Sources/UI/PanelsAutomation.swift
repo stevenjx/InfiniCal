@@ -22,7 +22,7 @@ struct ScheduleView: View {
                 }
                 .frame(height: 34)
 
-                Card(padding: 0) {
+                Card(kind: .list) {
                     Group {
                         if state.tasks.isEmpty {
                             Text(t("点击 “+” 按钮添加新任务，或从现有模板中选择。"))
@@ -122,7 +122,7 @@ struct ScheduleView: View {
                 .frame(height: 34)
                 .padding(.top, 6)
 
-                Card(padding: 0) {
+                Card(kind: .list) {
                     Group {
                         if state.taskHistory.isEmpty {
                             Text(t("已执行的任务将显示在此处。"))
@@ -157,7 +157,7 @@ struct ScheduleView: View {
                                                 .font(Typography.caption)
                                                 .foregroundColor(theme.textSecondary)
                                         }
-                                        .padding(.horizontal, 14)
+                                        .padding(.horizontal, CardPadding.regular)
                                         .padding(.vertical, 8)
                                         Divider().background(theme.divider)
                                     }
@@ -217,7 +217,7 @@ struct ScheduleView: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, CardPadding.regular)
         .padding(.vertical, 9)
     }
 

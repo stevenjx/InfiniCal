@@ -62,7 +62,7 @@ struct ChargeControlView: View {
                           isOn: $state.sailingMode)
 
                 if state.sailingMode {
-                    Card(padding: 14) {
+                    Card {
                         HStack(spacing: 8) {
                             Spacer()
                             Text(t("差异:"))
@@ -83,7 +83,7 @@ struct ChargeControlView: View {
                           help: t("电池温度超过上限时暂停充电，冷却后自动恢复。"),
                           isOn: $state.heatProtectMode)
 
-                Card(padding: 14) {
+                Card {
                     HStack {
                         Spacer()
                         Text(state.heatProtectMode
@@ -166,7 +166,7 @@ struct ChargeControlView: View {
 
     private func adapterCard(_ adapter: AppState.AdapterDiagnosis) -> some View {
         let status = adapterStatus(adapter)
-        return Card(padding: 14) {
+        return Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 8) {
                     Text(tf("输入 {p}", watts(adapter.inputWatts)))
@@ -247,7 +247,7 @@ struct ChargeControlView: View {
     // MARK: - Smart charge
 
     private var smartChargeCard: some View {
-        Card(padding: 14) {
+        Card {
             VStack(alignment: .leading, spacing: 10) {
                 ToggleRow(symbol: "clock.badge.checkmark",
                           title: t("在指定时间充满"),

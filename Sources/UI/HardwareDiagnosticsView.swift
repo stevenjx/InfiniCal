@@ -204,7 +204,7 @@ struct HardwareDiagnosticsView: View {
                                               onLibraryChanged: { refresh() })
                         }
                         ForEach(report.rows) { row in
-                            Card(padding: 10) {
+                            Card(padding: .compact) {
                                 VStack(alignment: .leading, spacing: 4) {
                                     HStack { Text(t(row.label)); Spacer(); Text(t(row.status)) }
                                         .font(Typography.body)

@@ -73,11 +73,10 @@ struct HistoryView: View {
     }
 
     private var alertCenter: some View {
-        Card(padding: 14) {
+        Card {
             VStack(alignment: .leading, spacing: 8) {
-                Text(t("异常告警")).font(Typography.headline)
-                Text(t("仅在 App 运行并持续观测时判断；提醒是异常证据，不是硬件故障诊断。"))
-                    .font(Typography.caption).foregroundColor(theme.textSecondary)
+                CardHeader(title: t("异常告警"),
+                           subtitle: t("仅在 App 运行并持续观测时判断；提醒是异常证据，不是硬件故障诊断。"))
                 if alerts.events.isEmpty { Text(t("暂无异常记录")).font(Typography.caption) }
                 ForEach(alerts.events) { event in
                     VStack(alignment: .leading, spacing: 4) {
@@ -101,12 +100,12 @@ struct HistoryView: View {
 
     private var healthTrends: some View {
         let window = HealthWindow(days: history.days, records: calibration.records, count: range.value)
-        return Card(padding: 14) {
+        return Card {
             VStack(alignment: .leading, spacing: 10) {
-                Text(t("电池健康趋势")).font(Typography.headline)
-                Text(tf("有效日样本 {p} · 有效校准 {p} · 未评估或低质量 {p}",
-                        "\(window.days.count)", "\(window.records.count)", "\(window.excludedRecords)"))
-                    .font(Typography.caption).foregroundColor(theme.textSecondary)
+                CardHeader(title: t("电池健康趋势"),
+                           subtitle: tf("有效日样本 {p} · 有效校准 {p} · 未评估或低质量 {p}",
+                                        "\(window.days.count)", "\(window.records.count)",
+                                        "\(window.excludedRecords)"))
                 trendLine(t("系统满充容量变化"), window.reportedDelta, "mAh")
                 trendLine(t("校准实测容量变化"), window.capacityDelta, "mAh")
                 trendLine(t("DCIR 变化"), window.resistanceDelta, "mΩ")
@@ -214,7 +213,7 @@ struct HistoryView: View {
     }
 
     private func summaryCard(_ title: String, _ value: String, _ symbol: String, _ tint: Color) -> some View {
-        Card(padding: 12) {
+        Card(padding: .compact) {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 5) {
                     Image(systemName: symbol)
@@ -239,7 +238,7 @@ struct HistoryView: View {
     // MARK: - Chart
 
     private var chartCard: some View {
-        Card(padding: 14) {
+        Card {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 10) {
                     Text(t("每日充放电"))
@@ -284,7 +283,7 @@ struct HistoryView: View {
     // MARK: - List
 
     private var listCard: some View {
-        Card(padding: 0) {
+        Card(kind: .list) {
             VStack(spacing: 0) {
                 HStack(spacing: 0) {
                     Text(t("日期")).frame(width: 96, alignment: .leading)
@@ -296,7 +295,7 @@ struct HistoryView: View {
                 }
                 .font(Typography.caption)
                 .foregroundColor(theme.textTertiary)
-                .padding(.horizontal, 14)
+                .padding(.horizontal, CardPadding.regular)
                 .padding(.vertical, 8)
 
                 Divider().background(theme.divider)
@@ -323,7 +322,7 @@ struct HistoryView: View {
                             .foregroundColor(theme.textSecondary)
                     }
                     .font(Typography.caption.monospacedDigit())
-                    .padding(.horizontal, 14)
+                    .padding(.horizontal, CardPadding.regular)
                     .padding(.vertical, 7)
                     .opacity(stat.isEmpty ? 0.45 : 1)
 

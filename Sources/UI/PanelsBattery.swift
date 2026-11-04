@@ -41,7 +41,7 @@ struct SleepEnergyView: View {
                 }
                 .frame(height: 34)
 
-                Card(padding: 14) {
+                Card {
                     VStack(alignment: .leading, spacing: 12) {
                         Text(t("选择 InfiniCal 在睡眠和充电时的行为方式"))
                             .font(Typography.caption)

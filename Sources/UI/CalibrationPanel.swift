@@ -32,12 +32,10 @@ struct CalibrationPanel: View {
         VStack(alignment: .leading, spacing: 7) {
             header
             if let quality = engine.resultQuality {
-                Card(padding: 12) {
+                Card {
                     VStack(alignment: .leading, spacing: 5) {
-                        Text(tf("校准质量等级：{p}", t(quality.label)))
-                            .font(Typography.headline)
-                        Text(t("质量等级基于过程证据，不代表统计概率或测量精度保证"))
-                            .font(Typography.caption).foregroundColor(theme.textSecondary)
+                        CardHeader(title: tf("校准质量等级：{p}", t(quality.label)),
+                                   subtitle: t("质量等级基于过程证据，不代表统计概率或测量精度保证"))
                         ForEach(quality.reasons, id: \.self) { reason in
                             Text(t(reason)).font(Typography.caption)
                         }
@@ -45,10 +43,9 @@ struct CalibrationPanel: View {
                 }
             }
             if engine.needsRecovery {
-                Card(padding: 12) {
+                Card {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(t("检测到未完成的校准"))
-                            .font(Typography.headline)
+                        CardHeader(title: t("检测到未完成的校准"))
                         if let checkpoint = engine.pendingRecovery {
                             Text((CalibrationPhase(rawValue: checkpoint.phase)?.title ?? checkpoint.phase)
                                  + " · " + checkpoint.lastSampleAt.formatted())
@@ -73,7 +70,7 @@ struct CalibrationPanel: View {
             // Kept visible after the session ends: a restore failure at the last
             // phase is exactly the thing the user must not miss.
             if let issue = engine.chargingIssue {
-                Card(padding: 12) {
+                Card(padding: .compact) {
                     Text(issue)
                         .font(Typography.caption)
                         .foregroundColor(theme.chartOrange)
@@ -186,14 +183,13 @@ struct CalibrationPanel: View {
                 .frame(height: 110)
             }
             controlBar
-            Card(padding: 12) {
-                HStack(spacing: 10) {
-                    Text(t("报告与数据导出"))
-                        .font(Typography.headline)
-                    Spacer()
-                    ForEach(["txt", "csv", "json"], id: \.self) { format in
-                        Button(format.uppercased()) { engine.exportSession(format: format) }
-                            .disabled(!engine.hasExportSamples)
+            Card {
+                CardHeader(title: t("报告与数据导出")) {
+                    HStack(spacing: Spacing.s) {
+                        ForEach(["txt", "csv", "json"], id: \.self) { format in
+                            Button(format.uppercased()) { engine.exportSession(format: format) }
+                                .disabled(!engine.hasExportSamples)
+                        }
                     }
                 }
             }
@@ -280,7 +276,7 @@ struct CalibrationPanel: View {
     @ViewBuilder
     private var dischargeHintCard: some View {
         if engine.needsUnplugForDischarge, engine.isRunning {
-            Card(padding: 12) {
+            Card {
                 HStack(spacing: 9) {
                     Image(systemName: "powerplug.fill")
                         .font(Glyph.row.weight(.semibold))
@@ -302,17 +298,11 @@ struct CalibrationPanel: View {
     @ViewBuilder
     private var chargeGateCard: some View {
         if engine.isChargeHeld, !engine.isRunning {
-            Card(padding: 14) {
+            Card {
                 VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(Glyph.row.weight(.semibold))
-                            .foregroundColor(theme.chartOrange)
-                        Text(tf("系统正在限制充电（当前 {p}%），校准可能充不到满电", "\(engine.percentage)"))
-                            .font(Typography.headline)
-                            .foregroundColor(theme.textPrimary)
-                        Spacer(minLength: 6)
-                    }
+                    CardHeader(title: tf("系统正在限制充电（当前 {p}%），校准可能充不到满电",
+                                         "\(engine.percentage)"),
+                               symbol: "exclamationmark.triangle.fill", tint: theme.chartOrange)
 
                     Text(t("「优化电池充电」会在 80% 附近暂停充电，新版 macOS 的「充电上限」也会把电量锁在设定值；适配器功率不足或温度过高同样会暂停。校准需要连续充到满电，请先按以下步骤关闭。若设置里已经是 100% 仍不充电，拔插一次电源后再点「刷新状态」："))
                         .font(Typography.caption)
@@ -367,7 +357,7 @@ struct CalibrationPanel: View {
     // MARK: - Live status
 
     private var statusCard: some View {
-        Card(padding: 14) {
+        Card {
             HStack(spacing: 14) {
                 HStack(spacing: 12) {
                     CalibrationRing(percentage: engine.percentage,
@@ -481,16 +471,10 @@ struct CalibrationPanel: View {
     }
 
     private var pipelineCard: some View {
-        Card(padding: 10) {
+        Card(padding: .compact) {
             VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                    Image(systemName: "arrow.triangle.branch")
-                        .font(Glyph.inline.weight(.semibold))
-                        .foregroundColor(theme.textSecondary)
-                    Text(t("校准流程"))
-                        .font(Typography.headline)
-                        .foregroundColor(theme.textPrimary)
-                    Spacer()
+                CardHeader(title: t("校准流程"), symbol: "arrow.triangle.branch",
+                           tint: theme.textSecondary) {
                     Text(pipelineProgressText)
                         .font(Typography.caption)
                         .foregroundColor(theme.textSecondary)
@@ -563,9 +547,9 @@ struct CalibrationPanel: View {
     // MARK: - Results
 
     private var enduranceCard: some View {
-        Card(padding: 10) {
+        Card(padding: .compact) {
             VStack(alignment: .leading, spacing: 8) {
-                cardTitle("clock", t("续航评估"), tint: theme.chartOrange) {
+                CardHeader(title: t("续航评估"), symbol: "clock", tint: theme.chartOrange) {
                     if engine.aiRemainingMinutes > 0 {
                         Text(t("AI 预测"))
                             .font(Typography.micro.weight(.semibold))
@@ -596,9 +580,9 @@ struct CalibrationPanel: View {
     }
 
     private var healthCard: some View {
-        Card(padding: 10) {
+        Card(padding: .compact) {
             VStack(alignment: .leading, spacing: 8) {
-                cardTitle("heart", t("健康度与容量"), tint: theme.chartBlue) {
+                CardHeader(title: t("健康度与容量"), symbol: "heart", tint: theme.chartBlue) {
                     if engine.aiConfidence > 0 {
                         Text(tf("置信度 {p}%", "\(Int(engine.aiConfidence))"))
                             .font(Typography.micro)
@@ -678,20 +662,6 @@ struct CalibrationPanel: View {
         }
     }
 
-    private func cardTitle<T: View>(_ symbol: String, _ title: String, tint: Color,
-                                    @ViewBuilder trailing: () -> T) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: symbol)
-                .font(Glyph.inline.weight(.semibold))
-                .foregroundColor(tint)
-            Text(title)
-                .font(Typography.headline)
-                .foregroundColor(theme.textPrimary)
-            Spacer(minLength: 6)
-            trailing()
-        }
-    }
-
     /// Quality badge, plus the CPU/GPU split when powermetrics produced one.
     private var socNote: String {
         guard engine.socPowerQuality == .measured, engine.socCPUWatts > 0 else {
@@ -707,7 +677,7 @@ struct CalibrationPanel: View {
     private func hostCard(title: String, value: String, unit: String,
                           symbol: String, tint: Color, progress: Double,
                           note: String? = nil) -> some View {
-        Card(padding: 10) {
+        Card(padding: .compact) {
             HStack(spacing: 9) {
                 ZStack {
                     Circle().stroke(tint.opacity(0.15), lineWidth: 3)
@@ -754,7 +724,7 @@ struct CalibrationPanel: View {
         let ceiling = readings.map { $0.maxRPM }.max() ?? 0
         let hasFan = !readings.isEmpty
 
-        return Card(padding: 10) {
+        return Card(padding: .compact) {
             HStack(spacing: 9) {
                 ZStack {
                     Circle().stroke(theme.chartPurple.opacity(0.15), lineWidth: 3)
@@ -838,7 +808,7 @@ struct CalibrationPanel: View {
         let low = cells.min() ?? 0
         let high = cells.max() ?? 1
         let span = max(0.001, high - low)
-        return Card(padding: 10) {
+        return Card(padding: .compact) {
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 5) {
                     Circle().fill(theme.chartGreen).frame(width: 5, height: 5)
@@ -880,7 +850,7 @@ struct CalibrationPanel: View {
                            domain: ClosedRange<Double>, steps: [Double], unit: String,
                            points: [CalibrationSample],
                            keyPath: KeyPath<CalibrationSample, Double>) -> some View {
-        Card(padding: 10) {
+        Card(padding: .compact) {
             CalibrationScopeCard(title: title, badge: badge, badgeUnit: badgeUnit, tint: tint,
                                  domain: domain, steps: steps, unit: unit,
                                  points: points, keyPath: keyPath)
@@ -1500,7 +1470,7 @@ private struct CalibrationHistorySheet: View {
     private var latestRecord: CalibrationRecord? { chronological.last }
 
     private var trendBlock: some View {
-        Card(padding: 12) {
+        Card {
             HStack(alignment: .top, spacing: 16) {
                 MiniChart(title: t("健康度"),
                           valueText: String(format: "%.1f%%", latestRecord?.batteryHealthPercentage ?? 0),

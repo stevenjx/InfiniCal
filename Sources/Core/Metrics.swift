@@ -34,3 +34,18 @@ enum CardPadding {
     static let compact: CGFloat = 10
     static let regular: CGFloat = 14
 }
+
+/// What a `Card` accepts for its inset. An enum rather than a `CGFloat` so the
+/// two-value rule is enforced by the compiler: `Card(padding: 12)` no longer
+/// compiles, where before it was a number nobody could see was off-grid.
+enum CardInset {
+    case regular
+    case compact
+
+    var value: CGFloat {
+        switch self {
+        case .regular: return CardPadding.regular
+        case .compact: return CardPadding.compact
+        }
+    }
+}

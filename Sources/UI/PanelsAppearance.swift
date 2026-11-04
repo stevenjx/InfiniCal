@@ -120,12 +120,8 @@ struct OtherView: View {
                 if state.capabilities.strategy == .unavailable || !state.helperInstalled {
                     Card {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text(t("充电控制状态"))
-                                .font(Typography.headline)
-                                .foregroundColor(theme.textPrimary)
-                            Text(state.capabilities.summary)
-                                .font(Typography.caption)
-                                .foregroundColor(theme.textSecondary)
+                            CardHeader(title: t("充电控制状态"),
+                                       subtitle: state.capabilities.summary)
                             if !state.helperInstalled {
                                 Button { state.installHelper() } label: {
                                     Text(t("安装特权助手"))

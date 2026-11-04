@@ -76,7 +76,7 @@ struct DashboardView: View {
     private var batterySpecs: some View {
         Card {
             VStack(alignment: .leading, spacing: 5) {
-                cardHeader("bolt.fill", t("电池规格"))
+                CardHeader(title: t("电池规格"), symbol: "bolt.fill")
                 spec(t("电流"), String(format: "%.2f A", abs(state.snapshot.amperage)))
                 spec(t("电压"), String(format: "%.2f V", state.snapshot.voltage))
                 spec(t("功率"), String(format: "%.1f W", abs(state.snapshot.power)))
@@ -94,7 +94,7 @@ struct DashboardView: View {
     private var batteryHealth: some View {
         Card {
             VStack(alignment: .leading, spacing: 5) {
-                cardHeader("heart.fill", t("电池健康"))
+                CardHeader(title: t("电池健康"), symbol: "heart.fill")
                 spec(t("设计容量"), "\(state.snapshot.designCapacity) mAh")
                 spec(t("最大容量"), "\(state.snapshot.maxCapacity) mAh", trailing: "\(state.snapshot.healthPercent) %")
                 spec(t("macOS 状态"), state.snapshot.conditionText)
@@ -107,7 +107,7 @@ struct DashboardView: View {
     private var adapterSpecs: some View {
         Card {
             VStack(alignment: .leading, spacing: 5) {
-                cardHeader("powerplug.fill", t("电源适配器规格"))
+                CardHeader(title: t("电源适配器规格"), symbol: "powerplug.fill")
                 if state.snapshot.adapter.isEmpty {
                     Text(t("未连接电源适配器"))
                         .font(Typography.body)
@@ -135,18 +135,6 @@ struct DashboardView: View {
         return String(format: "\(format) \(unit)", value)
     }
 
-    private func cardHeader(_ symbol: String, _ title: String) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: symbol)
-                .font(Glyph.row)
-                .foregroundColor(theme.textPrimary)
-            Text(title)
-                .font(Typography.headline)
-                .foregroundColor(theme.textPrimary)
-        }
-        .padding(.bottom, 2)
-    }
-
     private func spec(_ title: String, _ value: String, trailing: String? = nil) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(title)
@@ -171,7 +159,7 @@ struct DashboardView: View {
     private func chartCard(title: String, value: String, caption: String? = nil,
                            symbol: String, color: Color,
                            points: [HistoryPoint], limit: Double?, range: ClosedRange<Double>?) -> some View {
-        Card(padding: 12) {
+        Card {
             MiniChart(title: title, valueText: value, caption: caption, symbol: symbol, color: color,
                       points: points, limitFraction: limit, range: range)
         }
@@ -212,11 +200,9 @@ struct DashboardView: View {
     // MARK: - Bottom row cards
 
     private var highUsageCard: some View {
-        Card(padding: 12) {
+        Card {
             VStack(alignment: .leading, spacing: 8) {
-                Text(t("高功耗的应用程序"))
-                    .font(Typography.caption)
-                    .foregroundColor(theme.textSecondary)
+                CardHeader(title: t("高功耗的应用程序"))
                 if state.highUsageApps.isEmpty {
                     HStack(spacing: 8) {
                         RoundedRectangle(cornerRadius: 7)
@@ -258,13 +244,9 @@ struct DashboardView: View {
     }
 
     private var calibrationCard: some View {
-        Card(padding: 12) {
+        Card {
             VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text(t("上一次校准"))
-                        .font(Typography.caption)
-                        .foregroundColor(theme.textSecondary)
-                    Spacer()
+                CardHeader(title: t("上一次校准")) {
                     Text(state.lastCalibrationDate.map { Self.dateFormatter.string(from: $0) } ?? "-")
                         .font(Typography.caption)
                         .foregroundColor(theme.textPrimary)
@@ -305,7 +287,7 @@ private struct PowerFlowCard: View {
     @ObservedObject private var flowTicker = AppState.shared.flowTicker
 
     var body: some View {
-        Card(padding: 12) {
+        Card {
             VStack(spacing: 10) {
                 HStack(spacing: 8) {
                     chip("powerplug.fill", t("电源适配器"), PowerFormat.watts(state.snapshot.isPluggedIn ? flowTicker.shownSource : 0), tint: theme.flowAdapter)

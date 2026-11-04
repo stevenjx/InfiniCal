@@ -18,6 +18,14 @@ struct Theme {
     var cardElevated: Color { isDark ? Color(red: 0.20, green: 0.20, blue: 0.208) : Color.white }
     var innerControl: Color { isDark ? Color(red: 0.235, green: 0.235, blue: 0.245) : Color(red: 0.906, green: 0.906, blue: 0.918) }
     var cardStroke: Color { isDark ? Color.white.opacity(0.075) : Color.black.opacity(0.095) }
+    /// Cards are separated from the window by a hairline in dark mode and by a
+    /// shadow in light mode — never both. A hairline on white is invisible; a
+    /// shadow on a dark surface reads as smudge rather than depth. `Card` reads
+    /// these four values and nothing else decides elevation.
+    var cardStrokeWidth: CGFloat { isDark ? 1 : 0 }
+    var cardShadow: Color { isDark ? Color.black.opacity(0) : Color.black.opacity(0.07) }
+    var cardShadowRadius: CGFloat { isDark ? 0 : 6 }
+    var cardShadowY: CGFloat { isDark ? 0 : 2 }
     var divider: Color { isDark ? Color.white.opacity(0.07) : Color.black.opacity(0.105) }
     /// Outlines a control, not a container: heavier than `cardStroke` so a
     /// button reads as something you can press rather than as a faint edge.
@@ -86,23 +94,103 @@ final class UIValue<T>: ObservableObject {
 
 // MARK: - Building blocks
 
+/// How a card relates to what is around it.
+///
+/// Two kinds, not the three the plan listed. `inset` (a card inside a card) and
+/// `interactive` (a card you can click) were dropped after counting: nothing in
+/// `Sources/UI` nests one `Card` in another, and there is not a single
+/// `onTapGesture` or `onHover` on a card. Adding either would have produced a
+/// style with no caller — and a hover state on something that does nothing when
+/// clicked is a lie. `list` does have callers: three cards hold tables and
+/// scroll views whose rows draw their own horizontal inset.
+enum CardKind {
+    /// A container with content padding and page-level elevation.
+    case plain
+    /// Full-bleed: no padding, content clipped to the card shape. Rows inside
+    /// bring their own inset, so the card's edges are the table's edges.
+    case list
+}
+
 struct Card<Content: View>: View {
     private var theme: Theme { Theme.current }
-    var padding: CGFloat = CardPadding.regular
+    var kind: CardKind = .plain
+    var padding: CardInset = .regular
     @ViewBuilder var content: Content
+
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+    }
+
+    private var inset: CGFloat { kind == .list ? CardPadding.none : padding.value }
 
     var body: some View {
         content
-            .padding(padding)
+            .padding(inset)
             .frame(maxWidth: .infinity, alignment: .leading)
+            // Clipped before the background is drawn, so a full-bleed row's
+            // fill stops at the corner radius instead of squaring it off.
+            .clipShape(shape)
             .background(
-                RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+                shape
                     .fill(theme.card)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
-                            .strokeBorder(theme.cardStroke, lineWidth: 1)
-                    )
+                    .overlay(shape.strokeBorder(theme.cardStroke, lineWidth: theme.cardStrokeWidth))
+                    .shadow(color: theme.cardShadow, radius: theme.cardShadowRadius,
+                            x: 0, y: theme.cardShadowY)
             )
+    }
+}
+
+/// The one card title in the app.
+///
+/// Before this there were two private helpers — `cardHeader` on the dashboard
+/// and `cardTitle` on the calibration page — plus a dozen hand-written
+/// `Text(…).font(Typography.headline)` lines. They disagreed about icon size
+/// (10 vs 12 pt), icon tint (secondary vs series colour), spacing (5, 6, 10)
+/// and whether the title sat in an `HStack` with a `Spacer`. Two cards on the
+/// same page could look like two different products. Everything goes through
+/// here now, so they cannot.
+struct CardHeader<Trailing: View>: View {
+    private var theme: Theme { Theme.current }
+    let title: String
+    var symbol: String? = nil
+    /// Icon colour only. A tinted *title* would compete with the values below
+    /// it, which is why the title is always `textPrimary`.
+    var tint: Color? = nil
+    var help: String? = nil
+    /// Explanation under the title: `caption` in `textSecondary`.
+    var subtitle: String? = nil
+    @ViewBuilder var trailing: Trailing
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            HStack(spacing: Spacing.xs) {
+                if let symbol {
+                    Image(systemName: symbol)
+                        .font(Glyph.row)
+                        .foregroundColor(tint ?? theme.textPrimary)
+                }
+                Text(title)
+                    .font(Typography.headline)
+                    .foregroundColor(theme.textPrimary)
+                if let help { HelpDot(text: help) }
+                Spacer(minLength: Spacing.s)
+                trailing
+            }
+            if let subtitle {
+                Text(subtitle)
+                    .font(Typography.caption)
+                    .foregroundColor(theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+extension CardHeader where Trailing == EmptyView {
+    init(title: String, symbol: String? = nil, tint: Color? = nil,
+         help: String? = nil, subtitle: String? = nil) {
+        self.init(title: title, symbol: symbol, tint: tint, help: help,
+                  subtitle: subtitle) { EmptyView() }
     }
 }
 
@@ -259,7 +347,7 @@ struct SmallActionButton: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 7)
             .background(RoundedRectangle(cornerRadius: Radius.control, style: .continuous).fill(theme.innerControl))
-            .foregroundColor(destructive ? Color(red: 1, green: 0.27, blue: 0.23) : theme.textPrimary)
+            .foregroundColor(destructive ? theme.danger : theme.textPrimary)
         }
         .buttonStyle(.plain)
     }

@@ -1,18 +1,7 @@
 {
  "rules": {
   "bare-font": {},
-  "card-padding": {
-   "AdviceCard.swift": 1,
-   "CalibrationPanel.swift": 15,
-   "ChargeControlView.swift": 4,
-   "DashboardView.swift": 4,
-   "DeviceProfileCard.swift": 1,
-   "FanControlView.swift": 5,
-   "HardwareDiagnosticsView.swift": 1,
-   "HistoryPanel.swift": 5,
-   "PanelsAutomation.swift": 2,
-   "PanelsBattery.swift": 1
-  },
+  "card-padding": {},
   "literal-color": {},
   "literal-radius": {
    "CalibrationPanel.swift": 7,

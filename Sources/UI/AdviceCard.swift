@@ -12,12 +12,10 @@ struct AdviceCard: View {
     private var theme: Theme { Theme.current }
 
     var body: some View {
-        Card(padding: 14) {
+        Card {
             VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 6) {
-                    Text(t("本地建议")).font(Typography.headline)
-                    HelpDot(text: t("只根据本机历史数据生成，每条建议都附带证据。它是使用建议，不是硬件故障诊断。"))
-                    Spacer()
+                CardHeader(title: t("本地建议"),
+                           help: t("只根据本机历史数据生成，每条建议都附带证据。它是使用建议，不是硬件故障诊断。")) {
                     Text(tf("已记录 {p} 天 · 有效校准 {p} 次",
                             "\(report.observedDays)", "\(report.eligibleSessions)"))
                         .font(Typography.caption)

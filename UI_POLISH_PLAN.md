@@ -1,6 +1,6 @@
 # InfiniCal 界面美化开发规划
 
-> 版本基线：InfiniCal 1.0.23（build 28）
+> 版本基线：InfiniCal 1.0.24（build 29）
 >
 > 审查方式：逐个读 `Sources/UI/` 下 18 个源文件（6290 行），并在 1080×720 深色模式下
 > 实机截图 8 个面板（仪表板、充电控制、电池校准、风扇控制、历史、定时设置、其他、
@@ -117,10 +117,14 @@
 新增两个组件，替换现有的散装写法：
 
 ```
-Card(kind: .plain | .inset | .interactive, padding: .regular | .compact)
-  ├─ CardHeader(symbol, title, subtitle?, trailing?)   // 唯一标题写法
+Card(kind: .plain | .list, padding: .regular | .compact)
+  ├─ CardHeader(title, symbol?, tint?, help?, subtitle?, trailing?)   // 唯一标题写法
   └─ content
 ```
+
+> `inset` 与 `interactive` 落地时删掉了：全站没有一张卡套在另一张卡里，也没有一张卡
+> 本身是点击目标（详见 U0-03 实现说明）。`list` 是原表没有、但实际有 3 个调用者的形态
+> —— 表格与滚动列表要满幅、要裁切圆角。
 
 ```
 PageScaffold(title, symbol, help?, toolbar: { ... }) { scrollContent }
@@ -211,7 +215,7 @@ PageScaffold(title, symbol, help?, toolbar: { ... }) { scrollContent }
   否则会同时改动图表本身的颜色。
 - `focusRing` 只有定义没有使用者，等 U2-03 接入键盘焦点。
 
-#### U0-03 卡片与标题收口 — ❌ 未开始
+#### U0-03 卡片与标题收口 — ✅ 已完成（1.0.24）
 
 - **目标**：69 张卡长得像同一个产品。
 - **交付**：
@@ -220,6 +224,46 @@ PageScaffold(title, symbol, help?, toolbar: { ... }) { scrollContent }
   - 统一卡片阴影/描边：深色用 1px 描边 + 无阴影，浅色用极轻阴影 + 无描边。
 - **验收**：`Card(padding:)` 只剩 `.regular` / `.compact` 两种；同一页面所有卡片标题字号一致；卡片左右边线在同一列对齐（截图逐页确认）。
 - **依赖**：U0-01、U0-02。
+
+**实现说明**
+
+- 数字先修正：**卡片是 50 张，不是 69 张**。原统计用 `grep -c "Card("` 把 `AdviceCard(`、
+  `DeviceProfileCard(`、`CalibrationCard(` 这些**类型构造**也算进去了。真实分布是
+  39 张显式 `Card(padding:)`（14×14、12×13、10×8、16×1、0×3）+ 11 张走默认值。
+- `Card(padding:)` 的参数类型从 `CGFloat` 换成 `CardInset` 枚举（`.regular` / `.compact`）。
+  这不只是改个写法：**`Card(padding: 12)` 现在是编译错误**，两个取值的规则由编译器执行，
+  不再依赖 code review。`ui_lint` 的 `card-padding` 从 39 直接归零，基线已同步。
+- 12 与 16 的归属是逐个看的，不是一刀切：带标题和内容行的卡 → `regular`（14）；
+  单行提示与密集网格里的指标块 → `compact`（10）。四个 12 变 `compact`
+  （校准页两条提示、风扇页特权提示、历史页四宫格），其余九个变 `regular`。
+- `kind` 只做了 **plain / list** 两种，计划里的 `inset` 与 `interactive` 被删掉，理由是可数的：
+  `Sources/UI` 里**没有一张卡套在另一张卡里**（脚本按花括号配对查过），也**没有一个
+  `onTapGesture` / `onHover` 落在卡上**。给没有调用者的形态做样式，等于给不会响的东西
+  加悬停高亮。`list` 有真实调用者：历史表格、定时任务列表、任务历史，共 3 张。
+- `list` 顺手修掉一个旧问题：那 3 张卡此前是 `padding: 0` 且**没有裁切**，行内的
+  `Divider` 和滚动内容会顶到直角上，把圆角切掉。现在统一 `clipShape`，卡片边缘就是表格边缘。
+- 阴影/描边由 `Theme` 的四个新值决定（`cardStrokeWidth` / `cardShadow` /
+  `cardShadowRadius` / `cardShadowY`）：深色 1px 描边 + 零阴影，浅色零描边 +
+  `black 7% / r6 / y2` 阴影。此前是「描边两套深浅都给，阴影一个都没有」。
+- `CardHeader` 吸收了 12 处自写标题，并删掉两个私有助手（`DashboardView.cardHeader`、
+  `CalibrationPanel.cardTitle`）。图标尺寸统一到 `Glyph.row`（12pt）—— 校准页原来是
+  10pt semibold、仪表板是 12pt regular，同一个位置两种画法。
+- 顺手补掉 U0-02 的漏网：`Theme.swift` 里 `SmallActionButton` 还留着一个字面
+  `Color(red: 1, green: 0.27, blue: 0.23)`（危险色），因为 `ui_lint` 只对 `Sources/UI`
+  查颜色、对 `Theme.swift` 只查字号，所以它没被算进去。现已换成 `theme.danger`。
+- 16 张基线截图全部重录；差异集中在仪表板（12→14 内边距）与历史页（表格卡加描边+裁切），
+  逐张确认无裁切、无重叠、卡片左边线同列。
+
+**未覆盖**
+
+- 三个「标题 + 行内图例/徽标」的头没有走 `CardHeader`：`HistoryPanel` 的「每日充放电」
+  （标题与图例同排）、`DeviceProfileCard`（标题 + 版本徽标 + 右侧按钮）、
+  `MiniChart` 的标题（它压在 `figure` 数值上方，是**图表标签**而不是卡片标题）。
+  前两个要支持「标题右侧的行内配件」才能收编，为一个参数扩 `CardHeader` 的泛型不划算；
+  `MiniChart` 属于 U1-02 的图表改造。三者字号都已是 `headline` / `caption`，
+  不存在「同页两种卡片标题」。
+- `literal-radius` 仍有 30 处（`RoundedRectangle(cornerRadius: 7/8/9/10/11)`）。
+  U0-03 只收卡片与标题，这些散落的容器圆角留给对应的逐页改造。
 
 #### U0-04 页面骨架与空态 — ❌ 未开始
 
@@ -345,7 +389,7 @@ PageScaffold(title, symbol, help?, toolbar: { ... }) { scrollContent }
 | --- | --- | --- |
 | U0-01 | 设计令牌层 | ✅ 完成 |
 | U0-02 | 语义色与对比度 | ✅ 完成 |
-| U0-03 | 卡片与标题收口 | ❌ 未开始 |
+| U0-03 | 卡片与标题收口 | ✅ 完成 |
 | U0-04 | 页面骨架与空态 | ❌ 未开始 |
 | U1-01 | 侧边栏 | ❌ 未开始 |
 | U1-02 | 仪表板 | ❌ 未开始 |
@@ -362,7 +406,7 @@ PageScaffold(title, symbol, help?, toolbar: { ... }) { scrollContent }
 | U2-04 | 浅色模式 | ❌ 未开始 |
 | U2-05 | 视觉回归门禁 | ✅ 完成 |
 
-**统计：3 项完成 / 0 项部分完成 / 15 项未开始。**
+**统计：4 项完成 / 0 项部分完成 / 14 项未开始。**
 
 ---
 

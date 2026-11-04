@@ -78,7 +78,7 @@ struct FanControlPage: View {
     }
 
     private var noFanCard: some View {
-        Card(padding: 16) {
+        Card {
             HStack(spacing: 10) {
                 Image(systemName: "wind")
                     .font(Glyph.block)
@@ -97,7 +97,7 @@ struct FanControlPage: View {
     }
 
     private var helperNotice: some View {
-        Card(padding: 12) {
+        Card(padding: .compact) {
             HStack(spacing: 8) {
                 Image(systemName: "lock.shield")
                     .font(Glyph.row)
@@ -122,16 +122,9 @@ struct FanControlPage: View {
     // MARK: - Temperature
 
     private var temperatureCard: some View {
-        Card(padding: 14) {
+        Card {
             VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 6) {
-                    Image(systemName: "thermometer.medium")
-                        .font(Glyph.inline.weight(.semibold))
-                        .foregroundColor(theme.chartBlue)
-                    Text(t("温度"))
-                        .font(Typography.headline)
-                        .foregroundColor(theme.textPrimary)
-                    Spacer()
+                CardHeader(title: t("温度"), symbol: "thermometer.medium", tint: theme.chartBlue) {
                     Text(t("1 Hz 实时"))
                         .font(Typography.micro)
                         .foregroundColor(theme.textTertiary)
@@ -222,24 +215,18 @@ struct FanControlPage: View {
     // MARK: - Curve
 
     private var curveCard: some View {
-        Card(padding: 14) {
+        Card {
             VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 6) {
-                    Image(systemName: "chart.line.uptrend.xyaxis")
-                        .font(Glyph.inline.weight(.semibold))
-                        .foregroundColor(theme.chartPurple)
-                    Text(t("温度曲线"))
-                        .font(Typography.headline)
-                        .foregroundColor(theme.textPrimary)
-                    HelpDot(text: t("按选定传感器温度分三段调整转速：低于起始温度保持最低转速，中点给一个中间转速，达到满载温度时全速。每秒更新一次，温度变化小于 1°C 时不重写，转速每秒最多变化 150 RPM。"))
-                    Spacer()
+                CardHeader(title: t("温度曲线"), symbol: "chart.line.uptrend.xyaxis",
+                           tint: theme.chartPurple,
+                           help: t("按选定传感器温度分三段调整转速：低于起始温度保持最低转速，中点给一个中间转速，达到满载温度时全速。每秒更新一次，温度变化小于 1°C 时不重写，转速每秒最多变化 150 RPM。")) {
                     Toggle("", isOn: Binding(get: { controller.curveEnabled }, set: { controller.setCurveEnabled($0) }))
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .tint(theme.accent)
-                    .scaleEffect(0.78)
-                    .frame(width: 40, height: 20)
-                    .disabled(!controller.hasFans)
+                        .labelsHidden()
+                        .toggleStyle(.switch)
+                        .tint(theme.accent)
+                        .scaleEffect(0.78)
+                        .frame(width: 40, height: 20)
+                        .disabled(!controller.hasFans)
                 }
 
                 HStack(spacing: 10) {
@@ -377,7 +364,7 @@ private struct FanCard: View {
     private var tint: Color { fan.isManual ? theme.chartOrange : theme.chartPurple }
 
     var body: some View {
-        Card(padding: 14) {
+        Card {
             VStack(alignment: .leading, spacing: 9) {
                 HStack(alignment: .center, spacing: 10) {
                     Image(systemName: "fanblades.fill")
