@@ -48,13 +48,25 @@ echo "==> compiling window tool"
 xcrun swiftc -O "$ROOT/Tools/window_tool.swift" -o "$TOOL_BIN"
 
 ORIGINAL_MODE="$(defaults read "$BUNDLE_ID" colorMode 2>/dev/null || echo 2)"
+# The dashboard charts only fill while the app is frontmost, which a capture
+# run cannot guarantee (it is not an interactive session). Turning the
+# background-update switch on for the duration gives every screenshot a real
+# curve instead of a one-point buffer; the user's value is restored on exit.
+ORIGINAL_BG="$(defaults read "$BUNDLE_ID" dashboardBackgroundUpdates 2>/dev/null || echo 0)"
+case "$ORIGINAL_BG" in
+  1|true|yes) ORIGINAL_BG=true ;;
+  *) ORIGINAL_BG=false ;;
+esac
 
 cleanup() {
   pkill -f "InfiniCal.app/Contents/MacOS" 2>/dev/null || true
   defaults write "$BUNDLE_ID" colorMode -int "$ORIGINAL_MODE"
+  defaults write "$BUNDLE_ID" dashboardBackgroundUpdates -bool "$ORIGINAL_BG"
   rm -f "$TOOL_BIN"
 }
 trap cleanup EXIT
+
+defaults write "$BUNDLE_ID" dashboardBackgroundUpdates -bool true
 
 for appearance in "${APPEARANCES[@]}"; do
   case "$appearance" in
@@ -72,7 +84,9 @@ for appearance in "${APPEARANCES[@]}"; do
     # Double fork: the subshell exits at once, so bash does not print a
     # "Terminated" line for every panel when the next pkill reaps the app.
     ( "$BINARY" --panel "$panel" >/dev/null 2>&1 & )
-    sleep 4
+    # The dashboard samples its chart history every 2 s; a 4 s wait leaves a
+    # single point, which draws as an empty box. Everything else is static.
+    if [ "$panel" = "dashboard" ]; then sleep 24; else sleep 4; fi
 
     pid="$(pgrep -f "InfiniCal.app/Contents/MacOS" | head -1 || true)"
     if [ -z "$pid" ]; then

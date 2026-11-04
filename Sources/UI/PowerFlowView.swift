@@ -11,7 +11,9 @@
 //  * numbers always carry exactly one decimal (PowerFormat.watts),
 //  * the text of a number is published at most every 1.2 s (FlowTicker.shown*),
 //    so digits stop flickering while the geometry still glides at 30 fps,
-//  * every node is icon + caption, with the watt value printed on its ribbon.
+//  * three columns only — figure (1), ribbons (2), legend (1): the total on the
+//    left, one legend row per branch on the right, and no label floating over
+//    the curves.
 //
 
 import SwiftUI
@@ -293,32 +295,21 @@ struct PowerFlowView: View {
         var startBottom: CGFloat
         var endTop: CGFloat
         var endBottom: CGFloat
-        /// Tile geometry — fixed size, so a 6 W branch and a 60 W branch get the
-        /// same square icon instead of a stretched bar with a floating glyph.
-        var tileTop: CGFloat
-        var tileHeight: CGFloat
-        var labelPoint: CGPoint
-        var labelText: String
+        /// Legend row geometry — a fixed height, so a 6 W branch and a 60 W
+        /// branch line up on the same grid instead of stretching with their
+        /// value.
+        var rowTop: CGFloat
+        var rowHeight: CGFloat
     }
 
     private struct Layout {
         var placed: [Placed]
-        var cardX: CGFloat
-        var cardW: CGFloat
-        var laptopX: CGFloat
-        var laptopW: CGFloat
+        var sourceW: CGFloat
+        var sourceH: CGFloat
+        var sourceY: CGFloat
         var ribbonStart: CGFloat
         var ribbonEnd: CGFloat
-        var sinkW: CGFloat
-        var nodeH: CGFloat
-        var nodeY: CGFloat
-        var canvasX: CGFloat
-        var canvasW: CGFloat
-        var laptopH: CGFloat
-        var laptopY: CGFloat
-        var cardH: CGFloat
-        var cardY: CGFloat
-        var tileH: CGFloat
+        var rowW: CGFloat
     }
 
     // MARK: geometry
@@ -326,28 +317,20 @@ struct PowerFlowView: View {
     private func compute(_ size: CGSize) -> Layout {
         let w = size.width
         let h = size.height
-        let pad: CGFloat = compact ? 8 : 12
-        // Vertical padding is separate: the card already provides 12 pt around us,
-        // so matching that here stacked into 24 pt of dead space top and bottom.
-        let padY: CGFloat = 2
-        let gap: CGFloat = compact ? 6 : 10
-        let sinkW: CGFloat = compact ? 56 : 70
-        let nodeH = max(60, h - padY * 2)
-        let nodeY = (h - nodeH) / 2
-
-        let inner = w - pad * 2 - sinkW - gap * 3
-        let cardW = min(compact ? 112 : 142, max(compact ? 96 : 122, inner * (compact ? 0.26 : 0.20)))
-        // The laptop box is deliberately the same width as the source card: two
-        // matched panels (source → junction) read as one axis, and the ribbons
-        // then fan out from a panel edge instead of a floating icon.
-        let laptopW = cardW
-
-        let cardX = pad
-        let laptopX = cardX + cardW + gap
-        let canvasX = laptopX + laptopW
-        let ribbonStart = canvasX
-        let ribbonEnd = w - pad - sinkW
-        let canvasW = max(40, ribbonEnd - canvasX)
+        // The card already supplies a 14 pt inset, so padding again here showed
+        // up as a dead frame inside the card. The diagram now starts at the
+        // card's content edge and uses the whole width.
+        let gap: CGFloat = compact ? 8 : 12
+        // 1 : 2 : 1 — figure, ribbons, legend. Both side columns are capped: a
+        // 28 pt number needs ~130 pt, and a legend row wider than ~230 pt turns
+        // into a two-column table with a hole in the middle.
+        let unit = max(110, (w - gap * 2) / 4)
+        let sourceW = min(unit, compact ? 132 : 176)
+        let rowW = min(unit, compact ? 168 : 232)
+        // The ribbons span the two gaps as well, so they leave the source panel
+        // and arrive at the legend rows without a blank strip in between.
+        let ribbonStart = sourceW
+        let ribbonEnd = max(ribbonStart + 60, w - rowW)
 
         // Only components with a real flow get a branch (idle ones hide, like AlDente).
         // A branch only exists if the *model* gives it power. Testing the smoothed
@@ -360,103 +343,50 @@ struct PowerFlowView: View {
         let ceiling = model.sourcePower > 0.05 ? model.sourcePower : .greatestFiniteMagnitude
         let values = sinks.map { min(ceiling, max(0, ticker.smoothedSinks[$0.id] ?? $0.watts ?? 0)) }
         let total = max(0.001, values.reduce(0, +))
-        // Compact spacing: with 3 branches the old 12 pt gap left 40 pt of empty
-        // air between ribbons, so the fan read as three separate lanes instead of
-        // one caused-by-the-same-source bundle.
+        // Compact spacing: with 3 branches a 12 pt gap read as three separate
+        // lanes instead of one bundle caused by the same source.
         let slotGap: CGFloat = compact ? 7 : 8
         let gaps = slotGap * CGFloat(max(0, sinks.count - 1))
 
-        // The band always fills the available height, so the card looks identical
-        // whether one branch or five are present. (Deriving the band from the tile
-        // count made the whole card collapse to a single row on first launch,
-        // before the SoC / display readings had arrived.)
-        let stackHeight = nodeH
-        let bandTop = nodeY
+        // Rows never stretch with their watt value, and are capped so a lone
+        // branch does not become a 190 pt bar.
+        let rowH: CGFloat = sinks.isEmpty ? 0
+            : min(compact ? 40 : 44, (h - gaps) / CGFloat(sinks.count))
+        // Centred, so 1 or 3 branches occupy the same frame.
+        let rowsH = rowH * CGFloat(sinks.count) + gaps
+        var rowTop = max(0, (h - rowsH) / 2)
 
-        // Tiles never stretch with their watt value, and are capped so a lone
-        // branch does not become a giant square.
-        let tileH: CGFloat = sinks.isEmpty ? 0
-            : min(compact ? 46 : 50, (stackHeight - gaps) / CGFloat(sinks.count))
-        // Centred inside the fixed band, so 1 or 3 branches occupy the same frame.
-        let tilesHeight = tileH * CGFloat(sinks.count) + gaps
-        var tileTop = bandTop + max(0, (stackHeight - tilesHeight) / 2)
-
-        let cardH = stackHeight
-        let cardY = bandTop
-        // Laptop box: same height as the source card, so both panels align exactly.
-        let laptopH = stackHeight
-        let laptopY = bandTop
-
-        // Source neck: narrow on the laptop side so the ribbons read as a fan
-        // opening towards the tiles, not three parallel slabs.
-        let bandHeight = stackHeight * (compact ? 0.19 : 0.17)
-        var startCursor = bandTop + (stackHeight - bandHeight) / 2
-
-        let labelX = ribbonEnd - max(60, canvasW * 0.32)
-        let labelT = parameter(forX: labelX, x0: ribbonStart, x1: ribbonEnd)
+        // Source neck: narrow on the ribbon side so the branches read as a fan
+        // opening towards the legend, not parallel slabs.
+        let bandH = h * (compact ? 0.19 : 0.17)
+        var cursor = (h - bandH) / 2
 
         var placed: [Placed] = []
         for (index, sink) in sinks.enumerated() {
             let share = values[index] / total
-            let startH = max(1.6, bandHeight * CGFloat(share))
-            let startTop = startCursor
-            let startBottom = min(bandTop + stackHeight, startTop + startH)
-            startCursor = startBottom + (compact ? 1.5 : 2)
+            let startH = max(1.6, bandH * CGFloat(share))
+            let startTop = cursor
+            let startBottom = min(h, startTop + startH)
+            cursor = startBottom + (compact ? 1.5 : 2)
 
-            let center = tileTop + tileH / 2
-            // Thin branches keep a visible body, thick ones stay inside their tile.
-            let thickness = max(4, min(tileH - 8, tileH * 1.18 * CGFloat(share)))
-            let endTop = center - thickness / 2
-            let endBottom = center + thickness / 2
-
-            let point = curvePoint(t: labelT, x0: ribbonStart, x1: ribbonEnd,
-                                   y0: (startTop + startBottom) / 2, y1: center)
-            // Fall back to the live value when the throttled snapshot still holds 0
-            // for a branch that just appeared; otherwise it prints "—" for a second.
-            let shown = ticker.shownSinks[sink.id] ?? 0
-            let text = PowerFormat.watts(shown > 0.05 ? shown : values[index])
+            let center = rowTop + rowH / 2
+            // Thin branches keep a visible body, thick ones stay inside their row.
+            let thickness = max(4, min(rowH - 8, rowH * 1.18 * CGFloat(share)))
 
             placed.append(Placed(sink: sink,
                                  startTop: startTop, startBottom: startBottom,
-                                 endTop: endTop, endBottom: endBottom,
-                                 tileTop: tileTop, tileHeight: tileH,
-                                 labelPoint: point, labelText: text))
-            tileTop += tileH + slotGap
+                                 endTop: center - thickness / 2,
+                                 endBottom: center + thickness / 2,
+                                 rowTop: rowTop, rowHeight: rowH))
+            rowTop += rowH + slotGap
         }
 
-        // Keep the printed values from colliding on thin branches: nudge them
-        // apart vertically, then clamp inside the canvas.
-        let lineGap: CGFloat = compact ? 13 : 15
-        var adjusted = placed
-        var lastY = -CGFloat.greatestFiniteMagnitude
-        for index in adjusted.indices.sorted(by: { adjusted[$0].labelPoint.y < adjusted[$1].labelPoint.y }) {
-            var y = adjusted[index].labelPoint.y
-            if y - lastY < lineGap { y = lastY + lineGap }
-            y = min(max(y, bandTop + 8), bandTop + stackHeight - 8)
-            adjusted[index].labelPoint = CGPoint(x: adjusted[index].labelPoint.x, y: y)
-            lastY = y
-        }
-
-        return Layout(placed: adjusted, cardX: cardX, cardW: cardW,
-                      laptopX: laptopX, laptopW: laptopW,
-                      ribbonStart: ribbonStart, ribbonEnd: ribbonEnd,
-                      sinkW: sinkW, nodeH: nodeH, nodeY: nodeY,
-                      canvasX: canvasX, canvasW: canvasW,
-                      laptopH: laptopH, laptopY: laptopY,
-                      cardH: cardH, cardY: cardY, tileH: tileH)
-    }
-
-    /// Finds the curve parameter whose x is closest to `targetX`, so labels can be
-    /// printed in one aligned column regardless of how wide a branch is.
-    private func parameter(forX targetX: CGFloat, x0: CGFloat, x1: CGFloat) -> Double {
-        var low = 0.0
-        var high = 1.0
-        for _ in 0..<24 {
-            let mid = (low + high) / 2
-            let x = curvePoint(t: mid, x0: x0, x1: x1, y0: 0, y1: 0).x
-            if x < targetX { low = mid } else { high = mid }
-        }
-        return (low + high) / 2
+        // The figure panel hugs its three lines instead of filling the card
+        // height, which is what left two thirds of it empty.
+        let sourceH = min(h, compact ? 96 : 116)
+        return Layout(placed: placed,
+                      sourceW: sourceW, sourceH: sourceH, sourceY: (h - sourceH) / 2,
+                      ribbonStart: ribbonStart, ribbonEnd: ribbonEnd, rowW: rowW)
     }
 
     private func curvePoint(t: Double, x0: CGFloat, x1: CGFloat, y0: CGFloat, y1: CGFloat) -> CGPoint {
@@ -482,15 +412,23 @@ struct PowerFlowView: View {
                 }
                 .allowsHitTesting(false)
 
-                ForEach(Array(layout.placed.enumerated()), id: \.offset) { item in
-                    label(item.element)
+                sourceNode(layout)
+
+                // On a machine whose SMC exposes no per-component counters the
+                // branch list is empty, and without this the card was one small
+                // panel in a large blank field.
+                if layout.placed.isEmpty {
+                    EmptyState(symbol: "chart.bar.xaxis",
+                               title: t("暂无分项读数"),
+                               message: t("SoC 与显示功耗由 SMC 提供；读数到达前只显示总功率。"),
+                               layout: .inline)
+                        .frame(width: max(0, layout.ribbonEnd - layout.ribbonStart),
+                               height: geo.size.height, alignment: .leading)
+                        .offset(x: layout.ribbonStart)
                 }
 
-                sourceCard(layout)
-                laptopNode(layout)
-
                 ForEach(Array(layout.placed.enumerated()), id: \.offset) { item in
-                    sinkNode(item.element, layout: layout)
+                    sinkRow(item.element, layout: layout)
                 }
             }
         }
@@ -584,108 +522,88 @@ struct PowerFlowView: View {
 
     // MARK: pieces
 
-    private func label(_ item: Placed) -> some View {
-        Text(item.labelText)
-            .font(FlowType.label(compact))
-            .foregroundColor(theme.textPrimary)
-            .shadow(color: Color.black.opacity(theme.isDark ? 0.55 : 0.12), radius: 2, y: 1)
-            .fixedSize()
-            .position(x: item.labelPoint.x, y: item.labelPoint.y)
-    }
-
-    private func sourceCard(_ layout: Layout) -> some View {
+    /// The left column: the one figure this card exists to show, at `display`
+    /// size, plus the system draw the ribbons are split from. It used to be a
+    /// panel stretched to the full card height with three short lines centred in
+    /// it, which left most of the panel empty.
+    private func sourceNode(_ layout: Layout) -> some View {
         let isAdapter = model.source == .adapter
-        let tint = isAdapter
-            ? theme.flowAdapter
-            : theme.flowBattery
+        let tint = isAdapter ? theme.flowAdapter : theme.flowBattery
         let watts = ticker.shownSource > 0 ? ticker.shownSource : ticker.smoothedSource
+        let system = ticker.shownSystem > 0 ? ticker.shownSystem : ticker.smoothedSystem
         let pulse = 0.62 + 0.38 * (0.5 + 0.5 * sin(ticker.phase * .pi * 2))
 
-        return ZStack(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(theme.isDark ? Color.white.opacity(0.045) : Color.black.opacity(0.022))
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(theme.cardStroke, lineWidth: 1)
-
-            // No accent rail: a coloured bar down the edge just read as a stray
-            // line. The tint now lives only in the icon, which already anchors
-            // the card to the same colour as the adapter.
-            VStack(alignment: .leading, spacing: compact ? 4 : 6) {
-                HStack(spacing: 4) {
-                    Image(systemName: isAdapter ? "powerplug.fill" : "battery.75")
-                        .font(FlowType.sourceIcon(compact))
-                        .foregroundColor(tint)
-                        .opacity(isAdapter ? pulse : 1)
-                    Text(isAdapter ? t("电源适配器") : t("电池供电"))
-                        .font(FlowType.sourceCaption(compact))
-                        .foregroundColor(theme.textTertiary)
-                        .lineLimit(1)
-                }
-                Text(PowerFormat.watts(watts))
-                    .font(FlowType.sourceValue(compact))
-                    .foregroundColor(theme.textPrimary)
+        return VStack(alignment: .leading, spacing: Spacing.xs) {
+            HStack(spacing: Spacing.xs) {
+                Image(systemName: isAdapter ? "powerplug.fill" : "battery.75")
+                    .font(Glyph.row)
+                    .foregroundColor(tint)
+                    .opacity(isAdapter ? pulse : 1)
+                Text(isAdapter ? t("电源适配器") : t("电池供电"))
+                    .font(Typography.caption)
+                    .foregroundColor(theme.textSecondary)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.55)
-                Text(isAdapter ? t("已接入电源") : t("放电中"))
-                    .font(FlowType.sourceStatus(compact))
-                    .foregroundColor(theme.textTertiary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
             }
-            .padding(.leading, 14)
-            .padding(.trailing, 12)
-            .frame(maxHeight: .infinity, alignment: .center)
+            Text(PowerFormat.watts(watts))
+                .font(Typography.display)
+                .foregroundColor(theme.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.55)
+            Text(tf("系统 {p}", PowerFormat.watts(system)))
+                .font(Typography.micro)
+                .foregroundColor(theme.textTertiary)
+                .lineLimit(1)
         }
-        .frame(width: layout.cardW, height: layout.cardH)
-        .offset(x: layout.cardX, y: layout.cardY)
+        .padding(.horizontal, Spacing.m)
+        .frame(width: layout.sourceW, height: layout.sourceH, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+                .fill(theme.isDark ? Color.white.opacity(0.045) : Color.black.opacity(0.022))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Radius.card, style: .continuous)
+                .strokeBorder(theme.cardStroke, lineWidth: 1)
+        )
+        .offset(y: layout.sourceY)
         .help(isAdapter ? t("电源适配器输入功率") : t("电池输出功率"))
     }
 
-    /// Same square, same corner radius, same typography as a sink tile. Only the
-    /// border is neutral instead of tinted, because the laptop is neither a source
-    /// nor a destination — it is the junction the ribbons pass through.
-    /// Same panel as the source card, but icon-only: the adapter already prints the
-    /// wattage, and repeating it here read as duplicated data.
-    private func laptopNode(_ layout: Layout) -> some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(theme.isDark ? Color.white.opacity(0.045) : Color.black.opacity(0.022))
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(theme.cardStroke, lineWidth: 1)
-
-            Image(systemName: "laptopcomputer")
-                .font(FlowType.laptopIcon(compact))
-                .foregroundColor(theme.textSecondary)
-        }
-        .frame(width: layout.laptopW, height: layout.laptopH)
-        .offset(x: layout.laptopX, y: layout.laptopY)
-        .help("MacBook")
-    }
-
-    private func sinkNode(_ item: Placed, layout: Layout) -> some View {
+    /// The right column: one row per branch, icon + name + watts. The number sits
+    /// where its ribbon arrives, so the diagram no longer needs labels floating
+    /// over the curves.
+    private func sinkRow(_ item: Placed, layout: Layout) -> some View {
         let active = (ticker.smoothedSinks[item.sink.id] ?? item.sink.watts ?? 0) > 0.02
-        return ZStack {
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .fill(theme.cardElevated)
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .fill(item.sink.color.opacity(active ? 0.16 : 0.06))
-            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                .strokeBorder(item.sink.color.opacity(active ? 0.38 : 0.18), lineWidth: 1)
+        // Fall back to the live value when the throttled snapshot still holds 0
+        // for a branch that just appeared; otherwise it prints "—" for a second.
+        let shown = ticker.shownSinks[item.sink.id] ?? 0
+        let watts = shown > 0.05 ? shown : (item.sink.watts ?? 0)
 
-            VStack(spacing: compact ? 2 : 3) {
-                Image(systemName: item.sink.symbol)
-                    .font(FlowType.sinkIcon(compact))
-                    .foregroundColor(item.sink.color)
-                Text(item.sink.title)
-                    .font(FlowType.sinkTitle(compact))
-                    .foregroundColor(active ? theme.textSecondary : theme.textTertiary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.65)
-            }
-            .padding(.horizontal, 2)
+        return HStack(spacing: Spacing.s) {
+            Image(systemName: item.sink.symbol)
+                .font(Glyph.row)
+                .foregroundColor(item.sink.color)
+                .opacity(active ? 1 : 0.5)
+            Text(item.sink.title)
+                .font(Typography.label)
+                .foregroundColor(active ? theme.textSecondary : theme.textTertiary)
+                .lineLimit(1)
+            Spacer(minLength: Spacing.xs)
+            Text(PowerFormat.watts(watts))
+                .font(Typography.label.monospacedDigit())
+                .foregroundColor(active ? theme.textPrimary : theme.textTertiary)
+                .lineLimit(1)
         }
-        .frame(width: layout.sinkW, height: item.tileHeight)
-        .offset(x: layout.ribbonEnd, y: item.tileTop)
+        .padding(.horizontal, Spacing.m)
+        .frame(width: layout.rowW, height: item.rowHeight)
+        .background(
+            RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+                .fill(item.sink.color.opacity(active ? 0.13 : 0.05))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
+                .strokeBorder(item.sink.color.opacity(active ? 0.30 : 0.14), lineWidth: 1)
+        )
+        .offset(x: layout.ribbonEnd, y: item.rowTop)
         .help([item.sink.title + (item.sink.quality == .estimated ? t("（估算）") : ""), item.sink.detail]
             .compactMap { $0 }.joined(separator: " · "))
     }

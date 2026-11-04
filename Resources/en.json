@@ -867,5 +867,9 @@
  "电池温度 %.1f°C，上限 %d°C": "Battery %.1f °C, ceiling %d °C",
  "已到上限 {p}%": "At the {p}% limit",
  "航海区间保持 {p}%–{p}%": "Holding in the sailing band {p}%–{p}%",
- "当前生效：{p}；已覆盖：{p}": "Active: {p}; overridden: {p}"
+ "当前生效：{p}；已覆盖：{p}": "Active: {p}; overridden: {p}",
+ "系统 {p}": "System {p}",
+ "上限 {p}%": "Limit {p}%",
+ "暂无分项读数": "No breakdown yet",
+ "SoC 与显示功耗由 SMC 提供；读数到达前只显示总功率。": "SoC and display draw come from the SMC. Until they arrive only the total is shown."
 }

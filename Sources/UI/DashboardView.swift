@@ -10,7 +10,7 @@ struct DashboardView: View {
 
     var body: some View {
         PageScaffold(title: Panel.dashboard.title, symbol: Panel.dashboard.symbol) {
-        PowerFlowCard(state: state, theme: theme)
+            PowerFlowCard(state: state)
                 .frame(height: 224)
             // No fixed height here: "电池规格" needs more than 172 pt for its
             // six rows, so it overflowed while the two cards with a Spacer
@@ -27,6 +27,10 @@ struct DashboardView: View {
             HStack(alignment: .top, spacing: 14) {
                 chartCard(title: t("电池电量"),
                           value: "\(state.snapshot.percentage) %",
+                          // The dashed limit line is only readable if the number
+                          // it marks is written down somewhere; the axis ticks
+                          // alone leave it "somewhere under 100".
+                          caption: tf("上限 {p}%", "\(state.chargeVal)"),
                           symbol: "battery.100",
                           color: theme.chartGreen,
                           points: state.history.battery,
@@ -69,7 +73,7 @@ struct DashboardView: View {
 
     private var batterySpecs: some View {
         Card {
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: Spacing.s) {
                 CardHeader(title: t("电池规格"), symbol: "bolt.fill")
                 spec(t("电流"), String(format: "%.2f A", abs(state.snapshot.amperage)))
                 spec(t("电压"), String(format: "%.2f V", state.snapshot.voltage))
@@ -87,7 +91,7 @@ struct DashboardView: View {
 
     private var batteryHealth: some View {
         Card {
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: Spacing.s) {
                 CardHeader(title: t("电池健康"), symbol: "heart.fill")
                 spec(t("设计容量"), "\(state.snapshot.designCapacity) mAh")
                 spec(t("最大容量"), "\(state.snapshot.maxCapacity) mAh", trailing: "\(state.snapshot.healthPercent) %")
@@ -100,7 +104,7 @@ struct DashboardView: View {
 
     private var adapterSpecs: some View {
         Card {
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: Spacing.s) {
                 CardHeader(title: t("电源适配器规格"), symbol: "powerplug.fill")
                 if state.snapshot.adapter.isEmpty {
                     Text(t("未连接电源适配器"))
@@ -129,14 +133,16 @@ struct DashboardView: View {
         return String(format: "\(format) \(unit)", value)
     }
 
+    /// One spec row: `body` for both sides of the pair, so a card of six rows
+    /// reads as a table instead of six whispers.
     private func spec(_ title: String, _ value: String, trailing: String? = nil) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(title)
-                .font(Typography.caption)
+                .font(Typography.body)
                 .foregroundColor(theme.textSecondary)
             Spacer(minLength: 6)
             Text(value)
-                .font(Typography.label.monospacedDigit())
+                .font(Typography.body.monospacedDigit())
                 .foregroundColor(theme.textPrimary)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -277,47 +283,15 @@ struct DashboardView: View {
 
 private struct PowerFlowCard: View {
     @ObservedObject var state: AppState
-    let theme: Theme
     @ObservedObject private var flowTicker = AppState.shared.flowTicker
 
     var body: some View {
+        // No chip row above the diagram: every number it printed is now either
+        // the figure on the left or a legend row on the right, and the row was
+        // what forced the diagram into 176 pt of a 196 pt card.
         Card {
-            VStack(spacing: 10) {
-                HStack(spacing: 8) {
-                    chip("powerplug.fill", t("电源适配器"), PowerFormat.watts(state.snapshot.isPluggedIn ? flowTicker.shownSource : 0), tint: theme.flowAdapter)
-                    divider
-                    chip("laptopcomputer", "MacBook", PowerFormat.watts(flowTicker.shownSystem), tint: theme.flowSystem)
-                    divider
-                    chip("battery.100", t("电池"), PowerFormat.signedWatts(state.snapshot.voltage * state.snapshot.amperage), tint: theme.flowBattery)
-                    divider
-                    chip("cpu", "SoC", reading(state.soc, flowTicker.shownSinks["soc"]), tint: theme.flowSoC)
-                    divider
-                    chip("display", t("显示"), reading(state.displayPower, flowTicker.shownSinks["display"]), tint: theme.flowSystem)
-                    divider
-                    chip("ellipsis", t("其他"), PowerFormat.watts(flowTicker.shownSinks["other"]))
-                    Spacer(minLength: 0)
-                }
-                .padding(.horizontal, 4)
-                PowerFlowView(model: state.flowModel, ticker: flowTicker)
-                    .frame(height: 176)
-            }
+            PowerFlowView(model: state.flowModel, ticker: flowTicker)
         }
-    }
-
-    private var divider: some View { Rectangle().fill(theme.divider).frame(width: 1, height: 12) }
-
-    private func chip(_ symbol: String, _ title: String, _ value: String, tint: Color? = nil) -> some View {
-        HStack(spacing: 5) {
-            Image(systemName: symbol).font(Glyph.inline).foregroundColor(tint ?? theme.textSecondary)
-            Text(title).font(Typography.micro).foregroundColor(theme.textSecondary)
-            if !value.isEmpty { Text(value).font(Typography.micro.weight(.semibold).monospacedDigit()).foregroundColor(theme.textPrimary) }
-        }
-        .fixedSize()
-    }
-
-    private func reading(_ value: PowerReading, _ watts: Double?) -> String {
-        guard let raw = value.watts else { return "--" }
-        return PowerFormat.watts(watts ?? raw)
     }
 }
 

@@ -39,37 +39,6 @@ enum Typography {
     static let micro = Font.system(size: 10, weight: .medium)
 }
 
-/// The power-flow diagram is drawn at two sizes: `compact` inside the dashboard
-/// card, full width on the battery panel. Its labels belong to the drawing and
-/// shrink with it, so they do not follow the text ladder — but their numbers
-/// still live in this file, which is the point of the exercise.
-enum FlowType {
-    static func label(_ compact: Bool) -> Font {
-        Font.system(size: compact ? 9 : 10, weight: .semibold).monospacedDigit()
-    }
-    static func sourceIcon(_ compact: Bool) -> Font {
-        Font.system(size: compact ? 8 : 9, weight: .semibold)
-    }
-    static func sourceCaption(_ compact: Bool) -> Font {
-        Font.system(size: compact ? 8.5 : 9.5, weight: .medium)
-    }
-    static func sourceValue(_ compact: Bool) -> Font {
-        Font.system(size: compact ? 17 : 22, weight: .semibold).monospacedDigit()
-    }
-    static func sourceStatus(_ compact: Bool) -> Font {
-        Font.system(size: compact ? 8 : 9)
-    }
-    static func laptopIcon(_ compact: Bool) -> Font {
-        Font.system(size: compact ? 18 : 22)
-    }
-    static func sinkIcon(_ compact: Bool) -> Font {
-        Font.system(size: compact ? 10 : 11, weight: .semibold)
-    }
-    static func sinkTitle(_ compact: Bool) -> Font {
-        Font.system(size: compact ? 7.5 : 8, weight: .medium)
-    }
-}
-
 /// SF Symbols carry an optical size of their own, which is not a text size, so
 /// glyphs get their own four steps instead of being folded into the ladder.
 enum Glyph {
