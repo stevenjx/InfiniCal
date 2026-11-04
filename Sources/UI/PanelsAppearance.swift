@@ -15,40 +15,31 @@ struct OtherView: View {
         PageScaffold(title: Panel.other.title,
                      symbol: Panel.other.symbol,
                      toolbar: { headerToolbar }) {
-            HStack(spacing: 10) {
-                IconBadge(symbol: "circle.lefthalf.filled")
-                Text(t("外观模式"))
-                    .font(Typography.headline)
-                    .foregroundColor(theme.textPrimary)
-                Spacer()
-                segmentControl(selection: $state.colorMode,
+            // 外观 and 语言 were the only two settings rows left lying on the
+            // window background, while 合盖 / 通用 / 数据源 sat in cards. On the
+            // same screen that reads as "these two are not really settings".
+            SectionLabel(text: t("外观"))
+            Card {
+                VStack(spacing: Spacing.xs) {
+                    segmentRow(symbol: "circle.lefthalf.filled",
+                               title: t("外观模式"),
+                               selection: $state.colorMode,
                                options: [SegmentOption(id: 0, symbol: "circle.lefthalf.filled", title: t("系统")),
                                          SegmentOption(id: 1, symbol: "sun.max.fill", title: t("浅色")),
                                          SegmentOption(id: 2, symbol: "moon.fill", title: t("深色"))])
-            }
-            .frame(height: 46)
-
-            HStack(spacing: 10) {
-                IconBadge(symbol: "globe")
-                Text(t("语言"))
-                    .font(Typography.headline)
-                    .foregroundColor(theme.textPrimary)
-                Spacer()
-                segmentControl(selection: $state.languageMode,
+                    Divider().background(theme.divider)
+                    segmentRow(symbol: "globe",
+                               title: t("语言"),
+                               selection: $state.languageMode,
                                options: [SegmentOption(id: 0, symbol: nil, title: t("系统")),
                                          SegmentOption(id: 1, symbol: nil, title: "中文"),
                                          SegmentOption(id: 2, symbol: nil, title: "English")])
+                }
             }
-            .frame(height: 46)
 
-            Text(t("合盖模式"))
-                .font(Typography.label.weight(.semibold))
-                .foregroundColor(theme.textTertiary)
-                .padding(.leading, 4)
-                .padding(.top, 6)
-
+            SectionLabel(text: t("合盖模式"))
             Card {
-                VStack(spacing: 4) {
+                VStack(spacing: Spacing.xs) {
                     ToggleRow(symbol: "laptopcomputer", title: t("合盖时保持唤醒"), help: t("合上盖子时阻止系统睡眠，方便外接显示器使用。"), isOn: $state.completelyDisableSleep)
                     Divider().background(theme.divider)
                     ToggleRow(symbol: "display", title: t("关闭内建显示器"), isOn: $state.displayOffWhenSleepDisabled)
@@ -57,14 +48,9 @@ struct OtherView: View {
                 }
             }
 
-            Text(t("通用"))
-                .font(Typography.label.weight(.semibold))
-                .foregroundColor(theme.textTertiary)
-                .padding(.leading, 4)
-                .padding(.top, 6)
-
+            SectionLabel(text: t("通用"))
             Card {
-                VStack(spacing: 4) {
+                VStack(spacing: Spacing.xs) {
                     ToggleRow(symbol: "dock.rectangle",
                               title: t("在 Dock 中显示图标"),
                               help: t("关闭后应用只在菜单栏显示，不占用 Dock 与 Cmd-Tab。"),
@@ -82,14 +68,9 @@ struct OtherView: View {
                 }
             }
 
-            Text(t("功率数据源"))
-                .font(Typography.label.weight(.semibold))
-                .foregroundColor(theme.textTertiary)
-                .padding(.leading, 4)
-                .padding(.top, 6)
-
+            SectionLabel(text: t("功率数据源"))
             Card {
-                VStack(spacing: 6) {
+                VStack(spacing: Spacing.s) {
                     powerSourceRow(t("电源适配器输入"), "SMC PSTR · 1 Hz", quality: state.snapshot.isPluggedIn ? .measured : .unavailable)
                     powerSourceRow(t("MacBook 总功耗"), t("PSTR − 电池充电"), quality: .measured)
                     powerSourceRow(t("电池充放电"), "Voltage × Amperage", quality: .measured)
@@ -98,7 +79,7 @@ struct OtherView: View {
                     powerSourceRow(t("显示"), sourceName(for: state.displayPower), quality: state.displayPower.quality)
                     powerSourceRow("USB", t("无可用数据源"), quality: .unavailable)
                     Divider().background(theme.divider)
-                    HStack(alignment: .top, spacing: 6) {
+                    HStack(alignment: .top, spacing: Spacing.s) {
                         Image(systemName: "info.circle").font(Glyph.inline)
                         Text(t("「其他」= MacBook 总功耗 − 已知分项，属于残差而不是独立测量值。"))
                             .font(Typography.caption)
@@ -111,7 +92,7 @@ struct OtherView: View {
 
             if state.capabilities.strategy == .unavailable || !state.helperInstalled {
                 Card {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: Spacing.s) {
                         CardHeader(title: t("充电控制状态"),
                                    subtitle: state.capabilities.summary)
                         if !state.helperInstalled {
@@ -124,13 +105,13 @@ struct OtherView: View {
                                     .foregroundColor(.white)
                             }
                             .buttonStyle(.plain)
-                            .padding(.top, 4)
+                            .padding(.top, Spacing.xs)
                         }
                     }
                 }
             }
 
-            HStack(spacing: 6) {
+            HStack(spacing: Spacing.xs) {
                 Text("InfiniCal \(Self.appVersion)")
                     .font(Typography.caption)
                     .foregroundColor(theme.textTertiary)
@@ -139,8 +120,26 @@ struct OtherView: View {
                     .font(Typography.caption)
                     .foregroundColor(theme.textTertiary)
             }
-            .padding(.top, 10)
+            .padding(.top, Spacing.s)
         }
+    }
+
+    /// One settings row: icon, title, and a three-way pill on the right. Both
+    /// rows are 30 pt tall, the same as `ToggleRow`, so the card's rows keep one
+    /// rhythm now that they share a card.
+    private func segmentRow(symbol: String,
+                            title: String,
+                            selection: Binding<Int>,
+                            options: [SegmentOption]) -> some View {
+        HStack(spacing: Spacing.s) {
+            IconBadge(symbol: symbol)
+            Text(title)
+                .font(Typography.headline)
+                .foregroundColor(theme.textPrimary)
+            Spacer(minLength: Spacing.s)
+            segmentControl(selection: selection, options: options)
+        }
+        .frame(height: 30)
     }
 
     /// Diagnostics and update check: the page's toolbar, right of the title.
@@ -164,14 +163,36 @@ struct OtherView: View {
         }
     }
 
+    /// Two fields, not four fragments: what the number comes from on the left,
+    /// its quality on the right. The backend used to be a third right-aligned
+    /// column in 10 pt monospace, wedged between the name and a 34 pt-wide
+    /// badge — at that size it read as noise rather than as the answer to
+    /// "where does this come from".
     private func powerSourceRow(_ title: String, _ source: String, quality: PowerQuality) -> some View {
-        HStack(spacing: 8) {
-            Circle().fill(color(for: quality)).frame(width: 6, height: 6)
-            Text(title).font(Typography.caption).foregroundColor(theme.textPrimary)
-            Spacer()
-            Text(source).font(Typography.micro.monospaced()).foregroundColor(theme.textTertiary)
-            Text(quality.badge).font(Typography.micro).foregroundColor(color(for: quality)).frame(width: 34, alignment: .trailing)
+        HStack(spacing: Spacing.s) {
+            Text(title)
+                .font(Typography.body)
+                .foregroundColor(theme.textPrimary)
+            Spacer(minLength: Spacing.s)
+            Text(source)
+                .font(Typography.caption)
+                .foregroundColor(theme.textTertiary)
+                .lineLimit(1)
+            qualityBadge(quality)
         }
+        .frame(height: 26)
+    }
+
+    private func qualityBadge(_ quality: PowerQuality) -> some View {
+        HStack(spacing: Spacing.xs) {
+            Circle()
+                .fill(color(for: quality))
+                .frame(width: 6, height: 6)
+            Text(quality.badge)
+                .font(Typography.micro)
+                .foregroundColor(color(for: quality))
+        }
+        .frame(width: 58, alignment: .trailing)
     }
 
     private func color(for quality: PowerQuality) -> Color {
@@ -215,7 +236,7 @@ struct OtherView: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: 24)
                     .background(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        RoundedRectangle(cornerRadius: Radius.chip, style: .continuous)
                             .fill(selection.wrappedValue == option.id ? theme.accent : Color.clear)
                     )
                 }
@@ -224,7 +245,7 @@ struct OtherView: View {
         }
         .padding(3)
         .frame(width: 216)
-        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(theme.innerControl))
-        .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(theme.cardStroke, lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: Radius.control, style: .continuous).fill(theme.innerControl))
+        .overlay(RoundedRectangle(cornerRadius: Radius.control, style: .continuous).strokeBorder(theme.cardStroke, lineWidth: 1))
     }
 }
