@@ -263,6 +263,7 @@ struct MenuBarPanel: View {
                 Text(state.snapshot.isPresent ? "\(state.snapshot.percentage)" : "—")
                     .font(Typography.title.monospacedDigit())
                     .foregroundColor(theme.textPrimary)
+                    .numericTextTransition()
             }
             .frame(width: 50, height: 50)
 

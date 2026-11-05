@@ -55,7 +55,9 @@ struct RootView: View {
                         .padding(.bottom, 4)
                 }
                 Button {
-                    state.selectedPanel = panel
+                    withAnimation(Motion.panel) {
+                        state.selectedPanel = panel
+                    }
                 } label: {
                     HStack(spacing: Spacing.s) {
                         Image(systemName: panel.symbol)
@@ -183,6 +185,8 @@ struct RootView: View {
             case .other: OtherView()
             }
         }
+        .id(state.selectedPanel)
+        .transition(.opacity)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(theme.windowBackground)
     }

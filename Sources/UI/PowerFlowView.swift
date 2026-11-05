@@ -549,6 +549,7 @@ struct PowerFlowView: View {
                 .foregroundColor(theme.textPrimary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.55)
+                .numericTextTransition()
             Text(tf("系统 {p}", PowerFormat.watts(system)))
                 .font(Typography.micro)
                 .foregroundColor(theme.textTertiary)
@@ -592,6 +593,7 @@ struct PowerFlowView: View {
                 .font(Typography.label.monospacedDigit())
                 .foregroundColor(active ? theme.textPrimary : theme.textTertiary)
                 .lineLimit(1)
+                .numericTextTransition()
         }
         .padding(.horizontal, Spacing.m)
         .frame(width: layout.rowW, height: item.rowHeight)

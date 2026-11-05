@@ -105,6 +105,54 @@ final class UIValue<T>: ObservableObject {
     init(_ value: T) { self.value = value }
 }
 
+// MARK: - Motion
+
+/// Animation curves and reduce-motion handling, gathered so callers don't each
+/// reach into `@Environment` and repeat the `@available` guards.
+///
+/// `MACOSX_DEPLOYMENT_TARGET = 12.0`, so `.contentTransition(.numericText())`
+/// (macOS 14+) needs a runtime guard. The `.easeInOut` used for panel switches
+/// and chart first-frames works on 12+.
+///
+/// Every curve here is `Animation?`: `nil` means "no animation at all", which
+/// is what "Reduce Motion" asks for. `withAnimation(nil)` still runs the state
+/// change, it just does not animate it — so the same call site works with the
+/// setting on or off.
+enum Motion {
+    /// 120 ms cross-fade for panel switches.
+    static var panel: Animation? { conditional(.easeInOut(duration: 0.12)) }
+    /// 300 ms stroke reveal for chart first-frames.
+    static var chartStroke: Animation? { conditional(.easeOut(duration: 0.3)) }
+
+    /// `nil` when "Reduce Motion" is on.
+    ///
+    /// `NSWorkspace.shared.accessibilityDisplayShouldReduceMotion` reads the
+    /// system preference live, so it needs no `@Environment` and works from
+    /// non-View contexts.
+    static func conditional(_ animation: Animation) -> Animation? {
+        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? nil : animation
+    }
+
+    /// True when "Reduce Motion" is on — used to skip content transitions,
+    /// which have no "nil" form of their own.
+    static var reducesMotion: Bool {
+        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    }
+}
+
+extension View {
+    /// `.contentTransition(.numericText())` on macOS 14+, no-op elsewhere and
+    /// when "Reduce Motion" is on (the digit flip *is* the motion).
+    @ViewBuilder
+    func numericTextTransition() -> some View {
+        if #available(macOS 14, *), !Motion.reducesMotion {
+            self.contentTransition(.numericText())
+        } else {
+            self
+        }
+    }
+}
+
 // MARK: - Building blocks
 
 /// How a card relates to what is around it.
@@ -396,6 +444,7 @@ struct ValueStepper: View {
                 .font(Typography.headline.monospacedDigit())
                 .frame(minWidth: 30)
                 .foregroundColor(theme.textPrimary)
+                .numericTextTransition()
 
             Button {
                 value = min(range.upperBound, value + step)

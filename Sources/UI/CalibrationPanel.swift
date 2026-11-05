@@ -256,6 +256,7 @@ struct CalibrationPanel: View {
                                 .font(Typography.display.weight(.bold))
                                 .foregroundColor(theme.textPrimary)
                                 .monospacedDigit()
+                                .numericTextTransition()
                             Text("%")
                                 .font(Typography.label.weight(.semibold))
                                 .foregroundColor(theme.textSecondary)
@@ -554,6 +555,7 @@ struct CalibrationPanel: View {
                     .foregroundColor(tint)
                     .monospacedDigit()
                     .lineLimit(1)
+                    .numericTextTransition()
                 if !unit.isEmpty {
                     Text(unit)
                         .font(Typography.label.weight(.semibold))

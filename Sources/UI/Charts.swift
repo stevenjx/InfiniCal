@@ -21,6 +21,11 @@ struct MiniChart: View {
     var limitFraction: Double? = nil
     var range: ClosedRange<Double>? = nil
 
+    /// 0 on first render, animates to 1 over 300 ms so the stroke reveals
+    /// left-to-right. Stays at 1 for all subsequent data updates — the line
+    /// extends in place rather than redrawing from scratch.
+    @State private var reveal: CGFloat = 0
+
     private let plotHeight: CGFloat = 74
     /// Room for a four-digit tick at `micro`, right-aligned against the plot.
     private let axisWidth: CGFloat = 34
@@ -57,6 +62,7 @@ struct MiniChart: View {
                 Text(valueText)
                     .font(Typography.title.monospacedDigit())
                     .foregroundColor(theme.textPrimary)
+                    .numericTextTransition()
                 if let caption {
                     Text(caption)
                         .font(Typography.caption)
@@ -74,6 +80,24 @@ struct MiniChart: View {
             // ~125 pt the plot has left over once the ticks take their gutter,
             // and truncating them to "20:12:…" is worse than overhanging it.
             timeAxis
+        }
+        .onAppear {
+            // Nothing to reveal yet: leave `reveal` at 0 so the curve does not
+            // pop in fully drawn the moment the first sample lands.
+            if points.count > 1 { playReveal() }
+        }
+        // The first `onAppear` usually fires with an empty buffer (the
+        // dashboard reads history before the first 2 Hz tick arrives), so the
+        // replay on data arrival is what actually puts the 300 ms stroke on
+        // screen.
+        .onChange(of: points.count) { count in
+            if count > 1, reveal == 0 { playReveal() }
+        }
+    }
+
+    private func playReveal() {
+        withAnimation(Motion.chartStroke) {
+            reveal = 1
         }
     }
 
@@ -103,8 +127,10 @@ struct MiniChart: View {
                 if points.count > 1 {
                     let path = linePath(size: geo.size)
                     path
+                        .trim(from: 0, to: reveal)
                         .stroke(color, style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
                     fillPath(path: path, size: geo.size)
+                        .trim(from: 0, to: reveal)
                         .fill(LinearGradient(colors: [color.opacity(0.35), color.opacity(0.02)],
                                              startPoint: .top, endPoint: .bottom))
                 } else {

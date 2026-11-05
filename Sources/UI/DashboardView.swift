@@ -146,6 +146,7 @@ struct DashboardView: View {
                 .foregroundColor(theme.textPrimary)
                 .lineLimit(1)
                 .truncationMode(.middle)
+                .numericTextTransition()
             if let trailing {
                 Text(trailing)
                     .font(Typography.caption.monospacedDigit())
