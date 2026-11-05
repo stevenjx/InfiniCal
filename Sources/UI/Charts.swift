@@ -93,6 +93,12 @@ struct MiniChart: View {
         .onChange(of: points.count) { count in
             if count > 1, reveal == 0 { playReveal() }
         }
+        // VoiceOver read this card as a run of unrelated fragments — the title,
+        // then the figure, then axis ticks, then three timestamps. Combined and
+        // labelled, it announces one thing: "电池电量 80 %，上限 80 %".
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(title)
+        .accessibilityValue(caption.map { "\(valueText)，\($0)" } ?? valueText)
     }
 
     private func playReveal() {

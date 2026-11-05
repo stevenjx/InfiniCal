@@ -1564,6 +1564,8 @@ private struct CalibrationHistorySheet: View {
                         .foregroundColor(theme.textTertiary)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(tf("删除 {p} 的校准记录", Self.date.string(from: record.startDate)))
+                .help(t("删除这条校准记录"))
             }
 
             Text(tf("校准质量等级：{p}", record.quality.map { t($0.label) } ?? t("未评估（旧记录）")))

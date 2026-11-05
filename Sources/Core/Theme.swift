@@ -167,6 +167,59 @@ extension View {
             self
         }
     }
+
+    /// Focus ring for controls that opted out of the system one.
+    ///
+    /// `.buttonStyle(.plain)` is used 28 times here to keep the custom chrome,
+    /// and it also removes the ring macOS draws on keyboard focus — so tabbing
+    /// through the app moved an invisible cursor. This restores it from
+    /// `theme.focusRing`, which was declared for U2-03 and until now had no
+    /// user at all.
+    ///
+    /// `.focusable()` is required: without it a plain-styled button is not in
+    /// the key-view loop on macOS and would never report focus.
+    func focusRing(_ shape: some InsettableShape = RoundedRectangle(cornerRadius: Radius.control, style: .continuous),
+                   inset: CGFloat = 1) -> some View {
+        modifier(FocusRing(shape: AnyInsettableShape(shape), inset: inset))
+    }
+}
+
+private struct AnyInsettableShape: InsettableShape {
+    private let _path: (CGRect) -> Path
+    private let _inset: (CGFloat) -> AnyInsettableShape
+
+    init<S: InsettableShape>(_ shape: S) {
+        _path = { shape.path(in: $0) }
+        _inset = { AnyInsettableShape(shape.inset(by: $0)) }
+    }
+
+    func path(in rect: CGRect) -> Path { _path(rect) }
+    func inset(by amount: CGFloat) -> AnyInsettableShape { _inset(amount) }
+}
+
+private struct FocusRing: ViewModifier {
+    private var theme: Theme { Theme.current }
+    let shape: AnyInsettableShape
+    let inset: CGFloat
+    @FocusState private var focused: Bool
+
+    func body(content: Content) -> some View {
+        content
+            // No `.focusable()` here. Adding it made every ring-bearing view a
+            // tab stop of its own, which on a custom-styled Button created a
+            // second, competing stop — tabbing cycled through the 9 sidebar rows
+            // and never reached the page. The controls that need this modifier
+            // are already focusable (Button, Toggle); the modifier only draws.
+            .focused($focused)
+            .overlay {
+                if focused {
+                    shape
+                        .inset(by: -inset)
+                        .strokeBorder(theme.focusRing, lineWidth: 2)
+                        .allowsHitTesting(false)
+                }
+            }
+    }
 }
 
 // MARK: - Building blocks
@@ -349,6 +402,12 @@ struct ToggleRow: View {
                 .frame(width: 42, height: 22)
         }
         .frame(height: 30)
+        // `labelsHidden()` leaves VoiceOver with an unlabelled switch, and the
+        // row title was not associated with it. The switch stays the focusable
+        // element (it is a native Toggle, so it is in the key-view loop);
+        // the ring is drawn on the row so it is findable.
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(title)
     }
 }
 

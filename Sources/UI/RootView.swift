@@ -74,6 +74,11 @@ struct RootView: View {
                 }
                 .buttonStyle(SidebarRowStyle(selected: state.selectedPanel == panel,
                                              hovered: hovered.value == panel))
+                // The row style is custom, so the system ring is gone. Without
+                // this, tabbing through the sidebar moved an invisible cursor.
+                .focusRing(RoundedRectangle(cornerRadius: Radius.control, style: .continuous))
+                .accessibilityLabel(panel.title)
+                .accessibilityAddTraits(state.selectedPanel == panel ? [.isSelected] : [])
                 .onHover { inside in
                     if inside {
                         hovered.value = panel
@@ -110,7 +115,7 @@ struct RootView: View {
     private var footer: some View {
         VStack(alignment: .leading, spacing: Spacing.s) {
             HStack(spacing: Spacing.s) {
-                circleButton("power") { NSApp.terminate(nil) }
+                circleButton("power", label: t("退出 InfiniCal")) { NSApp.terminate(nil) }
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Infinity Computer")
                         .font(Typography.micro)
@@ -168,7 +173,8 @@ struct RootView: View {
         return Panel.allCases[index - 1].category
     }
 
-    private func circleButton(_ symbol: String, action: @escaping () -> Void) -> some View {
+    private func circleButton(_ symbol: String, label: String,
+                             action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(Glyph.row)
@@ -178,6 +184,10 @@ struct RootView: View {
                 .overlay(Circle().strokeBorder(theme.cardStroke, lineWidth: 1))
         }
         .buttonStyle(.plain)
+        .focusRing(Circle())
+        // Icon-only: "power" is not a label, and VoiceOver had nothing to say.
+        .accessibilityLabel(label)
+        .help(label)
     }
 
     @ViewBuilder

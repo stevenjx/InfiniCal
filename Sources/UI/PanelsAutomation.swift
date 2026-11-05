@@ -114,6 +114,10 @@ struct ScheduleView: View {
                     .foregroundColor(theme.textTertiary)
             }
             .buttonStyle(.plain)
+            // Icon-only: without these VoiceOver announces "trash" and there is
+            // no tooltip to say which task it removes.
+            .accessibilityLabel(tf("删除任务「{p}」", task.kind.title))
+            .help(t("删除这个定时任务"))
         }
         .padding(.horizontal, CardPadding.regular)
         .frame(height: Self.rowHeight)
@@ -229,6 +233,8 @@ struct ScheduleView: View {
                     .foregroundColor(theme.textPrimary)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(t("新建定时任务"))
+            .help(t("新建定时任务"))
 
             templateMenu
         }
