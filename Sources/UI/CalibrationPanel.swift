@@ -1424,77 +1424,59 @@ private struct CalibrationHistorySheet: View {
     private var theme: Theme { Theme.current }
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                Image(systemName: "clock.arrow.circlepath")
-                    .foregroundColor(theme.accent)
-                Text(t("历史校准记录"))
-                    .font(Typography.headline)
-                    .foregroundColor(theme.textPrimary)
-                Spacer()
+        SheetScaffold(title: t("历史校准记录"),
+                      symbol: "clock.arrow.circlepath",
+                      width: 620,
+                      // Empty means nothing to scroll, so the sheet shrinks to
+                      // its content instead of stranding the message in the
+                      // middle of an empty 580 pt box.
+                      height: engine.records.isEmpty ? nil : 580) {
+            VStack(spacing: Spacing.m) {
+                Picker("", selection: $tab.value) {
+                    Text(t("校准记录")).tag(0)
+                    Text(t("运行日志")).tag(1)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+
+                if tab.value == 1 {
+                    CalibrationLogView(engine: engine)
+                } else {
+                    recordsContent
+                }
+            }
+        } footer: {
+            SheetFooter(confirmTitle: t("完成"),
+                        onConfirm: { isPresented = false },
+                        confirmAnswersEscape: true) {
                 if !engine.records.isEmpty, tab.value == 0 {
                     Button(t("清空")) { engine.clearHistory() }
                         .buttonStyle(.plain)
-                        .foregroundColor(.red)
                         .font(Typography.body)
+                        .foregroundColor(theme.danger)
                 }
-                Button(t("完成")) { isPresented = false }
-                    .keyboardShortcut(.cancelAction)
-            }
-            .padding(14)
-
-            Divider().background(theme.divider)
-
-            Picker("", selection: $tab.value) {
-                Text(t("校准记录")).tag(0)
-                Text(t("运行日志")).tag(1)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .padding(.horizontal, 14)
-            .padding(.top, 10)
-
-            if tab.value == 1 {
-                CalibrationLogView(engine: engine)
-            } else {
-                recordsContent
             }
         }
-        .frame(width: 620, height: 580)
-        .background(theme.windowBackground)
     }
 
     @ViewBuilder
     private var recordsContent: some View {
         if engine.records.count >= 2 {
             trendBlock
-                .padding(.horizontal, 14)
-                .padding(.top, 12)
         }
 
         if engine.records.isEmpty {
-            VStack(spacing: 10) {
-                Spacer()
-                Image(systemName: "archivebox")
-                    .font(Glyph.hero)
-                    .foregroundColor(theme.textTertiary)
-                Text(t("还没有校准记录"))
-                    .font(Typography.body)
-                    .foregroundColor(theme.textSecondary)
-                Text(t("完成一次校准后，结果会自动保存在这里"))
-                    .font(Typography.caption)
-                    .foregroundColor(theme.textTertiary)
-                Spacer()
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            EmptyState(symbol: "archivebox",
+                       title: t("还没有校准记录"),
+                       message: t("完成一次校准后，结果会自动保存在这里"))
+                .frame(maxWidth: .infinity, alignment: .topLeading)
         } else {
             ScrollView {
-                LazyVStack(spacing: 8) {
+                LazyVStack(spacing: Spacing.s) {
                     ForEach(engine.records) { record in
                         recordRow(record)
                     }
                 }
-                .padding(14)
             }
         }
     }
@@ -1555,8 +1537,9 @@ private struct CalibrationHistorySheet: View {
                     .font(Typography.micro.weight(.semibold))
                     .padding(.horizontal, 7)
                     .padding(.vertical, 2.5)
-                    .background(Capsule().fill((record.batteryHealthPercentage >= 80 ? Color.green : Color.orange).opacity(0.14)))
-                    .foregroundColor(record.batteryHealthPercentage >= 80 ? .green : .orange)
+                    .background(Capsule().fill((record.batteryHealthPercentage >= 80
+                                                ? theme.success : theme.warning).opacity(0.14)))
+                    .foregroundColor(record.batteryHealthPercentage >= 80 ? theme.success : theme.warning)
                 Button {
                     engine.deleteRecord(record)
                 } label: {
@@ -1652,79 +1635,63 @@ struct CalibrationModeSheet: View {
     @State private var confirmingDeep = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(t("选择校准方式"))
-                    .font(Typography.headline)
-                    .foregroundColor(theme.textPrimary)
-                Text(t("深度决定测量是否完整，负载决定放电快慢。深度越深，耗时和损耗越大。"))
-                    .font(Typography.caption)
-                    .foregroundColor(theme.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            ForEach(CalibrationPreset.allCases) { item in
-                Button {
-                    preset = item
-                    confirmingDeep = false
-                } label: {
-                    presetRow(item)
-                }
-                .buttonStyle(.plain)
-            }
-
-            Divider().background(theme.divider)
-
-            HStack(spacing: 7) {
-                Text(t("放电负载"))
-                    .font(Typography.caption)
-                    .foregroundColor(theme.textSecondary)
-                ForEach(DischargeStressMode.allCases) { mode in
-                    ChipButton(title: mode.title, symbol: symbol(mode),
-                               selected: stress == mode) { stress = mode }
-                }
-                Spacer(minLength: 0)
-            }
-
-            if preset.requiresExplicitUserAction {
-                Text(t("深度校准会把电量放到约 10%，电池将在接近放空的状态下工作。非必要不建议频繁执行。"))
-                    .font(Typography.caption)
-                    .foregroundColor(theme.chartOrange)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            HStack(spacing: 10) {
-                Spacer(minLength: 0)
-                Button(t("取消")) { dismiss() }
-                    .buttonStyle(.plain)
-                    .font(Typography.body)
-                    .foregroundColor(theme.textSecondary)
-                Button(confirmingDeep ? t("确认开始深度校准") : t("开始校准")) {
-                    guard !(preset.requiresExplicitUserAction && !confirmingDeep) else {
-                        confirmingDeep = true
-                        return
+        SheetScaffold(title: t("选择校准方式"),
+                      subtitle: t("深度决定测量是否完整，负载决定放电快慢。深度越深，耗时和损耗越大。"),
+                      width: 430) {
+            VStack(alignment: .leading, spacing: Spacing.m) {
+                ForEach(CalibrationPreset.allCases) { item in
+                    Button {
+                        preset = item
+                        confirmingDeep = false
+                    } label: {
+                        presetRow(item)
                     }
-                    state.startCalibration(preset: preset, mode: stress)
-                    dismiss()
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
-                .font(Typography.headline)
-                .foregroundColor(confirmingDeep ? theme.chartOrange : theme.accent)
+
+                Divider().background(theme.divider)
+
+                HStack(spacing: Spacing.s) {
+                    Text(t("放电负载"))
+                        .font(Typography.caption)
+                        .foregroundColor(theme.textSecondary)
+                    ForEach(DischargeStressMode.allCases) { mode in
+                        ChipButton(title: mode.title, symbol: symbol(mode),
+                                   selected: stress == mode) { stress = mode }
+                    }
+                    Spacer(minLength: 0)
+                }
+
+                if preset.requiresExplicitUserAction {
+                    Text(t("深度校准会把电量放到约 10%，电池将在接近放空的状态下工作。非必要不建议频繁执行。"))
+                        .font(Typography.caption)
+                        .foregroundColor(theme.warning)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
+        } footer: {
+            SheetFooter(cancelTitle: t("取消"),
+                        onCancel: { dismiss() },
+                        confirmTitle: confirmingDeep ? t("确认开始深度校准") : t("开始校准"),
+                        onConfirm: {
+                            guard !(preset.requiresExplicitUserAction && !confirmingDeep) else {
+                                confirmingDeep = true
+                                return
+                            }
+                            state.startCalibration(preset: preset, mode: stress)
+                            dismiss()
+                        })
         }
-        .padding(20)
-        .frame(width: 430)
-        .background(theme.windowBackground)
     }
 
     private func presetRow(_ item: CalibrationPreset) -> some View {
         let selected = preset == item
-        return HStack(spacing: 10) {
+        return HStack(spacing: Spacing.m) {
             Image(systemName: symbol(item))
                 .font(Glyph.row)
                 .frame(width: 20)
                 .foregroundColor(selected ? theme.accent : theme.textTertiary)
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: Spacing.xxs) {
                 HStack(spacing: 6) {
                     Text(item.title)
                         .font(Typography.headline)
@@ -1739,7 +1706,7 @@ struct CalibrationModeSheet: View {
                 Text(item.risk)
                     .font(Typography.caption)
                     .foregroundColor(item.capsQualityAtLow || item.requiresExplicitUserAction
-                                     ? theme.chartOrange : theme.textTertiary)
+                                     ? theme.warning : theme.textTertiary)
             }
             Spacer(minLength: 6)
             if selected {
@@ -1748,9 +1715,9 @@ struct CalibrationModeSheet: View {
                     .foregroundColor(theme.accent)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .background(RoundedRectangle(cornerRadius: 9, style: .continuous)
+        .padding(.horizontal, Spacing.m)
+        .padding(.vertical, Spacing.s)
+        .background(RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
                         .fill(selected ? theme.selectedSidebar : theme.innerControl))
     }
 

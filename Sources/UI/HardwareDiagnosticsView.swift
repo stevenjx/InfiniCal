@@ -151,17 +151,26 @@ struct HardwareDiagnosticsView: View {
     }()
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text(t("硬件兼容性诊断")).font(.headline)
-                Spacer()
+        SheetScaffold(title: t("硬件兼容性诊断"),
+                      symbol: "stethoscope",
+                      subtitle: t("只读探测，不试写硬件。候选可用不等于实机验证；传感器列表并非完整清单。"),
+                      width: 700,
+                      height: 620) {
+            diagnosticsBody
+        } footer: {
+            SheetFooter(confirmTitle: t("关闭"),
+                        onConfirm: { dismiss() },
+                        confirmAnswersEscape: true) {
                 Button(t("刷新")) { refresh() }.disabled(data.busy)
                 Button("TXT") { export(json: false) }.disabled(data.report == nil || data.busy)
                 Button("JSON") { export(json: true) }.disabled(data.report == nil || data.busy)
-                Button(t("关闭")) { dismiss() }
             }
-            Text(t("只读探测，不试写硬件。候选可用不等于实机验证；传感器列表并非完整清单。"))
-                .font(Typography.caption).foregroundColor(theme.textSecondary)
+        }
+    }
+
+    @ViewBuilder
+    private var diagnosticsBody: some View {
+        VStack(alignment: .leading, spacing: Spacing.m) {
             if data.busy { ProgressView() }
             if !journal.entries.isEmpty {
                 Text(t("最近的控制结果"))
@@ -216,21 +225,21 @@ struct HardwareDiagnosticsView: View {
                     }
                 }
             }
-            if let exportError = data.exportError { Text(exportError).foregroundColor(theme.chartOrange) }
+            if let exportError = data.exportError {
+                Text(exportError).foregroundColor(theme.warning)
+            }
             Text(t("导出不包含序列号、用户名或原始 IORegistry 数据。"))
                 .font(Typography.caption).foregroundColor(theme.textSecondary)
         }
-        .padding(20).frame(width: 700, height: 620)
-        .background(theme.windowBackground)
         .onAppear { refresh() }
     }
 
     private func color(for phase: ControlPhase) -> Color {
         switch phase {
-        case .verified, .active, .restored: return theme.chartGreen
-        case .accepted: return theme.chartBlue
+        case .verified, .active, .restored: return theme.success
+        case .accepted: return theme.info
         case .requested: return theme.textSecondary
-        case .failed, .expired: return theme.chartOrange
+        case .failed, .expired: return theme.warning
         }
     }
 

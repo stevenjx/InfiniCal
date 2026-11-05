@@ -247,11 +247,14 @@ struct HelpDot: View {
         }
         .buttonStyle(.plain)
         .popover(isPresented: $flag.value, arrowEdge: .bottom) {
+            // 280 pt: the help texts are one or two sentences, and 260 broke
+            // the longer ones into four lines inside a bubble that is mostly
+            // padding.
             Text(text)
                 .font(Typography.body)
                 .foregroundColor(.primary)
                 .padding(Spacing.m)
-                .frame(width: 260, alignment: .leading)
+                .frame(width: 280, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

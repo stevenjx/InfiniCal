@@ -354,11 +354,18 @@ struct TaskEditor: View {
     private let weekdays = [t("一"), t("二"), t("三"), t("四"), t("五"), t("六"), t("日")]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(t("新建任务"))
-                .font(Typography.headline)
-                .foregroundColor(theme.textPrimary)
+        SheetScaffold(title: t("新建任务"), width: 360) {
+            form
+        } footer: {
+            SheetFooter(cancelTitle: t("取消"),
+                        onCancel: onCancel,
+                        confirmTitle: t("保存"),
+                        onConfirm: { onSave(draft.task) })
+        }
+    }
 
+    private var form: some View {
+        VStack(alignment: .leading, spacing: Spacing.m) {
             Picker(t("操作"), selection: $draft.kind) {
                 ForEach(TaskKind.allCases, id: \.self) { kind in
                     Text(kind.title).tag(kind)
@@ -462,24 +469,10 @@ struct TaskEditor: View {
             if let hint = conflictHint {
                 Text(hint)
                     .font(Typography.caption)
-                    .foregroundColor(theme.chartOrange)
+                    .foregroundColor(theme.warning)
                     .fixedSize(horizontal: false, vertical: true)
             }
-
-            HStack {
-                Spacer()
-                Button(t("取消")) { onCancel() }
-                    .buttonStyle(.plain)
-                    .foregroundColor(theme.textSecondary)
-                Button(t("保存")) { onSave(draft.task) }
-                    .buttonStyle(.plain)
-                    .foregroundColor(theme.accent)
-                    .padding(.leading, 14)
-            }
-            .font(Typography.headline)
         }
-        .padding(20)
-        .frame(width: 360)
     }
 
     /// Two tasks due at the same time that write the same lever cannot both

@@ -19,7 +19,6 @@ struct UpdatePanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(t("软件更新")).font(.headline)
             Text(tf("当前版本：{p}", updater.currentVersion.isEmpty ? t("未知") : updater.currentVersion))
 
             HStack {
@@ -95,21 +94,21 @@ struct UpdatePanel: View {
     }
 }
 
-/// 设置与菜单栏均可 .sheet(isPresented:) { UpdateSheet() }
+/// 菜单栏与设置页均 `.sheet(isPresented:) { UpdateSheet() }`。标题由
+/// `SheetScaffold` 提供，面板本身不带页头，换到别处嵌入时由宿主决定。
 @MainActor
 struct UpdateSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(spacing: 12) {
-            ScrollView { UpdatePanel().padding(20) }
-            HStack {
-                Spacer()
-                Button(t("关闭")) { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-            }
-            .padding([.horizontal, .bottom], 20)
+        SheetScaffold(title: t("软件更新"),
+                      symbol: "arrow.triangle.2.circlepath",
+                      width: 560) {
+            ScrollView { UpdatePanel() }
+        } footer: {
+            SheetFooter(confirmTitle: t("关闭"),
+                        onConfirm: { dismiss() },
+                        confirmAnswersEscape: true)
         }
-        .frame(width: 560, height: 560)
     }
 }

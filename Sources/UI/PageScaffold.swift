@@ -147,3 +147,124 @@ extension EmptyState where Actions == EmptyView {
         self.init(symbol: symbol, title: title, message: message, layout: layout) { EmptyView() }
     }
 }
+
+// MARK: - Sheets
+
+/// The frame every modal shares.
+///
+/// Six surfaces — 校准方式、校准历史、硬件诊断、软件更新、新建任务、特权助手 ——
+/// each picked its own title size (13 in four, 15 in one, the bare `.headline`
+/// in another), its own inset (14 / 20 / 24) and put its buttons wherever the
+/// author happened to be standing: in the header row, at the end of a trailing
+/// HStack, or centred under the text. Two of them answered Esc; the rest did
+/// not.
+///
+/// One skeleton now: header (symbol + title 15 + explanation 11), a footer bar,
+/// and a body in between that may scroll. The footer sits outside the body, so
+/// a long record list scrolls under a bar that does not move.
+///
+/// The corner radius is not set here. On macOS a `.sheet` is an AppKit sheet
+/// window and AppKit draws its corners; a rounded rectangle of our own inside it
+/// would be a second, slightly different curve. `Radius.sheet` therefore has no
+/// caller — see the plan's U1-09 notes.
+struct SheetScaffold<Content: View, Footer: View>: View {
+    private var theme: Theme { Theme.current }
+
+    let title: String
+    var symbol: String? = nil
+    var subtitle: String? = nil
+    var width: CGFloat = 420
+    /// `nil` lets the sheet hug its content. A number pins it — the record list
+    /// and the diagnostics sheet would otherwise resize as rows arrive.
+    var height: CGFloat? = nil
+    @ViewBuilder var content: Content
+    @ViewBuilder var footer: Footer
+
+    /// 20 pt, the same inset the panels use, per §2.2 of the plan.
+    private static var inset: CGFloat { Spacing.xl }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            Divider().background(theme.divider)
+            content
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .padding(.horizontal, Self.inset)
+                .padding(.vertical, Spacing.l)
+            Divider().background(theme.divider)
+            footer
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .padding(.horizontal, Self.inset)
+                .padding(.vertical, Spacing.m + Spacing.xxs)
+        }
+        .frame(width: width)
+        .frame(height: height)
+        .background(theme.windowBackground)
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            HStack(spacing: Spacing.s) {
+                if let symbol { IconBadge(symbol: symbol, color: theme.accent) }
+                Text(title)
+                    .font(Typography.title)
+                    .foregroundColor(theme.textPrimary)
+            }
+            if let subtitle {
+                Text(subtitle)
+                    .font(Typography.caption)
+                    .foregroundColor(theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, Self.inset)
+        .padding(.top, Self.inset)
+        .padding(.bottom, Spacing.m)
+    }
+}
+
+/// The button bar: optional secondary actions on the left, then the pair that
+/// ends the sheet on the right.
+///
+/// The buttons are the system's rather than a capsule of our own. A filled
+/// accent capsule would carry white 12 pt text at 3.6:1 (measured on this
+/// palette), and this is the one place in the app where a button is the last
+/// step before a hardware change — the platform control is both readable and
+/// what a Mac user expects in a sheet. `.defaultAction` / `.cancelAction` also
+/// give Return and Esc without a second mechanism.
+struct SheetFooter<Leading: View>: View {
+    var cancelTitle: String? = nil
+    var onCancel: (() -> Void)? = nil
+    var confirmTitle: String? = nil
+    var onConfirm: (() -> Void)? = nil
+    /// For a sheet whose only button is 关闭 or 完成: it is the default action,
+    /// but Esc has to reach it too, and a button carries one shortcut.
+    var confirmAnswersEscape = false
+    @ViewBuilder var leading: Leading
+
+    var body: some View {
+        HStack(spacing: Spacing.m) {
+            leading
+            Spacer(minLength: Spacing.m)
+            if let cancelTitle, let onCancel {
+                Button(cancelTitle, action: onCancel)
+                    .keyboardShortcut(.cancelAction)
+            }
+            if let confirmTitle, let onConfirm {
+                Button(confirmTitle, action: onConfirm)
+                    .keyboardShortcut(confirmAnswersEscape ? .cancelAction : .defaultAction)
+            }
+        }
+    }
+}
+
+extension SheetFooter where Leading == EmptyView {
+    init(cancelTitle: String? = nil, onCancel: (() -> Void)? = nil,
+         confirmTitle: String? = nil, onConfirm: (() -> Void)? = nil,
+         confirmAnswersEscape: Bool = false) {
+        self.init(cancelTitle: cancelTitle, onCancel: onCancel,
+                  confirmTitle: confirmTitle, onConfirm: onConfirm,
+                  confirmAnswersEscape: confirmAnswersEscape) { EmptyView() }
+    }
+}
