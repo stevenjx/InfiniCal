@@ -357,28 +357,15 @@ struct ChargeControlView: View {
     /// Was a bare row on the window background with a hand-rolled capsule.
     private var helperNotice: some View {
         Card(padding: .compact) {
-            HStack(spacing: Spacing.s) {
-                Image(systemName: "lock.shield")
-                    .font(Glyph.row)
-                    .foregroundColor(theme.textSecondary)
-                Text(tf("写入 SMC 需要特权助手（当前策略：{p}）", state.capabilities.strategy.title))
-                    .font(Typography.caption)
-                    .foregroundColor(theme.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: Spacing.s)
-                Button {
-                    state.installHelper()
-                } label: {
-                    Text(t("安装"))
-                        .font(Typography.label)
-                        .padding(.horizontal, Spacing.m)
-                        .frame(height: 24)
-                        .background(RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
-                                        .fill(theme.accent))
-                        .foregroundColor(.white)
-                }
-                .buttonStyle(.plain)
-            }
+            // Same shape as the fan page's notice — both are "a write needs
+            // root and the helper is not installed", so they share one
+            // component instead of two hand-rolled rows that drift.
+            RetryState(symbol: "lock.shield",
+                       title: t("写入 SMC 需要特权助手"),
+                       reason: tf("当前策略：{p}。安装助手后由它代为写入，本 App 不需要 root。",
+                                  state.capabilities.strategy.title),
+                       layout: .inline,
+                       actionTitle: t("安装")) { state.installHelper() }
         }
     }
 }

@@ -35,11 +35,20 @@ struct DeviceProfileCard: View {
                     .foregroundColor(theme.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
                 if let message = store.message {
-                    Text(message).font(Typography.caption).foregroundColor(theme.chartGreen)
+                    // A success note, not a failure — `.success` reads as green
+                    // in both appearances, `chartGreen` was 2.16:1 on the card.
+                    Text(message).font(Typography.caption).foregroundColor(theme.success)
                 }
                 if let error = error.value {
-                    Text(error).font(Typography.caption).foregroundColor(theme.chartOrange)
-                        .fixedSize(horizontal: false, vertical: true)
+                    // Was a chartOrange sentence with no recovery. Importing a
+                    // rule file is exactly where the user needs to know *why*
+                    // it failed and to be able to try again.
+                    RetryState(symbol: "doc.badge.ellipsis",
+                               title: t("规则导入失败"),
+                               reason: error,
+                               layout: .inline,
+                               actionTitle: t("重新导入")) { importRules() }
+                        .padding(.top, Spacing.xxs)
                 }
             }
         }

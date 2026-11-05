@@ -73,6 +73,15 @@ extension PageScaffold where Toolbar == EmptyView {
 /// sentence inside the list. All three are the same message: "there is nothing
 /// here yet, and this is what would put something here".
 ///
+/// Three tones, because "nothing here yet" and "we could not read it" are not
+/// the same thing and used to look identical:
+///
+/// - `neutral` — no data yet. Grey icon; nothing is wrong.
+/// - `loading` — a read is in flight. Spinner in place of the icon.
+/// - `failure` — the read failed. Danger icon and, above all, a **reason**.
+///   A failure that says only "失败" tells the user nothing they can act on,
+///   so `reason` is what distinguishes this tone from a plain empty state.
+///
 /// `Actions` is a view slot rather than a title/closure pair because the
 /// schedule page's empty state needs two actions and one of them is a menu
 /// (模板). The pair that used to sit here had no callers and could not express
@@ -82,13 +91,28 @@ struct EmptyState<Actions: View>: View {
     /// for cards whose height is set by a sibling rather than by the message.
     enum Layout { case stacked, inline }
 
+    enum Tone {
+        case neutral
+        case loading
+        case failure
+    }
+
     private var theme: Theme { Theme.current }
 
     let symbol: String
     let title: String
     var message: String? = nil
     var layout: Layout = .stacked
+    var tone: Tone = .neutral
     @ViewBuilder var actions: Actions
+
+    private var tint: Color {
+        switch tone {
+        case .neutral: return theme.textTertiary
+        case .loading: return theme.textSecondary
+        case .failure: return theme.danger
+        }
+    }
 
     var body: some View {
         switch layout {
@@ -99,16 +123,17 @@ struct EmptyState<Actions: View>: View {
 
     private var stacked: some View {
         VStack(spacing: Spacing.s + Spacing.xxs) {
-            Image(systemName: symbol)
-                .font(Glyph.hero)
-                .foregroundColor(theme.textTertiary)
+            glyph(font: Glyph.hero, height: 30)
             Text(title)
                 .font(Typography.headline)
                 .foregroundColor(theme.textPrimary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: 360)
             if let message {
                 Text(message)
                     .font(Typography.caption)
-                    .foregroundColor(theme.textSecondary)
+                    .foregroundColor(tone == .failure ? theme.textPrimary : theme.textSecondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: 360)
@@ -123,9 +148,7 @@ struct EmptyState<Actions: View>: View {
 
     private var inline: some View {
         HStack(spacing: Spacing.s) {
-            Image(systemName: symbol)
-                .font(Glyph.block)
-                .foregroundColor(theme.textTertiary)
+            glyph(font: Glyph.block, height: 18)
             VStack(alignment: .leading, spacing: Spacing.xxs) {
                 Text(title)
                     .font(Typography.headline)
@@ -133,18 +156,104 @@ struct EmptyState<Actions: View>: View {
                 if let message {
                     Text(message)
                         .font(Typography.caption)
-                        .foregroundColor(theme.textSecondary)
+                        .foregroundColor(tone == .failure ? theme.textPrimary : theme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
             Spacer(minLength: 0)
         }
     }
+
+    @ViewBuilder
+    private func glyph(font: Font, height: CGFloat) -> some View {
+        if tone == .loading {
+            // A spinner has no intrinsic size comparable to a glyph, so the row
+            // height is pinned to what the icon would have taken. Approximate
+            // on purpose — a spinner that changes row height on appear is worse
+            // than one a point or two off centre.
+            ProgressView()
+                .controlSize(.small)
+                .scaleEffect(0.8)
+                .frame(height: height)
+        } else {
+            Image(systemName: symbol)
+                .font(font)
+                .foregroundColor(tint)
+        }
+    }
 }
 
 extension EmptyState where Actions == EmptyView {
-    init(symbol: String, title: String, message: String? = nil, layout: Layout = .stacked) {
-        self.init(symbol: symbol, title: title, message: message, layout: layout) { EmptyView() }
+    init(symbol: String, title: String, message: String? = nil,
+         layout: Layout = .stacked, tone: Tone = .neutral) {
+        self.init(symbol: symbol, title: title, message: message,
+                  layout: layout, tone: tone) { EmptyView() }
+    }
+}
+
+/// Failure state with one recovery button — the shape every "we could not
+/// read X" in the app should have.
+///
+/// `reason` is required on purpose. A failure that says only "失败" is exactly
+/// what this tone exists to prevent, so there is no initialiser that lets you
+/// omit it. The button takes its own title because the recovery is sometimes
+/// "重试" and sometimes "安装" (a write failed because the privileged helper is
+/// missing — retrying will not help).
+struct RetryState: View {
+    private var theme: Theme { Theme.current }
+
+    let symbol: String
+    let title: String
+    /// Why it failed. Never "失败" on its own.
+    let reason: String
+    var layout: EmptyState<EmptyView>.Layout = .stacked
+    /// Button text. Defaults to 重试; pass 安装 when the fix is installing.
+    var actionTitle: String? = nil
+    let retry: () -> Void
+
+    var body: some View {
+        switch layout {
+        case .stacked:
+            VStack(spacing: Spacing.m) {
+                RetryStateContent(symbol: symbol, title: title, reason: reason,
+                                  layout: .stacked)
+                actionButton
+            }
+        case .inline:
+            // Inline rows set their own height from a sibling, so stacking the
+            // button underneath would stretch the row. `EmptyState.inline`
+            // already ends in a Spacer, so the button lands at the right edge.
+            HStack(spacing: Spacing.s) {
+                RetryStateContent(symbol: symbol, title: title, reason: reason,
+                                  layout: .inline)
+                actionButton
+            }
+        }
+    }
+
+    private var actionButton: some View {
+        Button(action: retry) {
+            Text(actionTitle ?? t("重试"))
+                .font(Typography.label)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 5)
+                .background(Capsule().fill(theme.accent))
+                .foregroundColor(.white)
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// The icon/title/reason half of `RetryState`, split so the button can sit at
+/// a fixed distance below it in both layouts.
+private struct RetryStateContent: View {
+    let symbol: String
+    let title: String
+    let reason: String
+    let layout: EmptyState<EmptyView>.Layout
+
+    var body: some View {
+        EmptyState(symbol: symbol, title: title, message: reason, layout: layout, tone: .failure)
     }
 }
 

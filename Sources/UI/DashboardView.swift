@@ -10,6 +10,31 @@ struct DashboardView: View {
 
     var body: some View {
         PageScaffold(title: Panel.dashboard.title, symbol: Panel.dashboard.symbol) {
+            if state.snapshot.isPresent {
+                batteryContent
+            } else {
+                noBatteryContent
+            }
+        }
+    }
+
+    /// A desktop has no battery keys at all, so every figure below reads 0 —
+    /// 0 %, 0 mAh, 0 cycles — which looks like a dead pack rather than a
+    /// machine that never had one. The power-flow card still has data, so it
+    /// stays; the battery cards are replaced by one sentence that says why.
+    @ViewBuilder
+    private var noBatteryContent: some View {
+        Card {
+            EmptyState(symbol: "desktopcomputer",
+                       title: t("这台 Mac 没有电池"),
+                       message: t("仪表板上的电量、健康度与充电控制都依赖电池的 SMC 键，台式机没有这些键。风扇、温度与功耗照常可用。"))
+        }
+        PowerFlowCard(state: state)
+            .frame(height: 224)
+    }
+
+    @ViewBuilder
+    private var batteryContent: some View {
             PowerFlowCard(state: state)
                 .frame(height: 224)
             // No fixed height here: "电池规格" needs more than 172 pt for its
@@ -66,7 +91,6 @@ struct DashboardView: View {
                 highUsageCard
                 calibrationCard
             }
-        }
     }
 
     // MARK: - Specs

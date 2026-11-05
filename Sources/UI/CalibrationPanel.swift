@@ -45,7 +45,7 @@ struct CalibrationPanel: View {
                         Text(t("中断期间无法测量。继续将从预充重新测量，不拼接旧积分；不会自动启动放电。"))
                             .font(Typography.caption)
                         if let error = engine.recoveryError {
-                            Text(error).foregroundColor(theme.chartOrange)
+                            Text(error).foregroundColor(theme.danger)
                         }
                         HStack {
                             Button(t("继续（重新测量）")) { _ = engine.restartInterruptedSession() }
@@ -1387,7 +1387,7 @@ private struct CalibrationLogView: View {
             if let error = exportError.value {
                 Text(error)
                     .font(Typography.caption)
-                    .foregroundColor(.red)
+                    .foregroundColor(theme.danger)
                     .padding(.horizontal, 14)
                     .padding(.bottom, 10)
             }

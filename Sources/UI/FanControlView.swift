@@ -25,6 +25,17 @@ struct FanControlPage: View {
                             .frame(maxWidth: .infinity)
                     }
                 }
+            } else if !controller.hasReadOnce {
+                // The first SMC read happens on the next runloop, so the very
+                // first frame has no fans. Saying "此机型没有风扇" then was a
+                // false alarm on every launch.
+                Card {
+                    EmptyState(symbol: "wind",
+                               title: t("正在读取风扇…"),
+                               message: t("首次读取 SMC 需要一拍。"),
+                               layout: .inline,
+                               tone: .loading)
+                }
             } else {
                 noFanCard
             }
@@ -44,9 +55,15 @@ struct FanControlPage: View {
             }
 
             if let error = controller.lastError {
-                Text(error)
-                    .font(Typography.caption)
-                    .foregroundColor(theme.danger)
+                // Was a bare red sentence with no way out. A failed SMC write
+                // is exactly the case where the user needs a retry and a
+                // reason, not just the fact.
+                Card {
+                    RetryState(symbol: "exclamationmark.triangle",
+                               title: t("风扇控制未生效"),
+                               reason: error,
+                               layout: .inline) { controller.refresh() }
+                }
             }
         }
         .onAppear { controller.beginMonitoring() }
@@ -78,24 +95,11 @@ struct FanControlPage: View {
 
     private var helperNotice: some View {
         Card(padding: .compact) {
-            HStack(spacing: Spacing.s) {
-                Image(systemName: "lock.shield")
-                    .font(Glyph.row)
-                    .foregroundColor(theme.textSecondary)
-                Text(t("调整风扇需要特权助手（写入 SMC 必须 root）"))
-                    .font(Typography.caption)
-                    .foregroundColor(theme.textSecondary)
-                Spacer()
-                Button { state.installHelper() } label: {
-                    Text(t("安装"))
-                        .font(Typography.label)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(Capsule().fill(theme.accent))
-                        .foregroundColor(.white)
-                }
-                .buttonStyle(.plain)
-            }
+            RetryState(symbol: "lock.shield",
+                       title: t("调整风扇需要特权助手"),
+                       reason: t("写入 SMC 必须 root。安装后在「系统设置 → 隐私与安全性」里批准即可。"),
+                       layout: .inline,
+                       actionTitle: t("安装")) { state.installHelper() }
         }
     }
 
@@ -110,10 +114,19 @@ struct FanControlPage: View {
                         .foregroundColor(theme.textTertiary)
                 }
 
-                if controller.sensors.isEmpty {
-                    Text(t("未读到温度传感器"))
-                        .font(Typography.caption)
-                        .foregroundColor(theme.textSecondary)
+                if controller.sensors.isEmpty && !controller.hasReadOnce {
+                    EmptyState(symbol: "thermometer.medium",
+                               title: t("正在读取温度…"),
+                               layout: .inline,
+                               tone: .loading)
+                } else if controller.sensors.isEmpty {
+                    // "未读到温度传感器" alone left the user guessing whether the
+                    // machine has none or the read failed. Say which, and let
+                    // them try again.
+                    RetryState(symbol: "thermometer.slash",
+                               title: t("未读到温度传感器"),
+                               reason: t("SMC 没有返回温度键的读数。Intel Mac 通常需要特权助手才能读到。"),
+                               layout: .inline) { controller.refresh() }
                 } else {
                     VStack(alignment: .leading, spacing: Spacing.s) {
                         ForEach(controller.sensors) { sensor in

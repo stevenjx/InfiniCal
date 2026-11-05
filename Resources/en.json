@@ -880,5 +880,19 @@
  "差异": "Delta",
  "温度上限": "Temperature cap",
  "当前 {p}": "Now {p}",
- "→ 将航海至 {p}%": "→ sails down to {p}%"
+ "→ 将航海至 {p}%": "→ sails down to {p}%",
+ "重试": "Retry",
+ "正在读取风扇…": "Reading fans…",
+ "首次读取 SMC 需要一拍。": "The first SMC read takes one runloop tick.",
+ "正在读取温度…": "Reading temperatures…",
+ "风扇控制未生效": "Fan control did not take effect",
+ "调整风扇需要特权助手": "Adjusting fans needs the privileged helper",
+ "写入 SMC 必须 root。安装后在「系统设置 → 隐私与安全性」里批准即可。": "Writing to the SMC requires root. After installing, approve it in System Settings → Privacy & Security.",
+ "SMC 没有返回温度键的读数。Intel Mac 通常需要特权助手才能读到。": "The SMC returned no temperature keys. Intel Macs usually need the privileged helper to read them.",
+ "写入 SMC 需要特权助手": "Writing to the SMC needs the privileged helper",
+ "当前策略：{p}。安装助手后由它代为写入，本 App 不需要 root。": "Current strategy: {p}. Once the helper is installed it does the writing, so this app needs no root.",
+ "这台 Mac 没有电池": "This Mac has no battery",
+ "仪表板上的电量、健康度与充电控制都依赖电池的 SMC 键，台式机没有这些键。风扇、温度与功耗照常可用。": "Charge level, health and charge control on the dashboard all read battery SMC keys that desktops do not have. Fans, temperatures and power draw still work.",
+ "规则导入失败": "Rule import failed",
+ "重新导入": "Import again"
 }

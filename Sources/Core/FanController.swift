@@ -79,6 +79,9 @@ final class FanController: ObservableObject {
     @Published private(set) var fans: [FanInfo] = []
     @Published private(set) var sensors: [ThermalReading] = []
     @Published private(set) var lastError: String?
+    /// False until the first SMC read completes. The view uses it to tell
+    /// "not read yet" apart from "this machine really has no fans".
+    @Published private(set) var hasReadOnce = false
 
     /// Per-fan mode chosen in the UI.
     @Published var modes: [Int: FanMode] = [:] {
@@ -243,6 +246,11 @@ final class FanController: ObservableObject {
 
         let thermal = readSensors()
         if thermal != sensors { sensors = thermal }
+
+        // `beginMonitoring` reads on the next runloop, so the first frame has
+        // empty arrays. Without this flag the fan page reported "此机型没有风扇"
+        // for one frame and then showed the fans — a false alarm.
+        if !hasReadOnce { hasReadOnce = true }
 
         // Seed UI state from the hardware on first sight so the panel never shows
         // a made-up default.
