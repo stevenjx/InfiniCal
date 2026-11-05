@@ -91,6 +91,15 @@ struct RootView: View {
         }
         .frame(width: 240)
         .background(theme.sidebarBackground)
+        // The sidebar is 0.005 lighter than the window in light mode — 1.04:1,
+        // which is no boundary at all. Deepening the fill cannot fix it without
+        // turning the sidebar grey, so draw the edge instead: one hairline is
+        // what macOS sidebars use and it survives both appearances.
+        .overlay(alignment: .trailing) {
+            Rectangle()
+                .fill(theme.cardStroke)
+                .frame(width: 1)
+        }
     }
 
     /// Company, author, then version and the update entry on a line of their

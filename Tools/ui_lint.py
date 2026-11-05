@@ -14,6 +14,19 @@ Rules
   literal-color  Color(red:)               → Theme.*
   literal-radius cornerRadius: <number>    → Radius.*
   card-padding   Card(padding: <number>)   → .regular / .compact
+  chart-as-text  chart* fed to text         → success/warning/danger/info
+
+Why `chart-as-text` is a rule of its own
+  The chart series colours are one fixed value shared by both appearances. As
+  text on a white card they measure 2.16–3.66:1 — below WCAG AA — and dark
+  purple is 3.92:1. They belong in dots, lines and fills. This rule is the
+  call-site half of that policy; `contrast_check.py` enforces the colour half.
+
+  The pattern covers `foregroundColor(theme.chartX)` and the ternary form
+  `foregroundColor(cond ? a : theme.chartX)` — the second one is how the fan
+  page's temperature figure kept a blue number after the first pass. It
+  deliberately does *not* match `tint:`: that argument colours an icon in
+  `CardHeader` and a figure elsewhere, and a regex cannot tell which.
 
 Usage
   python3 Tools/ui_lint.py                 # check against the baseline
@@ -43,6 +56,19 @@ RULES = {
     "literal-color": re.compile(r"Color\(red:"),
     "literal-radius": re.compile(r"cornerRadius:\s*[0-9]"),
     "card-padding": re.compile(r"Card\(padding:\s*[0-9]"),
+    # Two shapes only, and both are unambiguous:
+    #   .foregroundColor(theme.chartX)
+    #   .foregroundColor(cond ? a : theme.chartX)
+    # A wider pattern was tried and reverted: matching `tint:` swept up every
+    # `CardHeader(tint:)`, which colours the icon only and is legal. Whether a
+    # `tint:` argument ends up on text depends on the receiving component's
+    # implementation, and a regex cannot know that — so it would have raised 20
+    # false positives. The `tint:` cases were fixed by hand instead, and the
+    # `chart-as-text` *colour* audit in contrast_check.py still guards them:
+    # if one comes back, the call-site that reintroduces it will almost
+    # certainly be a foregroundColor.
+    "chart-as-text": re.compile(
+        r"foregroundColor\([^)]*theme\.chart(?:Green|Blue|Purple|Orange)"),
 }
 
 HINTS = {
@@ -50,6 +76,7 @@ HINTS = {
     "literal-color": "use Theme.success/warning/danger/info or a chart colour",
     "literal-radius": "use Radius.chip/control/card/sheet",
     "card-padding": "use Card(padding: .regular) or .compact",
+    "chart-as-text": "series colours are for dots/lines/fills; text uses success/warning/danger/info",
 }
 
 

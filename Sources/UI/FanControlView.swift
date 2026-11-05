@@ -72,16 +72,21 @@ struct FanControlPage: View {
 
     private var statusPill: some View {
         let manual = controller.isAnyManual || controller.curveEnabled
+        // Was `chartOrange`/`chartGreen` on a 12 % tint of themselves. Both are
+        // series colours (2.16:1 and 3.31:1 on a white card), and the tinted
+        // capsule behind them lowers the effective contrast further. A status
+        // label is text, so it gets the semantic pair.
+        let ink = manual ? theme.warning : theme.success
         return HStack(spacing: Spacing.xs) {
             Image(systemName: manual ? "hand.raised.fill" : "gearshape.2.fill")
                 .font(Glyph.inline.weight(.bold))
             Text(manual ? t("手动控制") : t("系统自动"))
                 .font(Typography.label)
         }
-        .foregroundColor(manual ? theme.chartOrange : theme.chartGreen)
+        .foregroundColor(ink)
         .padding(.horizontal, 9)
         .padding(.vertical, 4)
-        .background(Capsule().fill((manual ? theme.chartOrange : theme.chartGreen).opacity(theme.isDark ? 0.18 : 0.12)))
+        .background(Capsule().fill(ink.opacity(theme.isDark ? 0.18 : 0.12)))
     }
 
     private var noFanCard: some View {
@@ -177,8 +182,14 @@ struct FanControlPage: View {
 
     private func temperatureRow(_ sensor: ThermalReading) -> some View {
         let fraction = min(1, max(0, (sensor.celsius - 20) / 80))
-        let tint: Color = sensor.celsius >= 90 ? theme.danger
+        // Two colours, deliberately. The bar's colour carries "how hot", so it
+        // keeps the series/warning/danger ladder. The figure is text, and text
+        // does not get a series colour: `chartBlue` measured 3.27:1 on a white
+        // card, and below the warning line there is no state to express anyway.
+        let barTint: Color = sensor.celsius >= 90 ? theme.danger
             : (sensor.celsius >= 75 ? theme.warning : theme.chartBlue)
+        let figureTint: Color = sensor.celsius >= 90 ? theme.danger
+            : (sensor.celsius >= 75 ? theme.warning : theme.textPrimary)
         return VStack(alignment: .leading, spacing: Spacing.xs) {
             HStack(alignment: .firstTextBaseline, spacing: Spacing.xs) {
                 Text(sensor.name)
@@ -191,7 +202,7 @@ struct FanControlPage: View {
                 Spacer(minLength: Spacing.xs)
                 Text(String(format: "%.1f", sensor.celsius))
                     .font(Typography.headline.monospacedDigit())
-                    .foregroundColor(tint)
+                    .foregroundColor(figureTint)
                     .numericTextTransition()
                 Text("°C")
                     .font(Typography.micro)
@@ -200,7 +211,7 @@ struct FanControlPage: View {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(theme.innerControl)
-                    Capsule().fill(tint.opacity(0.75))
+                    Capsule().fill(barTint.opacity(0.75))
                         .frame(width: max(3, geo.size.width * fraction))
                 }
             }
@@ -282,7 +293,10 @@ struct FanControlPage: View {
                 // not change the card's height.
                 Text(curveFooter)
                     .font(Typography.caption)
-                    .foregroundColor(enabled ? theme.chartPurple : theme.textTertiary)
+                    // `chartPurple` on text was 3.65:1 on a white card. On/off
+                    // is already carried by the toggle beside it, so the
+                    // caption only has to stay readable.
+                    .foregroundColor(enabled ? theme.textSecondary : theme.textTertiary)
                     .lineLimit(1)
             }
         }

@@ -305,12 +305,12 @@ struct MenuBarPanel: View {
             Text(tf("采样时间：{p}", state.snapshot.timestamp.formatted(date: .omitted, time: .standard)))
                 .font(Typography.caption).foregroundColor(theme.textSecondary)
             if !state.statusNote.isEmpty {
-                Text(state.statusNote).font(Typography.caption).foregroundColor(theme.chartOrange)
+                Text(state.statusNote).font(Typography.caption).foregroundColor(theme.warning)
                     .fixedSize(horizontal: false, vertical: true)
             }
             if !alerts.events.isEmpty {
                 Text(tf("异常记录：{p}（历史页查看）", "\(alerts.events.count)"))
-                    .font(Typography.caption).foregroundColor(theme.chartOrange)
+                    .font(Typography.caption).foregroundColor(theme.warning)
             }
         }
         .padding(10)

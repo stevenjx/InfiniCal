@@ -64,7 +64,7 @@ struct CalibrationPanel: View {
                 Card(padding: .compact) {
                     Text(issue)
                         .font(Typography.caption)
-                        .foregroundColor(theme.chartOrange)
+                        .foregroundColor(theme.danger)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -160,7 +160,7 @@ struct CalibrationPanel: View {
                 HStack(spacing: 9) {
                     Image(systemName: "powerplug.fill")
                         .font(Glyph.row.weight(.semibold))
-                        .foregroundColor(theme.chartOrange)
+                        .foregroundColor(theme.warning)
                     Text(t("放电指令已下发，但 60 秒内仍未测到放电电流。放电指令保持生效，也可以拔掉电源适配器让它立即开始。"))
                         .font(Typography.caption)
                         .foregroundColor(theme.textPrimary)
@@ -317,6 +317,13 @@ struct CalibrationPanel: View {
                             valueFont: Font = Typography.headline) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 4) {
+                // The tint marks *which* reading this is. It used to colour the
+                // figure itself, which put a series colour on text: 2.16–3.92:1
+                // on a white card, below AA. A dot carries the same identity at
+                // a size where contrast rules do not apply.
+                Circle()
+                    .fill(tint)
+                    .frame(width: 5, height: 5)
                 Image(systemName: symbol)
                     .font(Glyph.inline.weight(.semibold))
                     .foregroundColor(theme.textTertiary)
@@ -328,7 +335,9 @@ struct CalibrationPanel: View {
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(value)
                     .font(valueFont)
-                    .foregroundColor(tint)
+                    // Was `tint`. A figure is the most-read text in the tile, so
+                    // it gets the primary colour and the dot does the coding.
+                    .foregroundColor(theme.textPrimary)
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
@@ -564,7 +573,7 @@ struct CalibrationPanel: View {
                 if let badge {
                     Text(badge)
                         .font(Typography.micro.weight(.semibold))
-                        .foregroundColor(theme.chartPurple)
+                        .foregroundColor(theme.info)
                         .padding(.leading, 4)
                 }
             }
@@ -582,7 +591,9 @@ struct CalibrationPanel: View {
             HStack(spacing: 5) {
                 Image(systemName: trend.isAccelerating ? "arrow.down.right" : "arrow.down.forward")
                     .font(Glyph.inline.weight(.bold))
-                    .foregroundColor(trend.isAccelerating ? theme.chartOrange : theme.textTertiary)
+                    // Accelerating degradation is the one case that needs
+                    // attention; a series colour there was 2.16:1 on white.
+                    .foregroundColor(trend.isAccelerating ? theme.warning : theme.textTertiary)
                 Text(tf("衰减 {p} ± {p} %/100 次循环 · {p} 个样本",
                         String(format: "%.2f", trend.slopePer100Cycles),
                         String(format: "%.2f", trend.slopeMargin),
@@ -966,7 +977,7 @@ struct CalibrationPanel: View {
                     Image(systemName: "bolt.horizontal.circle.fill").font(Glyph.inline.weight(.bold))
                     Text(t("GPU 加压中")).font(Typography.micro)
                 }
-                .foregroundColor(theme.chartOrange)
+                .foregroundColor(theme.warning)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3.5)
                 .background(Capsule().fill(theme.chartOrange.opacity(0.14)))
@@ -1068,13 +1079,16 @@ private struct CalibrationScopeCard: View {
                             .foregroundColor(theme.textSecondary)
                         Text("\(String(format: "%.1f", selected[keyPath: keyPath])) \(unit)")
                             .font(Typography.micro.weight(.semibold).monospaced())
-                            .foregroundColor(tint)
+                            .foregroundColor(theme.textPrimary)
                     }
                 } else {
                     HStack(alignment: .firstTextBaseline, spacing: 2) {
                         Text(badge)
                             .font(Typography.label.weight(.bold).monospaced())
-                            .foregroundColor(tint)
+                            // Was `tint`: a series colour as text. The capsule
+                            // behind it is already tinted, so the colour coding
+                            // survives without pushing the figure below AA.
+                            .foregroundColor(theme.textPrimary)
                         Text(badgeUnit)
                             .font(Typography.micro)
                             .foregroundColor(theme.textSecondary)

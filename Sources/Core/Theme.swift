@@ -17,15 +17,22 @@ struct Theme {
     var card: Color { isDark ? Color(red: 0.165, green: 0.165, blue: 0.172) : Color.white }
     var cardElevated: Color { isDark ? Color(red: 0.20, green: 0.20, blue: 0.208) : Color.white }
     var innerControl: Color { isDark ? Color(red: 0.235, green: 0.235, blue: 0.245) : Color(red: 0.906, green: 0.906, blue: 0.918) }
-    var cardStroke: Color { isDark ? Color.white.opacity(0.075) : Color.black.opacity(0.095) }
-    /// Cards are separated from the window by a hairline in dark mode and by a
-    /// shadow in light mode — never both. A hairline on white is invisible; a
-    /// shadow on a dark surface reads as smudge rather than depth. `Card` reads
-    /// these four values and nothing else decides elevation.
-    var cardStrokeWidth: CGFloat { isDark ? 1 : 0 }
-    var cardShadow: Color { isDark ? Color.black.opacity(0) : Color.black.opacity(0.07) }
-    var cardShadowRadius: CGFloat { isDark ? 0 : 6 }
-    var cardShadowY: CGFloat { isDark ? 0 : 2 }
+    var cardStroke: Color { isDark ? Color.white.opacity(0.075) : Color.black.opacity(0.12) }
+    /// Light mode used to rely on a shadow alone. Measured, a white card on the
+    /// 0.96 window is 1.09:1 and the 7 % shadow only faked an edge — the card
+    /// boundary was invisible. It now gets a hairline *and* a shadow: the
+    /// hairline draws the edge, the shadow adds depth.
+    ///
+    /// Why not 3:1 (WCAG 1.4.11): that ratio targets controls the user must
+    /// operate, and no white card on a light-grey field can reach it — the
+    /// window would have to drop to ~0.70 grey, which turns a light UI into a
+    /// mid-grey one. macOS panels separate by ~1.1:1 the same way. The hairline
+    /// at 12 % measures 1.32:1 against the card, which is what makes the edge
+    /// visible in a screenshot instead of theoretical.
+    var cardStrokeWidth: CGFloat { isDark ? 1 : 1 }
+    var cardShadow: Color { isDark ? Color.black.opacity(0) : Color.black.opacity(0.055) }
+    var cardShadowRadius: CGFloat { isDark ? 0 : 5 }
+    var cardShadowY: CGFloat { isDark ? 0 : 1 }
     var divider: Color { isDark ? Color.white.opacity(0.07) : Color.black.opacity(0.105) }
     /// Outlines a control, not a container: heavier than `cardStroke` so a
     /// button reads as something you can press rather than as a faint edge.
@@ -87,10 +94,19 @@ struct Theme {
     var flowUSB: Color { isDark ? Color(red: 0.60, green: 0.60, blue: 0.65) : Color(red: 0.353, green: 0.353, blue: 0.388) }
     var flowOther: Color { isDark ? Color(red: 0.30, green: 0.68, blue: 0.60) : Color(red: 0.102, green: 0.420, blue: 0.369) }
 
-    var chartGreen: Color { Color(red: 0.29, green: 0.62, blue: 0.36) }
-    var chartBlue: Color { Color(red: 0.25, green: 0.55, blue: 1.0) }
-    var chartPurple: Color { Color(red: 0.60, green: 0.42, blue: 0.95) }
-    var chartOrange: Color { Color(red: 0.95, green: 0.62, blue: 0.20) }
+    /// Chart series colours: dots, lines and fills only. They were one fixed
+    /// value shared by both appearances, which put the light appearance at
+    /// 2.16:1 (orange) on white — a line you cannot see. The light halves are
+    /// the same hues pushed dark enough to clear 3:1 against `card`, the
+    /// threshold WCAG 1.4.11 applies to graphical objects.
+    ///
+    /// Text never uses these; `success`/`warning`/`danger`/`info` carry meaning
+    /// in words. `Tools/contrast_check.py` derives its chart-as-text rows from
+    /// the call sites, so reintroducing one fails the gate.
+    var chartGreen: Color { isDark ? Color(red: 0.29, green: 0.62, blue: 0.36) : Color(red: 0.13, green: 0.45, blue: 0.20) }
+    var chartBlue: Color { isDark ? Color(red: 0.25, green: 0.55, blue: 1.0) : Color(red: 0.10, green: 0.36, blue: 0.78) }
+    var chartPurple: Color { isDark ? Color(red: 0.60, green: 0.42, blue: 0.95) : Color(red: 0.42, green: 0.24, blue: 0.72) }
+    var chartOrange: Color { isDark ? Color(red: 0.95, green: 0.62, blue: 0.20) : Color(red: 0.72, green: 0.42, blue: 0.00) }
 }
 
 /// Small observable flag used instead of @State (unavailable without the

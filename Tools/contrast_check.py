@@ -16,6 +16,15 @@ Thresholds
   whole text ladder several steps darker, and almost no tertiary text sits
   there.
 
+Why the chart series are audited too
+  `chartGreen/Blue/Purple/Orange` are one fixed value shared by both
+  appearances, and they were used as *text* colour in 19 places (tile figures,
+  calibration error lines, the menu bar status). On a white card they measure
+  2.16–3.66:1, all below AA. The rule going forward is: series colours live in
+  dots, lines and fills; text uses `success`/`warning`/`danger`/`info`.
+  Auditing them here is what makes that rule verifiable instead of a promise —
+  and it is what `ui_lint`'s `chart-as-text` ratchet points at.
+
 Usage
   python3 Tools/contrast_check.py          # table, exit 1 on failure
   python3 Tools/contrast_check.py --all    # include the informational rows
@@ -35,6 +44,25 @@ TEXT_TOKENS = ["textPrimary", "textSecondary", "textTertiary", "success", "warni
 SURFACES = ["card", "windowBackground"]
 INFO_SURFACE = "innerControl"
 SERIES = ["flowAdapter", "flowSystem", "flowBattery", "flowSoC", "flowUSB", "flowOther"]
+
+# Chart series colours. They are legal in dots, lines, fills and badge
+# backgrounds; as *text* they are not, which is what the rows below enforce.
+# The list is derived from the call sites rather than declared by hand: a token
+# still used as `foregroundColor(theme.chart*)` is audited and must clear AA; a
+# token with no such call site has nothing to audit. That way fixing the last
+# call site clears the row, and adding a new one brings it back — the audit
+# tracks the code, not a list someone forgets to update.
+UI_DIR = ROOT / "Sources/UI"
+
+
+def chart_as_text_tokens():
+    """Series tokens still used directly as a text colour in Sources/UI."""
+    pattern = re.compile(
+        r"foregroundColor\(theme\.(chart(?:Green|Blue|Purple|Orange))\)")
+    live = set()
+    for path in UI_DIR.glob("*.swift"):
+        live.update(pattern.findall(path.read_text()))
+    return sorted(live)
 
 RGB = re.compile(r"Color\(red:\s*([\d.]+),\s*green:\s*([\d.]+),\s*blue:\s*([\d.]+)\)")
 INK = re.compile(r"Color\.(white|black)\.opacity\(([\d.]+)\)")
@@ -124,6 +152,15 @@ def main():
             rows.append((mode, token, "card", r, False))
             if r < AA:
                 failures.append((mode, token, "card", r))
+
+        for token in chart_as_text_tokens():
+            if token not in palette:
+                continue
+            bg = palette["card"][index]
+            r = ratio(over(palette[token][index], bg), bg)
+            rows.append((mode, token, "card (as text)", r, True))
+            if r < AA:
+                failures.append((mode, token, "card (as text)", r))
 
     print(f"{'mode':5} {'token':16} {'on':17} {'ratio':>6}  ")
     for mode, token, surface, r, enforced in rows:
