@@ -176,11 +176,16 @@ extension View {
     /// `theme.focusRing`, which was declared for U2-03 and until now had no
     /// user at all.
     ///
-    /// `.focusable()` is required: without it a plain-styled button is not in
-    /// the key-view loop on macOS and would never report focus.
+    /// `.focusable()` is required for `.buttonStyle(.plain)` buttons: plain
+    /// style takes the button out of the key-view loop, so without it the ring
+    /// has nothing to react to. It must be off for controls that are already
+    /// focusable (a native `Toggle`), or they get a second, competing tab stop.
     func focusRing(_ shape: some InsettableShape = RoundedRectangle(cornerRadius: Radius.control, style: .continuous),
-                   inset: CGFloat = 1) -> some View {
-        modifier(FocusRing(shape: AnyInsettableShape(shape), inset: inset))
+                   inset: CGFloat = 1,
+                   focusable: Bool = false,
+                   onActivate: (() -> Void)? = nil) -> some View {
+        modifier(FocusRing(shape: AnyInsettableShape(shape), inset: inset,
+                           focusable: focusable, onActivate: onActivate))
     }
 }
 
@@ -201,16 +206,18 @@ private struct FocusRing: ViewModifier {
     private var theme: Theme { Theme.current }
     let shape: AnyInsettableShape
     let inset: CGFloat
+    let focusable: Bool
+    var onActivate: (() -> Void)? = nil
     @FocusState private var focused: Bool
 
     func body(content: Content) -> some View {
         content
-            // No `.focusable()` here. Adding it made every ring-bearing view a
-            // tab stop of its own, which on a custom-styled Button created a
-            // second, competing stop — tabbing cycled through the 9 sidebar rows
-            // and never reached the page. The controls that need this modifier
-            // are already focusable (Button, Toggle); the modifier only draws.
+            .modifier(MaybeFocusable(on: focusable))
             .focused($focused)
+            // Attached here, next to `.focused`, so the key handler sits on the
+            // view that actually holds focus. Applying it outside `focusRing`
+            // put it above the focusable wrapper and Space never arrived.
+            .modifier(ActivationKey(command: onActivate))
             .overlay {
                 if focused {
                     shape
@@ -219,6 +226,37 @@ private struct FocusRing: ViewModifier {
                         .allowsHitTesting(false)
                 }
             }
+    }
+}
+
+/// Space activates the focused control.
+///
+/// `.focusable()` is what puts a plain-styled Button into the Tab order here,
+/// but the focusable wrapper it installs takes the key before the Button's own
+/// activation does — measured: the ring moved, Space did nothing. macOS 14+.
+private struct ActivationKey: ViewModifier {
+    let command: (() -> Void)?
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let command, #available(macOS 14, *) {
+            content.onKeyPress(.space) {
+                command()
+                return .handled
+            }
+        } else {
+            content
+        }
+    }
+}
+
+/// Conditional `.focusable()`. A plain-styled Button needs it to enter the
+/// key-view loop; a native Toggle already is one and must not be wrapped again,
+/// or it gets two tab stops.
+private struct MaybeFocusable: ViewModifier {
+    let on: Bool
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if on { content.focusable() } else { content }
     }
 }
 
@@ -386,28 +424,46 @@ struct ToggleRow: View {
     var disabled = false
 
     var body: some View {
-        HStack(spacing: Spacing.s) {
-            IconBadge(symbol: symbol)
-            Text(title)
-                .font(Typography.headline)
-                .foregroundColor(disabled ? theme.textTertiary : theme.textPrimary)
-            if let help { HelpDot(text: help) }
-            Spacer(minLength: 8)
-            Toggle("", isOn: $isOn)
-                .labelsHidden()
-                .toggleStyle(.switch)
-                .tint(theme.accent)
-                .disabled(disabled)
-                .scaleEffect(0.82)
-                .frame(width: 42, height: 22)
+        // The row is the control, not the 22 pt switch at its right edge.
+        //
+        // Two reasons. First, keyboard: a Button is the one control whose
+        // activation key (Space) is wired by SwiftUI itself, while a Toggle
+        // wrapped in `.focusable()` takes focus but then never receives the
+        // key — I measured exactly that, the ring appeared and Space did
+        // nothing. Second, hit target: clicking the label to flip a switch is
+        // what people expect from a settings row.
+        //
+        // The switch is now an indicator (`allowsHitTesting(false)`) so the
+        // Button owns both the click and the keyboard.
+        Button {
+            guard !disabled else { return }
+            isOn.toggle()
+        } label: {
+            HStack(spacing: Spacing.s) {
+                IconBadge(symbol: symbol)
+                Text(title)
+                    .font(Typography.headline)
+                    .foregroundColor(disabled ? theme.textTertiary : theme.textPrimary)
+                if let help { HelpDot(text: help) }
+                Spacer(minLength: 8)
+                Toggle("", isOn: $isOn)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .tint(theme.accent)
+                    .disabled(disabled)
+                    .scaleEffect(0.82)
+                    .frame(width: 42, height: 22)
+                    .allowsHitTesting(false)
+            }
+            .frame(height: 30)
+            .contentShape(Rectangle())
         }
-        .frame(height: 30)
-        // `labelsHidden()` leaves VoiceOver with an unlabelled switch, and the
-        // row title was not associated with it. The switch stays the focusable
-        // element (it is a native Toggle, so it is in the key-view loop);
-        // the ring is drawn on the row so it is findable.
-        .accessibilityElement(children: .contain)
+        .buttonStyle(.plain)
+        .focusRing(focusable: true) { if !disabled { isOn.toggle() } }
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(title)
+        .accessibilityValue(isOn ? "开" : "关")
+        .accessibilityAddTraits(.isButton)
     }
 }
 
@@ -514,6 +570,8 @@ struct ValueStepper: View {
             }
             .buttonStyle(.plain)
             .foregroundColor(theme.textSecondary)
+            .focusRing(focusable: true) { value = max(range.lowerBound, value - step) }
+            .accessibilityLabel(t("减少"))
 
             Text("\(value)")
                 .font(Typography.headline.monospacedDigit())
@@ -531,6 +589,8 @@ struct ValueStepper: View {
             }
             .buttonStyle(.plain)
             .foregroundColor(theme.textSecondary)
+            .focusRing(focusable: true) { value = min(range.upperBound, value + step) }
+            .accessibilityLabel(t("增加"))
 
             Text(suffix)
                 .font(Typography.caption)

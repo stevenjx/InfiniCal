@@ -909,5 +909,7 @@
  "「{p}」会从磁盘删除，不再执行，无法撤销。": "“{p}” is removed from disk and will no longer run. This cannot be undone.",
  "新建定时任务": "New scheduled task",
  "定时任务": "Scheduled tasks",
- "回落至 {p}%": "Settle to {p}%"
+ "回落至 {p}%": "Settle to {p}%",
+ "减少": "Decrease",
+ "增加": "Increase"
 }

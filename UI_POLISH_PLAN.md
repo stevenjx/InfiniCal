@@ -4,7 +4,7 @@
 >
 > **当前状态**：地基批 **U0 四项全部完成**，逐页批 **U1-01 – U1-09 全部完成**，U2-01 动效、U2-02 三态完成；
 > 已发布 v1.0.25（含 U0-03 / U0-04 / U1-02）、**v1.0.26**（含 U1-01 – U1-09、U2-01）与 **v1.0.27**（含 U2-02）。
-> U2-03 已做但未完成：焦点环只覆盖侧边栏，内容区进不了 Tab 循环（真因未查明），详见该条目。
+> **18 项全部完成。** 后续可继续的是各条目的「未覆盖」清单。
 > 每项的实现说明与「未覆盖」都写在该条目下面，
 > 末尾的进度总览与统计行随进度更新。
 >
@@ -834,7 +834,7 @@ EmptyState(symbol, title, message?, layout: .stacked | .inline, action?)
     改动前就是这样，与无电池分支无关；它属于 `PowerFlowView` 的绘制问题，不在本项范围。
   - `CalibrationPanel` 里 `回落至 {p}%` 仍未收录进 `en.json`（既有遗漏，与本项无关，原样保留）。
 
-#### U2-03 无障碍与键盘 — ⚠️ 部分完成（焦点环只覆盖侧边栏）
+#### U2-03 无障碍与键盘 — ✅ 已完成
 
 - **做法**：全部可交互元素加 `.accessibilityLabel`；焦点环用 `theme.focusRing`；补齐 Tab 顺序；所有图标按钮有 `.help()`。
 - **验收**：只用键盘能完成「改上限 → 开过热保护 → 开风扇自定义」；VoiceOver 能读出每张卡的标题与主数值。
@@ -851,22 +851,32 @@ EmptyState(symbol, title, message?, layout: .stacked | .inline, action?)
   原来一张图表卡被读成一串碎片（标题、数值、三个刻度、三个时间戳），现在一次读完。
 - `ToggleRow` 补 `accessibilityLabel(title)`（`Toggle("")` + `labelsHidden()` 让开关没有名称）。
 
-**未完成 —— 内容区控件进不了 Tab 循环**
+**内容区 Tab —— 已打通（第一轮曾误判为「真因未查明」）**
 
-计划验收「只用键盘完成改上限 → 开过热保护 → 开风扇自定义」**没有通过**。诊断过程：
+计划验收「只用键盘完成改上限 → 开过热保护 → 开风扇自定义」现在通过，实测证据在后。
 
-1. 按常规给 `FocusRing` 加 `.focusable()` → 更糟：Tab 只在侧边栏 9 项里循环，一次进不了内容区。
-2. 查 `defaults read -g AppleKeyboardUIMode` 未设置（默认 0，只有文本框/列表参与 Tab）。
-3. 把系统设置临时改成 3（全键盘导航）重测 → **仍然只有侧边栏**。所以不是系统设置的锅。
-4. 判断是 `.focusable()` 让自定义样式的 Button 变成独立 tab stop，与内容区形成两个竞争循环。
-5. 去掉 `.focusable()`、只保留 `@FocusState` 绘制 → 侧边栏仍显示焦点环，但内容区依然进不去。
+第一轮失败的原因是**漏了一个变量**：`.focusable()` 加在了 `FocusRing` 里，但当时只把
+`focusRing` 挂在侧边栏，内容区控件一个都没挂 —— 于是「内容区进不去」其实是「内容区没接过修饰符」，
+不是架构问题。第二轮把 `focusRing` 挂到 `ValueStepper` 与 `ToggleRow` 后，Tab 立刻进入内容区。
 
-**真因未查明。** 可能是 `content` 上 `.id(state.selectedPanel)` 每页重建影响了 focus scope，
-也可能是 SwiftUI 在 macOS 上对自定义 `ButtonStyle` + `.plain` 的 key-view 处理。
-没有继续硬凑：再往下要么用 `focusSection()` 全盘重构焦点体系，要么逐个控件
-`.focusable()` 加手工 Tab 顺序，是几天的活，没把握就不该草草做一半。
+真实困难出现在下一步：**焦点到了，空格没有反应**。逐步排除：
 
-试验期间改过系统全局 `AppleKeyboardUIMode`，已 `defaults delete` 还原为未设置。
+1. `postToPid` 投递不生效？→ 换 `.cghidEventTap` 系统级注入，依旧无反应。
+2. 应用不在前台？→ 查 `NSWorkspace.frontmostApplication`，确认是 InfiniCal。
+3. 空格被 `.focusable()` 包装层吞掉 → 加 `.onKeyPress(.space)`，**只要挂在 `focusRing` 外面就收不到**，
+   必须挂进 `FocusRing` 内部、紧挨 `@FocusState`，处理按键的视图才是持有焦点的那个。
+4. `Toggle` 自身接不到空格（`.labelsHidden()` + `.focusable()` 组合下）→ 把整行改成 `Button` 驱动，
+   `Toggle` 降为纯指示器（`allowsHitTesting(false)`）。Button 的激活键由 SwiftUI 自己接线。
+
+**实测证据**（截图逐帧比对）：
+- 焦点环从侧边栏进入内容区，落在「差异」的 `−` 上，再 Tab 到 `+`（步进器内部顺序正确）
+- 再 Tab 到开关行，环出现在开关上
+- 按空格：开关从蓝色「开」变灰色「关」，焦点环保持
+- 按空格于步进器：工具栏「充电限制」从 **80 → 85**，右侧「将航海至 80%」同步更新
+
+**副作用已还原**：这轮键盘测试真的改动了本机设置（`chargeVal` 80→85、
+`allowChargeLimitsBelow80` 1→0），已写回原值并重跑截图确认无污染。
+第一轮试验改过的系统全局 `AppleKeyboardUIMode` 也已 `defaults delete`。
 
 **未覆盖**
 
@@ -962,11 +972,11 @@ EmptyState(symbol, title, message?, layout: .stacked | .inline, action?)
 | U1-09 | 弹窗与浮层 | ✅ 完成 |
 | U2-01 | 动效与过渡 | ✅ 完成 |
 | U2-02 | 空态/加载/错误 | ✅ 完成 |
-| U2-03 | 无障碍与键盘 | ⚠️ 部分完成 |
+| U2-03 | 无障碍与键盘 | ✅ 完成 |
 | U2-04 | 浅色模式 | ✅ 完成 |
 | U2-05 | 视觉回归门禁 | ✅ 完成 |
 
-**统计：17 项完成 / 1 项部分完成（U2-03 内容区 Tab 未打通）/ 0 项未开始。**
+**统计：18 项全部完成。**
 
 ---
 
