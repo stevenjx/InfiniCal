@@ -4,7 +4,7 @@
 >
 > **当前状态**：地基批 **U0 四项全部完成**，逐页批 **U1-01 – U1-09 全部完成**，U2-01 动效、U2-02 三态完成；
 > 已发布 v1.0.25（含 U0-03 / U0-04 / U1-02）、**v1.0.26**（含 U1-01 – U1-09、U2-01）与 **v1.0.27**（含 U2-02）。
-> 下一步是 **U2-03 无障碍与键盘**。
+> U2-03 已做但未完成：焦点环只覆盖侧边栏，内容区进不了 Tab 循环（真因未查明），详见该条目。
 > 每项的实现说明与「未覆盖」都写在该条目下面，
 > 末尾的进度总览与统计行随进度更新。
 >
@@ -834,12 +834,48 @@ EmptyState(symbol, title, message?, layout: .stacked | .inline, action?)
     改动前就是这样，与无电池分支无关；它属于 `PowerFlowView` 的绘制问题，不在本项范围。
   - `CalibrationPanel` 里 `回落至 {p}%` 仍未收录进 `en.json`（既有遗漏，与本项无关，原样保留）。
 
-#### U2-03 无障碍与键盘 — ❌ 未开始
+#### U2-03 无障碍与键盘 — ⚠️ 部分完成（焦点环只覆盖侧边栏）
 
 - **做法**：全部可交互元素加 `.accessibilityLabel`；焦点环用 `theme.focusRing`；补齐 Tab 顺序；所有图标按钮有 `.help()`。
 - **验收**：只用键盘能完成「改上限 → 开过热保护 → 开风扇自定义」；VoiceOver 能读出每张卡的标题与主数值。
 
-#### U2-04 浅色模式专项 — ❌ 未开始
+**已完成**
+
+- 新增 `View.focusRing(_:inset:)`，用 `@FocusState` 画 2pt 描边。`theme.focusRing` 从 U0 就定义、
+  一直 0 个使用者，现在终于有了。
+- **实测验证**：用 `CGEvent.postToPid` 向应用发真实 Tab 键（本机 `AXIsProcessTrusted` 为 true），
+  侧边栏 9 个导航项可逐个走完，每项都显示蓝色圆角环，顺序正确。不是"应该能"，是截图证实的。
+- 补 4 处纯图标按钮的语义（这是全应用仅有的 4 处 label 里没有任何 `Text` 的）：
+  定时任务删除 / 新建、校准记录删除、侧边栏电源。之前 VoiceOver 只念得出符号名「trash」。
+- `MiniChart` 加 `.accessibilityElement(children: .ignore)` + label + value，
+  原来一张图表卡被读成一串碎片（标题、数值、三个刻度、三个时间戳），现在一次读完。
+- `ToggleRow` 补 `accessibilityLabel(title)`（`Toggle("")` + `labelsHidden()` 让开关没有名称）。
+
+**未完成 —— 内容区控件进不了 Tab 循环**
+
+计划验收「只用键盘完成改上限 → 开过热保护 → 开风扇自定义」**没有通过**。诊断过程：
+
+1. 按常规给 `FocusRing` 加 `.focusable()` → 更糟：Tab 只在侧边栏 9 项里循环，一次进不了内容区。
+2. 查 `defaults read -g AppleKeyboardUIMode` 未设置（默认 0，只有文本框/列表参与 Tab）。
+3. 把系统设置临时改成 3（全键盘导航）重测 → **仍然只有侧边栏**。所以不是系统设置的锅。
+4. 判断是 `.focusable()` 让自定义样式的 Button 变成独立 tab stop，与内容区形成两个竞争循环。
+5. 去掉 `.focusable()`、只保留 `@FocusState` 绘制 → 侧边栏仍显示焦点环，但内容区依然进不去。
+
+**真因未查明。** 可能是 `content` 上 `.id(state.selectedPanel)` 每页重建影响了 focus scope，
+也可能是 SwiftUI 在 macOS 上对自定义 `ButtonStyle` + `.plain` 的 key-view 处理。
+没有继续硬凑：再往下要么用 `focusSection()` 全盘重构焦点体系，要么逐个控件
+`.focusable()` 加手工 Tab 顺序，是几天的活，没把握就不该草草做一半。
+
+试验期间改过系统全局 `AppleKeyboardUIMode`，已 `defaults delete` 还原为未设置。
+
+**未覆盖**
+
+- 内容区控件的键盘可达性（如上）
+- VoiceOver 全量走查没做：只给 4 处图标按钮和 `MiniChart` 加了语义，
+  其余 44 个有文字标签的按钮靠文字本身朗读，没有逐页用 VoiceOver 实测
+- 自定义 Tab 顺序（`.focusSection()`）未做
+
+#### U2-04 浅色模式专项 — ✅ 已完成
 
 - **现状**：浅色模式可用但从未逐页审过，卡片描边 9.5% 黑在 #F5F5F6 上几乎看不见。
   **另外查出一类系统性问题**：`chartGreen` / `chartBlue` / `chartOrange` 这三个系列色是
@@ -849,6 +885,34 @@ EmptyState(symbol, title, message?, layout: .stacked | .inline, action?)
   文字用 `success` / `warning` / `danger` / `info`，系列色只用于圆点、线条和填充。
 - **做法**：浅色下卡片改为「白底 + 5% 阴影 + 8% 描边」；图表系列色降饱和 10%；侧边栏用 `NSColor.windowBackgroundColor` 近似。
 - **验收**：8 个面板浅色截图逐张过；卡片边界在浅色下可辨；对比度脚本全绿。
+
+**实现说明**
+
+- **19 处 `chart*` 当文字色**全部换掉：直接 `foregroundColor` 6 处 + 经 `tint` 间接染色 13 处。
+  分别改成 `success` / `warning` / `danger` / `info` / `textPrimary`。
+  其中 `metricTile` 的主数值改 `textPrimary`、左侧加 5pt 彩色圆点保住指标身份——
+  数值是磁贴里最被读的文字，用系列色既是对比度问题也是层级问题，与 `CardHeader` 注释里
+  「tinted title 会与数值打架」是同一条判断。
+- **温度行拆成两个色源**：数字用 `textPrimary`（警示时才 danger/warning），
+  **进度条仍用 series 色**——颜色在那里表达「多热」，那是图形不是文字。
+- **卡片边界**：改前白卡在 0.96 窗口上只有 1.09:1 且描边宽度为 0，全靠 7% 阴影撑场面，
+  截图里基本看不到边。现在 1pt @ 12%（对卡片 1.32:1）+ 5% 阴影。
+  **没有凑 3:1**：WCAG 1.4.11 针对必须操作的控件，而白卡配浅灰底数学上到不了 3:1
+  （窗口得压到 0.70 灰，浅色界面就变中灰），macOS 自己的面板同样是 1.1:1 级别。
+  要的是「截图里看得见边」，1.32:1 做到了。
+- **侧边栏** 0.945 vs 窗口 0.96 = 1.04:1，加深底色最多到 1.08:1，所以改为右侧画一条 hairline。
+- **图表系列色**原来两个外观共用一个固定值，浅色下 `chartOrange` 只有 2.16:1，是一条看不见的线。
+  改成浅色取同色系深版：4.08 / 5.89 / 6.18 / 7.04:1，都过图形要求的 3:1。
+
+**门禁先补（否则改完也不知道对不对）**
+
+- `contrast_check.py` 原来只审 24 组语义色，`chart*` 完全在视野外——这正是 2.16:1 的橙色文字
+  能一直活着的原因。现在 `chart*` 的检查**从调用点推导**：还有 `foregroundColor(theme.chart*)`
+  的 token 才审，改完了行自动消失，写回去又回来。
+- `ui_lint.py` 加 `chart-as-text` 棘轮，匹配 `foregroundColor(theme.chartX)` 与三元式
+  `foregroundColor(cond ? a : theme.chartX)`。第二种真抓到东西——风扇页温度数字就是靠它找出来的。
+  试过把 `tint:` 也纳入，立刻误报 20 处 `CardHeader(tint:)`（只染图标、合法），撤掉。
+  这个权衡写在规则注释里。
 
 #### U2-05 视觉回归门禁 — ✅ 已完成（1.0.22 工具链）
 
@@ -898,11 +962,11 @@ EmptyState(symbol, title, message?, layout: .stacked | .inline, action?)
 | U1-09 | 弹窗与浮层 | ✅ 完成 |
 | U2-01 | 动效与过渡 | ✅ 完成 |
 | U2-02 | 空态/加载/错误 | ✅ 完成 |
-| U2-03 | 无障碍与键盘 | ❌ 未开始 |
-| U2-04 | 浅色模式 | ❌ 未开始 |
+| U2-03 | 无障碍与键盘 | ⚠️ 部分完成 |
+| U2-04 | 浅色模式 | ✅ 完成 |
 | U2-05 | 视觉回归门禁 | ✅ 完成 |
 
-**统计：16 项完成 / 0 项部分完成 / 2 项未开始。**
+**统计：17 项完成 / 1 项部分完成（U2-03 内容区 Tab 未打通）/ 0 项未开始。**
 
 ---
 
