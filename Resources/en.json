@@ -894,5 +894,20 @@
  "这台 Mac 没有电池": "This Mac has no battery",
  "仪表板上的电量、健康度与充电控制都依赖电池的 SMC 键，台式机没有这些键。风扇、温度与功耗照常可用。": "Charge level, health and charge control on the dashboard all read battery SMC keys that desktops do not have. Fans, temperatures and power draw still work.",
  "规则导入失败": "Rule import failed",
- "重新导入": "Import again"
+ "重新导入": "Import again",
+ "删除": "Delete",
+ "删除 {p} 的校准记录": "Delete the calibration record from {p}",
+ "删除这条校准记录": "Delete this calibration record",
+ "删除这条校准记录？": "Delete this calibration record?",
+ "这条记录会从磁盘删除，无法撤销。": "The record is removed from disk. This cannot be undone.",
+ "清空全部校准记录？": "Clear all calibration records?",
+ "清空 {p} 条记录": "Clear {p} record(s)",
+ "记录会直接从磁盘删除，无法撤销，也没有备份。需要保留的话请先导出。": "Records are deleted from disk with no undo and no backup. Export first if you want to keep them.",
+ "删除这个定时任务": "Delete this scheduled task",
+ "删除这个定时任务？": "Delete this scheduled task?",
+ "删除任务「{p}」": "Delete the task “{p}”",
+ "「{p}」会从磁盘删除，不再执行，无法撤销。": "“{p}” is removed from disk and will no longer run. This cannot be undone.",
+ "新建定时任务": "New scheduled task",
+ "定时任务": "Scheduled tasks",
+ "回落至 {p}%": "Settle to {p}%"
 }

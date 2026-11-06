@@ -44,6 +44,20 @@ struct ScheduleView: View {
                 editor.isPresented = false
             }
         }
+        .confirmationDialog(t("删除这个定时任务？"),
+                            isPresented: Binding(get: { editor.pendingDelete != nil },
+                                                 set: { if !$0 { editor.pendingDelete = nil } }),
+                            titleVisibility: .visible) {
+            Button(t("删除"), role: .destructive) {
+                if let task = editor.pendingDelete { state.removeTask(task) }
+                editor.pendingDelete = nil
+            }
+            Button(t("取消"), role: .cancel) { editor.pendingDelete = nil }
+        } message: {
+            if let task = editor.pendingDelete {
+                Text(tf("「{p}」会从磁盘删除，不再执行，无法撤销。", task.kind.title))
+            }
+        }
     }
 
     // MARK: - Task list
@@ -107,7 +121,7 @@ struct ScheduleView: View {
             .scaleEffect(0.72)
             .frame(width: 36, height: 20)
             Button {
-                state.removeTask(task)
+                editor.pendingDelete = task
             } label: {
                 Image(systemName: "trash")
                     .font(Glyph.row)
@@ -312,6 +326,9 @@ struct ScheduleView: View {
 final class ScheduleEditorModel: ObservableObject {
     @Published var isPresented = false
     @Published var draft = TaskDraft()
+    /// Which task the trash button is asking about. Deleting a schedule removes
+    /// it from disk with no undo, so the row asks first.
+    @Published var pendingDelete: ScheduledTask?
 }
 
 final class TaskDraft: ObservableObject {

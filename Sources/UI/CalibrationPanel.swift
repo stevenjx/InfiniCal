@@ -1437,6 +1437,11 @@ private struct CalibrationHistorySheet: View {
     @ObservedObject var engine: CalibrationEngine
     @Binding var isPresented: Bool
     @StateObject private var tab = UIValue<Int>(0)
+    /// Both destructive paths land here first. `deleteRecord` and `clearHistory`
+    /// remove the only copy of a completed session — there is no undo and no
+    /// backup, so the button must not be one click away from the data.
+    @StateObject private var confirmingClear = UIValue(false)
+    @StateObject private var pendingDelete = UIValue<CalibrationRecord?>(nil)
     private var theme: Theme { Theme.current }
 
     var body: some View {
@@ -1461,17 +1466,41 @@ private struct CalibrationHistorySheet: View {
                     recordsContent
                 }
             }
-        } footer: {
+            } footer: {
             SheetFooter(confirmTitle: t("完成"),
                         onConfirm: { isPresented = false },
                         confirmAnswersEscape: true) {
                 if !engine.records.isEmpty, tab.value == 0 {
-                    Button(t("清空")) { engine.clearHistory() }
+                    // "清空" wipes every record, not just the visible one.
+                    Button(t("清空")) { confirmingClear.value = true }
                         .buttonStyle(.plain)
                         .font(Typography.body)
                         .foregroundColor(theme.danger)
                 }
             }
+        }
+        .confirmationDialog(t("清空全部校准记录？"),
+                            isPresented: Binding(get: { confirmingClear.value },
+                                                 set: { confirmingClear.value = $0 }),
+                            titleVisibility: .visible) {
+            Button(tf("清空 {p} 条记录", "\(engine.records.count)"), role: .destructive) {
+                engine.clearHistory()
+            }
+            Button(t("取消"), role: .cancel) {}
+        } message: {
+            Text(t("记录会直接从磁盘删除，无法撤销，也没有备份。需要保留的话请先导出。"))
+        }
+        .confirmationDialog(t("删除这条校准记录？"),
+                            isPresented: Binding(get: { pendingDelete.value != nil },
+                                                 set: { if !$0 { pendingDelete.value = nil } }),
+                            titleVisibility: .visible) {
+            Button(t("删除"), role: .destructive) {
+                if let record = pendingDelete.value { engine.deleteRecord(record) }
+                pendingDelete.value = nil
+            }
+            Button(t("取消"), role: .cancel) { pendingDelete.value = nil }
+        } message: {
+            Text(t("这条记录会从磁盘删除，无法撤销。"))
         }
     }
 
@@ -1557,7 +1586,7 @@ private struct CalibrationHistorySheet: View {
                                                 ? theme.success : theme.warning).opacity(0.14)))
                     .foregroundColor(record.batteryHealthPercentage >= 80 ? theme.success : theme.warning)
                 Button {
-                    engine.deleteRecord(record)
+                    pendingDelete.value = record
                 } label: {
                     Image(systemName: "trash")
                         .font(Glyph.row)
