@@ -1338,6 +1338,23 @@ final class AppState: ObservableObject {
         saveTasks()
     }
 
+    /// Saves an edited task back to its slot.
+    ///
+    /// Takes the whole task rather than separate fields so the caller cannot
+    /// half-update one: the id decides *which* task is replaced, everything else
+    /// is what gets written. Returns false when the id is gone (deleted from
+    /// another path while the sheet was open), and the caller falls back to
+    /// adding it.
+    @discardableResult
+    func updateTask(_ task: ScheduledTask) -> Bool {
+        guard let index = tasks.firstIndex(where: { $0.id == task.id }) else {
+            return false
+        }
+        tasks[index] = task
+        saveTasks()
+        return true
+    }
+
     func removeTask(_ task: ScheduledTask) {
         tasks.removeAll { $0.id == task.id }
         saveTasks()

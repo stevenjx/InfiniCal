@@ -283,7 +283,8 @@ EmptyState(symbol, title, message?, layout: .stacked | .inline, action?)
   前两个要支持「标题右侧的行内配件」才能收编，为一个参数扩 `CardHeader` 的泛型不划算；
   `MiniChart` 属于 U1-02 的图表改造。三者字号都已是 `headline` / `caption`，
   不存在「同页两种卡片标题」。
-- `literal-radius` 仍有 30 处（`RoundedRectangle(cornerRadius: 7/8/9/10/11)`）。
+- ~~`literal-radius` 仍有 30 处~~ → 已清零：12 处按用途归到 `Radius.chip/control/card`，
+  `ui_lint` 基线降到 0，注入一处字面圆角会立即 FAIL（已验证）。
   U0-03 只收卡片与标题，这些散落的容器圆角留给对应的逐页改造。
 
 #### U0-04 页面骨架与空态 — ✅ 已完成（1.0.24）
@@ -661,6 +662,12 @@ EmptyState(symbol, title, message?, layout: .stacked | .inline, action?)
 
 **未覆盖**
 
+- **任务行现在可点编辑（补做）**：`AppState` 只有 `addTask`，没有 `updateTask`，所以任务能
+  建、能开关、能删，**唯独改不了**。补 `updateTask(_:)`（按 id 替换，id 不在时返回 false，
+  调用方回落到 add）、`TaskDraft.load(_:)`（保留 id / enabled / lastRun）、编辑器标题按
+  `isEditing` 切换。整行加 `.simultaneousGesture` 打开编辑，`.onHover` 给行级底色——
+  hover 放在行上而不是 `Card` 上：任务卡是 `list`，整卡包含表头，高亮整张表不对。
+  实测：点行 → 弹窗标题「编辑任务」且字段预填 → 保存后任务数仍为 1、id 不变。
 - 任务行不显示 `setLimit` 的数值：`TaskKind.title` 是「设置充电限制」，80% 还是 60% 只能
   点开编辑器看。这是既有行为，改它要动 `TaskKind.title`（任务编辑器与历史记录共用）。
 - 历史列表按条数无限变长（上限 50 条），没有分页或折叠。50 条时页面约 1900pt，靠页面滚动

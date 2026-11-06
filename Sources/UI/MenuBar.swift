@@ -288,7 +288,7 @@ struct MenuBarPanel: View {
             metricRow("powerplug", t("适配器"), adapterText)
         }
         .padding(10)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(theme.card))
+        .background(RoundedRectangle(cornerRadius: Radius.control, style: .continuous).fill(theme.card))
     }
 
     private var controlSummary: some View {
@@ -315,7 +315,7 @@ struct MenuBarPanel: View {
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 10).fill(theme.card))
+        .background(RoundedRectangle(cornerRadius: Radius.control).fill(theme.card))
     }
 
     private var policyText: String {

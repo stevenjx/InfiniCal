@@ -198,7 +198,7 @@ struct HardwareDiagnosticsView: View {
                     }
                 }
                 .padding(8)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(theme.innerControl))
+                .background(RoundedRectangle(cornerRadius: Radius.control, style: .continuous).fill(theme.innerControl))
                 Text(t("“已回读确认”表示读回值与目标一致；“已接受”只表示写入未报错，硬件是否照做未知。"))
                     .font(Typography.caption).foregroundColor(theme.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)

@@ -911,5 +911,7 @@
  "定时任务": "Scheduled tasks",
  "回落至 {p}%": "Settle to {p}%",
  "减少": "Decrease",
- "增加": "Increase"
+ "增加": "Increase",
+ "点击编辑这个任务": "Click to edit this task",
+ "编辑任务": "Edit Task"
 }

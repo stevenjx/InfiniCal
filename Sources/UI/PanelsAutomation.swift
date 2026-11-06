@@ -16,6 +16,9 @@ struct ScheduleView: View {
     /// History rows are one line — what ran, what it was, when — because the
     /// detail is a time plus a reason, not prose.
     private static let historyRowHeight: CGFloat = 32
+    /// Which row the pointer is over. Rows share one id-typed slot rather than
+    /// each keeping its own `@State`, so only one can be highlighted.
+    @StateObject private var hoveredRow = UIValue<UUID?>(nil)
 
     var body: some View {
         PageScaffold(title: Panel.schedule.title,
@@ -38,7 +41,10 @@ struct ScheduleView: View {
         }
         .sheet(isPresented: $editor.isPresented) {
             TaskEditor(draft: editor.draft) { task in
-                state.addTask(task)
+                // Editing targets the existing row. `updateTask` returns false
+                // only if the row vanished while the sheet was open, in which
+                // case appending is the honest outcome rather than losing it.
+                if !state.updateTask(task) { state.addTask(task) }
                 editor.isPresented = false
             } onCancel: {
                 editor.isPresented = false
@@ -135,6 +141,23 @@ struct ScheduleView: View {
         }
         .padding(.horizontal, CardPadding.regular)
         .frame(height: Self.rowHeight)
+        .contentShape(Rectangle())
+        // The row used to be inert: only the 20 pt switch and the trash button
+        // responded, so a task could be created, toggled and deleted but never
+        // changed. Clicking anywhere else now opens the same sheet in edit mode.
+        // `.simultaneousGesture` rather than `.onTapGesture` so the switch and
+        // the trash button keep their own taps.
+        .simultaneousGesture(TapGesture().onEnded { beginEditing(task) })
+        .onHover { inside in
+            withAnimation(Motion.hover) { hoveredRow.value = inside ? task.id : nil }
+        }
+        .background(hoveredRow.value == task.id ? theme.hoverBackground : Color.clear)
+        .help(t("点击编辑这个任务"))
+    }
+
+    private func beginEditing(_ task: ScheduledTask) {
+        editor.draft.load(task)
+        editor.isPresented = true
     }
 
     // MARK: - History
@@ -341,6 +364,16 @@ final class TaskDraft: ObservableObject {
     @Published var onlyBelow: Int?
     @Published var maxTemperature: Int?
 
+    /// Set when the sheet was opened from an existing row. `task` carries it
+    /// through so saving updates that task instead of appending a duplicate.
+    @Published private(set) var editingID: UUID?
+    /// The switch is part of the row, not the sheet, so editing keeps whatever
+    /// it was — the sheet must not silently re-enable a disabled task.
+    private var editingEnabled = true
+    private var editingLastRun: Date?
+
+    var isEditing: Bool { editingID != nil }
+
     func reset() {
         kind = .topUp
         value = 80
@@ -350,6 +383,24 @@ final class TaskDraft: ObservableObject {
         onlyOnAdapter = false
         onlyBelow = nil
         maxTemperature = nil
+        editingID = nil
+        editingEnabled = true
+        editingLastRun = nil
+    }
+
+    /// Loads an existing task so the same sheet can edit it in place.
+    func load(_ task: ScheduledTask) {
+        kind = task.kind
+        value = task.value
+        hour = task.hour
+        minute = task.minute
+        weekdays = task.weekdays
+        onlyOnAdapter = task.conditions?.onlyOnAdapter ?? false
+        onlyBelow = task.conditions?.onlyBelowPercentage
+        maxTemperature = task.conditions?.maxTemperature
+        editingID = task.id
+        editingEnabled = task.enabled
+        editingLastRun = task.lastRun
     }
 
     var conditions: TaskConditions? {
@@ -363,6 +414,13 @@ final class TaskDraft: ObservableObject {
         var task = ScheduledTask(kind: kind, value: value, hour: hour,
                                  minute: minute, weekdays: weekdays)
         task.conditions = conditions
+        if let editingID {
+            // Identity and run state belong to the row being edited; only the
+            // fields the sheet shows come from the draft.
+            task.id = editingID
+            task.enabled = editingEnabled
+            task.lastRun = editingLastRun
+        }
         return task
     }
 }
@@ -377,7 +435,7 @@ struct TaskEditor: View {
     private let weekdays = [t("一"), t("二"), t("三"), t("四"), t("五"), t("六"), t("日")]
 
     var body: some View {
-        SheetScaffold(title: t("新建任务"), width: 360) {
+        SheetScaffold(title: draft.isEditing ? t("编辑任务") : t("新建任务"), width: 360) {
             form
         } footer: {
             SheetFooter(cancelTitle: t("取消"),

@@ -936,7 +936,7 @@ struct CalibrationPanel: View {
             }
             .padding(.horizontal, 9)
             .padding(.vertical, 4)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(theme.innerControl))
+            .background(RoundedRectangle(cornerRadius: Radius.control, style: .continuous).fill(theme.innerControl))
 
             HStack(spacing: 6) {
                 Text(t("放电至"))
@@ -1095,7 +1095,7 @@ private struct CalibrationScopeCard: View {
                     }
                     .padding(.horizontal, 6)
                     .padding(.vertical, 1)
-                    .background(RoundedRectangle(cornerRadius: 5).fill(tint.opacity(theme.isDark ? 0.18 : 0.11)))
+                    .background(RoundedRectangle(cornerRadius: Radius.chip).fill(tint.opacity(theme.isDark ? 0.18 : 0.11)))
                 }
             }
 
@@ -1121,7 +1121,7 @@ private struct CalibrationScopeCard: View {
                             .foregroundColor(theme.textPrimary)
                             .padding(.horizontal, 5)
                             .padding(.vertical, 2)
-                            .background(RoundedRectangle(cornerRadius: 4).fill(theme.cardElevated))
+                            .background(RoundedRectangle(cornerRadius: Radius.chip).fill(theme.cardElevated))
                             .offset(x: min(max(x - 40, 30), max(30, geometry.size.width - 120)), y: 0)
                             .allowsHitTesting(false)
                     }
@@ -1387,7 +1387,7 @@ private struct CalibrationLogView: View {
                         .id("log-end")
                 }
                 .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
                         .fill(theme.innerControl.opacity(0.45))
                 )
                 .padding(.horizontal, 14)
@@ -1642,8 +1642,8 @@ private struct CalibrationHistorySheet: View {
         }
         .padding(11)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(theme.card))
-        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(theme.cardStroke, lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).fill(theme.card))
+        .overlay(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).strokeBorder(theme.cardStroke, lineWidth: 1))
     }
 
     private func value(_ title: String, _ text: String) -> some View {

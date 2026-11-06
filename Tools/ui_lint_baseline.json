@@ -2,14 +2,9 @@
  "rules": {
   "bare-font": {},
   "card-padding": {},
+  "chart-as-text": {},
   "literal-color": {},
-  "literal-radius": {
-   "CalibrationPanel.swift": 6,
-   "DashboardView.swift": 2,
-   "DeviceProfileCard.swift": 1,
-   "HardwareDiagnosticsView.swift": 1,
-   "MenuBar.swift": 2
-  }
+  "literal-radius": {}
  },
  "version": 1
 }

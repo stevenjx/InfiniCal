@@ -90,7 +90,7 @@ struct DeviceProfileCard: View {
         .font(Typography.caption)
         .padding(.horizontal, 6)
         .padding(.vertical, 2)
-        .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(theme.innerControl))
+        .background(RoundedRectangle(cornerRadius: Radius.chip, style: .continuous).fill(theme.innerControl))
     }
 
     @ViewBuilder

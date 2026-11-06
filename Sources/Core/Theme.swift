@@ -139,6 +139,9 @@ enum Motion {
     static var panel: Animation? { conditional(.easeInOut(duration: 0.12)) }
     /// 300 ms stroke reveal for chart first-frames.
     static var chartStroke: Animation? { conditional(.easeOut(duration: 0.3)) }
+    /// Pointer-over a clickable card. Short on purpose: a hover fill that eases
+    /// in slowly reads as lag when the pointer sweeps across several rows.
+    static var hover: Animation? { conditional(.easeOut(duration: 0.08)) }
 
     /// `nil` when "Reduce Motion" is on.
     ///
@@ -264,13 +267,16 @@ private struct MaybeFocusable: ViewModifier {
 
 /// How a card relates to what is around it.
 ///
-/// Two kinds, not the three the plan listed. `inset` (a card inside a card) and
-/// `interactive` (a card you can click) were dropped after counting: nothing in
-/// `Sources/UI` nests one `Card` in another, and there is not a single
-/// `onTapGesture` or `onHover` on a card. Adding either would have produced a
-/// style with no caller — and a hover state on something that does nothing when
-/// clicked is a lie. `list` does have callers: three cards hold tables and
-/// scroll views whose rows draw their own horizontal inset.
+/// `inset` (a card inside a card) was dropped after counting: nothing in
+/// `Sources/UI` nests one `Card` in another, so the style would have had no
+/// caller. `list` has callers — three cards hold tables and scroll views whose
+/// rows draw their own horizontal inset.
+///
+/// `interactive` stays dropped. A clickable *row* did appear (a scheduled task
+/// opens its editor now), but the row is inside a `list` card and carries its
+/// own `.onHover`; the card around it is still not clickable. Adding the kind
+/// would have meant a `Card` style with zero callers — the exact thing this
+/// comment was written to prevent. Hover lives on the row.
 enum CardKind {
     /// A container with content padding and page-level elevation.
     case plain

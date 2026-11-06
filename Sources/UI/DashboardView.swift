@@ -230,7 +230,7 @@ struct DashboardView: View {
                 CardHeader(title: t("高功耗的应用程序"))
                 if state.highUsageApps.isEmpty {
                     HStack(spacing: 8) {
-                        RoundedRectangle(cornerRadius: 7)
+                        RoundedRectangle(cornerRadius: Radius.chip)
                             .fill(theme.innerControl)
                             .frame(width: 26, height: 26)
                             .overlay(Image(systemName: "app.dashed").font(Glyph.row).foregroundColor(theme.textTertiary))
@@ -289,7 +289,7 @@ struct DashboardView: View {
                     }
                     .padding(.horizontal, 12)
                     .padding(.vertical, 9)
-                    .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(theme.innerControl))
+                    .background(RoundedRectangle(cornerRadius: Radius.control, style: .continuous).fill(theme.innerControl))
                     .foregroundColor(theme.textPrimary)
                 }
                 .buttonStyle(.plain)
