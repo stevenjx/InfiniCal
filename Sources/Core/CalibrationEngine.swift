@@ -237,7 +237,6 @@ final class CalibrationEngine: ObservableObject {
     @Published var remainingCapacityMAh: Double = 0
     @Published var cycleCount: Int = 0
     @Published var hardwareModel: String = "--"
-    @Published var batterySerial: String = "--"
     @Published var cellVoltages: [Double] = []
     @Published var cellDeltaMillivolts: Double = 0
     @Published var isCharging: Bool = false
@@ -292,25 +291,22 @@ final class CalibrationEngine: ObservableObject {
     @Published var aiTrueCapacityMAh: Double = 0
     @Published var aiTrueHealthPercent: Double = 0
     @Published var aiConfidence: Double = 0
-    @Published var aggregated: AggregatedHealth?
 
     // MARK: Insight
 
     /// Decay trend from the daily history. Nil until there is enough data to
     /// say anything — see `BatteryTrend.minimumSamples`.
     @Published private(set) var trend: BatteryTrend?
-    /// Live CPU / GPU / ANE split of `socPowerWatts`; zero when unknown.
+    /// Live CPU / GPU split of `socPowerWatts`; zero when unknown. ANE is not
+    /// published: no view shows it, so it stayed a report-only number.
     @Published var socCPUWatts: Double = 0
     @Published var socGPUWatts: Double = 0
-    @Published var socANEWatts: Double = 0
 
     // MARK: Charts & log
 
     @Published var chartPoints: [CalibrationSample] = []
     @Published var dischargeCurve: [CalibrationSample] = []
     @Published var log: [String] = []
-    @Published var lastReportURL: URL?
-    @Published var lastCSVURL: URL?
 
     // MARK: History
 
@@ -393,8 +389,6 @@ final class CalibrationEngine: ObservableObject {
     private var splitCPUSum = 0.0
     private var splitGPUSum = 0.0
     private var splitANESum = 0.0
-    private var processTally: [String: Int] = [:]
-    private var processSamples = 0
     /// The mode the discharge actually ran under. `stressMode` can be changed
     /// mid-session, and the report must not describe a run by the setting that
     /// happened to be selected when it finished.
@@ -429,8 +423,6 @@ final class CalibrationEngine: ObservableObject {
     private var dischargeStart: Date?
     private var holdStart: Date?
     @Published var dischargeStartPercentage = 100
-    private var sessionReportURL: URL?
-    private var sessionCSVURL: URL?
 
     private let holdDurationSeconds: TimeInterval = 600
 
@@ -480,7 +472,6 @@ final class CalibrationEngine: ObservableObject {
         }
         hardwareModel = Self.machineModel()
         records = CalibrationStore.load()
-        aggregated = CalibrationStore.aggregate(records)
         trend = BatteryTrend.compute(days: DailyHistory.shared.days)
         refreshLastRunDate()
         refreshNotificationPermission()
@@ -686,10 +677,6 @@ final class CalibrationEngine: ObservableObject {
         sessionStart = Date()
         holdStart = nil
         dischargeStartPercentage = percentage
-        sessionReportURL = nil
-        sessionCSVURL = nil
-        lastReportURL = nil
-        lastCSVURL = nil
 
         integrator.reset()
         dcir.reset()
@@ -719,8 +706,6 @@ final class CalibrationEngine: ObservableObject {
         splitCPUSum = 0
         splitGPUSum = 0
         splitANESum = 0
-        processTally.removeAll()
-        processSamples = 0
         sessionStressMode = stressMode
         sessionPreset = preset
 
@@ -889,7 +874,6 @@ final class CalibrationEngine: ObservableObject {
         } else {
             cellDeltaMillivolts = 0
         }
-        if !snapshot.batterySerial.isEmpty { batterySerial = snapshot.batterySerial }
     }
 
     // MARK: - Charging precondition
@@ -1294,7 +1278,7 @@ final class CalibrationEngine: ObservableObject {
 
         lastCompletedRecord = record
         if autoExport {
-            exportReports(record: record)
+            exportReports()
         }
         records = CalibrationStore.append(record)
         if CalibrationStore.load().contains(where: { $0.id == record.id }) {
@@ -1304,7 +1288,6 @@ final class CalibrationEngine: ObservableObject {
             pendingRecovery = defaults.data(forKey: checkpointKey).flatMap { try? JSONDecoder().decode(CalibrationCheckpoint.self, from: $0) }
             recoveryError = t("校准结果保存失败；恢复记录已保留")
         }
-        aggregated = CalibrationStore.aggregate(records)
         trend = BatteryTrend.compute(days: DailyHistory.shared.days)
         defaults.set(Date().timeIntervalSince1970, forKey: Keys.lastRun)
         refreshLastRunDate()
@@ -1543,14 +1526,11 @@ final class CalibrationEngine: ObservableObject {
               now.timeIntervalSince(lastSocPowerFetch) >= socPowerInterval else { return }
         socPowerFetchInFlight = true
         lastSocPowerFetch = now
-        // Read on the main thread: the sampler blocks for a second and there is
-        // no reason to pay that outside a session.
-        let attributing = isRunning
+        // powermetrics blocks for about a second, so it runs off the main thread.
+        // It used to also sample a per-process CPU ranking here (a second
+        // blocking call) for a report line that nothing ever rendered.
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let split = HelperClient.shared.socPowerSplit()
-            let processes = attributing
-                ? ProcessSampler.topProcesses(interval: 1.0, limit: 3, excluding: [getpid()])
-                : []
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.socPowerFetchInFlight = false
@@ -1579,22 +1559,17 @@ final class CalibrationEngine: ObservableObject {
                 self.socPowerQuality = .measured
                 self.socCPUWatts = split.cpu
                 self.socGPUWatts = split.gpu
-                self.socANEWatts = split.ane
                 self.lastSocPowerSuccess = Date()
-                if self.isRunning { self.recordSplit(split, processes: processes) }
+                if self.isRunning { self.recordSplit(split) }
             }
         }
     }
 
-    private func recordSplit(_ split: HelperClient.SocPowerSample,
-                             processes: [ProcessLoad]) {
+    private func recordSplit(_ split: HelperClient.SocPowerSample) {
         splitSamples += 1
         splitCPUSum += split.cpu
         splitGPUSum += split.gpu
         splitANESum += split.ane
-        guard !processes.isEmpty else { return }
-        processSamples += 1
-        for process in processes { processTally[process.name, default: 0] += 1 }
     }
 
 
@@ -1721,13 +1696,14 @@ final class CalibrationEngine: ObservableObject {
 
     // MARK: - Reports
 
-    private func exportReports(record: CalibrationRecord) {
+    private func exportReports() {
         // Automatic exports share the same allowlisted format as manual exports.
+        // The URLs are not kept: no view lists past exports, and the record row
+        // already opens the report path it stored.
         let package = makeExport()
         let stamp = Self.fileStamp.string(from: Date())
-        lastReportURL = write(exportText(package), name: "InfiniCal_Calibration_Report_\(stamp).txt")
-        lastCSVURL = write(package.csv, name: "InfiniCal_Telemetry_\(stamp).csv")
-        return
+        write(exportText(package), name: "InfiniCal_Calibration_Report_\(stamp).txt")
+        write(package.csv, name: "InfiniCal_Telemetry_\(stamp).csv")
     }
 
     var hasExportSamples: Bool { !sessionPoints.isEmpty }
@@ -1793,27 +1769,8 @@ final class CalibrationEngine: ObservableObject {
         } catch { chargingIssue = error.localizedDescription }
     }
 
-    /// Most frequently seen names in the discharge window, with how often they
-    /// appeared out of the samples taken.
-    private func topProcessSummary() -> String {
-        guard processSamples > 0 else { return "" }
-        return processTally
-            .sorted { $0.value > $1.value }
-            .prefix(3)
-            .map { tf("{p} ({p}/{p})", $0.key, "\($0.value)", "\(processSamples)") }
-            .joined(separator: " · ")
-    }
-
-    /// Stable ASCII tokens: a CSV is data, not UI, so it must not be localised.
-    private static func qualityToken(_ quality: PowerQuality) -> String {
-        switch quality {
-        case .measured: return "measured"
-        case .estimated: return "estimated"
-        case .unavailable: return "unavailable"
-        }
-    }
-
     /// Application Support first (no TCC prompt), then the temporary folder.
+    @discardableResult
     private func write(_ content: String, name: String) -> URL? {
         let manager = FileManager.default
         let directories = [CalibrationStore.directory.appendingPathComponent("Reports", isDirectory: true),
@@ -1830,13 +1787,11 @@ final class CalibrationEngine: ObservableObject {
 
     func deleteRecord(_ record: CalibrationRecord) {
         records = CalibrationStore.delete(id: record.id)
-        aggregated = CalibrationStore.aggregate(records)
     }
 
     func clearHistory() {
         CalibrationStore.clear()
         records = []
-        aggregated = nil
     }
 
     private func refreshLastRunDate() {

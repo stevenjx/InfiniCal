@@ -190,15 +190,6 @@ struct CalibrationRecord: Codable, Identifiable, Equatable {
     var conditions: CalibrationConditions? = nil
 }
 
-/// Weighted blend of the most recent sessions.
-struct AggregatedHealth {
-    var sessionCount = 0
-    var capacityMAh: Double = 0
-    var capacityWh: Double = 0
-    var healthPercent: Double = 0
-    var confidence: Double = 0
-}
-
 enum CalibrationStore {
 
     static var directory: URL {
@@ -240,34 +231,5 @@ enum CalibrationStore {
 
     static func clear() {
         save([])
-    }
-
-    /// Multi-session blend: the newest five valid sessions, weighted by recency.
-    static func aggregate(_ records: [CalibrationRecord]) -> AggregatedHealth? {
-        let valid = records
-            .filter { $0.calculatedCapacityMAh > 1000 && $0.batteryHealthPercentage > 0 && $0.quality?.eligibleForAggregation == true }
-            .sorted { $0.startDate > $1.startDate }
-        guard !valid.isEmpty else { return nil }
-
-        let recent = Array(valid.prefix(5))
-        var totalWeight = 0.0
-        var capacity = 0.0
-        var energy = 0.0
-        var health = 0.0
-        for (index, record) in recent.enumerated() {
-            let weight = Double(recent.count - index)
-            totalWeight += weight
-            capacity += record.calculatedCapacityMAh * weight
-            energy += record.calculatedCapacityWh * weight
-            health += record.batteryHealthPercentage * weight
-        }
-        guard totalWeight > 0 else { return nil }
-
-        let confidenceTable: [Double] = [0, 60, 80, 90, 95, 99]
-        return AggregatedHealth(sessionCount: recent.count,
-                                capacityMAh: capacity / totalWeight,
-                                capacityWh: energy / totalWeight,
-                                healthPercent: health / totalWeight,
-                                confidence: confidenceTable[min(recent.count, 5)])
     }
 }

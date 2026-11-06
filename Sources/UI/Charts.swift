@@ -45,6 +45,16 @@ struct MiniChart: View {
         return (min - pad)...(max + pad)
     }
 
+    /// A steady reading has no area to fill. Filling it down to the axis drew a
+    /// solid block that read as "area chart of nothing" — the same defect the
+    /// calibration scopes had.
+    private var isFlat: Bool {
+        let values = points.map { $0.value }
+        guard let min = values.min(), let max = values.max() else { return true }
+        let span = bounds.upperBound - bounds.lowerBound
+        return max - min <= Swift.max(1e-9, span * 0.02)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
@@ -132,13 +142,15 @@ struct MiniChart: View {
                 }
                 if points.count > 1 {
                     let path = linePath(size: geo.size)
+                    if !isFlat {
+                        fillPath(path: path, size: geo.size)
+                            .trim(from: 0, to: reveal)
+                            .fill(LinearGradient(colors: [color.opacity(0.35), color.opacity(0.02)],
+                                                 startPoint: .top, endPoint: .bottom))
+                    }
                     path
                         .trim(from: 0, to: reveal)
                         .stroke(color, style: StrokeStyle(lineWidth: 1.6, lineCap: .round, lineJoin: .round))
-                    fillPath(path: path, size: geo.size)
-                        .trim(from: 0, to: reveal)
-                        .fill(LinearGradient(colors: [color.opacity(0.35), color.opacity(0.02)],
-                                             startPoint: .top, endPoint: .bottom))
                 } else {
                     Rectangle().fill(theme.divider.opacity(0.35))
                 }

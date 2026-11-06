@@ -69,13 +69,12 @@ struct CalibrationPanel: View {
                 }
             }
             dischargeHintCard
-            // Four sections, one card each. Before this the page stacked 27
-            // cards of equal weight — the hero, the pipeline, the results, the
-            // host telemetry and six scopes all looked like the same thing.
+            // One card per section. Before this the page stacked 27 cards of
+            // equal weight — the hero, the pipeline, the results, the host
+            // telemetry and six scopes all looked like the same thing.
             heroCard
             pipelineCard
-            healthCard
-            liveMetricsCard
+            statusCard
             curvesCard
             controlBar
             exportCard
@@ -241,7 +240,7 @@ struct CalibrationPanel: View {
     /// The one card that answers "where is the pack right now": state of charge,
     /// what it is doing, and the three electrical readings that explain it.
     /// Six metrics used to sit here, which made the hero a grid rather than a
-    /// headline; the other three moved to the 实时指标 section.
+    /// headline; the other three moved to 电池状态.
     private var heroCard: some View {
         Card {
             HStack(spacing: Spacing.m) {
@@ -308,14 +307,20 @@ struct CalibrationPanel: View {
         return theme.textPrimary
     }
 
-    /// One tile of a metric grid: icon + label, value + unit, note. Every grid on
-    /// this page uses it, so tiles in the same row always share an anatomy and a
-    /// height — the four host readings used to be four slightly different cards.
+    /// One tile of a metric grid. Two lines: a label row that also carries the
+    /// reading's qualifier (measured / estimated / threshold) and a figure row.
+    ///
+    /// The third line used to be reserved for the note even when it was empty,
+    /// which cost 16 pt on every tile — 6 rows of tiles on this page, about
+    /// 96 pt — to keep heights aligned. Folding the note into the label row
+    /// keeps the alignment (every tile is exactly two lines) without the reserve.
     private func metricTile(_ title: String, _ value: String, _ unit: String,
                             symbol: String, tint: Color,
                             note: String? = nil,
+                            help: String? = nil,
+                            valueTint: Color? = nil,
                             valueFont: Font = Typography.headline) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: Spacing.xxs) {
             HStack(spacing: 4) {
                 // The tint marks *which* reading this is. It used to colour the
                 // figure itself, which put a series colour on text: 2.16–3.92:1
@@ -331,13 +336,23 @@ struct CalibrationPanel: View {
                     .font(Typography.caption)
                     .foregroundColor(theme.textSecondary)
                     .lineLimit(1)
+                if let note, !note.isEmpty {
+                    // `-1` so a long qualifier truncates before the label does.
+                    Text(note)
+                        .font(Typography.micro)
+                        .foregroundColor(theme.textTertiary)
+                        .lineLimit(1)
+                        .layoutPriority(-1)
+                        .help(help ?? note)
+                }
+                Spacer(minLength: 0)
             }
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(value)
                     .font(valueFont)
                     // Was `tint`. A figure is the most-read text in the tile, so
                     // it gets the primary colour and the dot does the coding.
-                    .foregroundColor(theme.textPrimary)
+                    .foregroundColor(valueTint ?? theme.textPrimary)
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
@@ -347,21 +362,15 @@ struct CalibrationPanel: View {
                         .foregroundColor(theme.textSecondary)
                 }
             }
-            // Reserved even when empty, so a tile without a note is the same
-            // height as one with it.
-            Text(note ?? "")
-                .font(Typography.micro)
-                .foregroundColor(theme.textTertiary)
-                .lineLimit(1)
-                .frame(height: 13, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// Three equal columns: the rhythm shared by 实时指标 and 健康度与容量.
+    /// Four equal columns. Three columns left a third of the card empty on the
+    /// last row of every group and cost one extra row per group.
     private var gridColumns: [GridItem] {
         Array(repeating: GridItem(.flexible(), spacing: Spacing.m, alignment: .topLeading),
-              count: 3)
+              count: 4)
     }
 
     // MARK: - Pipeline
@@ -488,19 +497,26 @@ struct CalibrationPanel: View {
         }
     }
 
-    // MARK: - Results
+    // MARK: - Status
 
-    /// 健康度与容量: two headline figures over one uniform grid of six facts,
-    /// then the evidence lines. 续航评估 used to be its own card holding two
-    /// numbers and a placeholder, which is why the row read lopsided next to the
-    /// dense health card.
-    private var healthCard: some View {
+    /// 健康度与容量 and 实时指标 were two cards, each a 3 × 2 grid with a blank
+    /// third line reserved under every tile. Twelve numbers came at the cost of
+    /// ~400 pt — over half the first screen — and pushed the curves below the
+    /// fold. One card, four columns, two lines per tile: the same twelve numbers
+    /// in about 250 pt. Nothing was dropped.
+    private var statusCard: some View {
         let health = engine.measuredHealth > 0 ? engine.measuredHealth : engine.aiTrueHealthPercent
         let minutes = engine.aiRemainingMinutes > 0 ? engine.aiRemainingMinutes : engine.estimatedRemainingMinutes
+        let fans = self.fans.fans
+        let fanRPM = fans.map { $0.currentRPM }.max() ?? 0
+        let hasFan = !fans.isEmpty
+        let hot = engine.temperature >= engine.highTemperature
 
         return Card {
             VStack(alignment: .leading, spacing: Spacing.m) {
-                CardHeader(title: t("健康度与容量"), symbol: "heart.fill", tint: theme.chartBlue) {
+                CardHeader(title: t("电池状态"), symbol: "battery.75",
+                           tint: theme.chartBlue,
+                           help: t("健康度与容量来自最近一次有效校准，其余为该瞬间的实时读数；每项的来源标在标签右侧。")) {
                     if engine.aiConfidence > 0 {
                         Text(tf("置信度 {p}%", "\(Int(engine.aiConfidence))"))
                             .font(Typography.micro)
@@ -534,11 +550,43 @@ struct CalibrationPanel: View {
                                "mΩ", symbol: "waveform.path.ecg", tint: theme.textPrimary)
                     metricTile(t("循环次数"), "\(engine.cycleCount)", "",
                                symbol: "arrow.triangle.2.circlepath", tint: theme.textPrimary)
+                    metricTile(t("剩余容量"), String(format: "%.0f", engine.remainingCapacityMAh), "mAh",
+                               symbol: "battery.50", tint: theme.textPrimary)
                     metricTile(t("全周期耗时"), Self.duration(engine.totalDischargeRuntimeMinutes), "",
                                symbol: "hourglass", tint: theme.textPrimary)
                     metricTile(t("平均放电功耗"), String(format: "%.1f", engine.dischargeAveragePower), "W",
                                symbol: "bolt.slash", tint: theme.textPrimary)
+                    metricTile(t("风扇转速"), hasFan ? "\(fanRPM)" : "--", "RPM",
+                               symbol: "fanblades.fill",
+                               tint: hasFan ? theme.chartPurple : theme.textTertiary,
+                               note: hasFan
+                                   ? (fanRPM > 0 ? tf("上限 {p} RPM", "\(fans.map { $0.maxRPM }.max() ?? 0)")
+                                                 : t("已停转"))
+                                   : t("此机型无风扇"))
+                    metricTile(t("电池温度"),
+                               engine.temperature > 0 ? String(format: "%.1f", engine.temperature) : "--",
+                               "°C", symbol: "thermometer.medium",
+                               tint: hot ? theme.danger : theme.textPrimary,
+                               note: tf("阈值 {p}°C", "\(Int(engine.highTemperature))"),
+                               valueTint: hot ? theme.danger : nil)
+                    metricTile(t("CPU 温度"),
+                               engine.cpuTemperature > 0 ? String(format: "%.0f", engine.cpuTemperature) : "--",
+                               "°C", symbol: "thermometer.sun",
+                               tint: engine.cpuTemperature >= 85 ? theme.danger : theme.chartOrange,
+                               valueTint: engine.cpuTemperature >= 85 ? theme.danger : nil)
+                    metricTile(t("SoC 功耗"),
+                               engine.socPowerQuality == .unavailable
+                                   ? "--" : String(format: "%.1f", engine.socPowerWatts),
+                               "W", symbol: "cpu", tint: theme.chartOrange,
+                               note: socNote, help: socDetail)
+                    metricTile(t("屏幕功耗"),
+                               engine.displayPowerQuality == .unavailable
+                                   ? "--" : String(format: "%.1f", engine.displayPowerWatts),
+                               "W", symbol: "display", tint: theme.chartBlue,
+                               note: engine.displayPowerQuality.badge)
                 }
+
+                trendLine
 
                 if !engine.cellVoltages.isEmpty {
                     Text(tf("电芯 {p} V · 压差 {p} mV",
@@ -548,13 +596,11 @@ struct CalibrationPanel: View {
                         .foregroundColor(theme.textTertiary)
                         .lineLimit(1)
                 }
-
-                trendLine
             }
         }
     }
 
-    /// The two figures at the top of 健康度与容量: value + unit, then what it is.
+    /// The two figures at the top of 电池状态: value + unit, then what it is.
     private func headlineFigure(_ value: String, unit: String, title: String,
                                 tint: Color, badge: String?) -> some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -620,71 +666,18 @@ struct CalibrationPanel: View {
         }
     }
 
-    /// Quality badge, plus the CPU/GPU split when powermetrics produced one.
-    private var socNote: String {
+    /// Short qualifier for the tile label. The CPU/GPU split is too wide to sit
+    /// next to the label at four columns, so it goes to the tile's tooltip
+    /// (`socDetail`) instead of being truncated mid-number.
+    private var socNote: String { engine.socPowerQuality.badge }
+
+    private var socDetail: String {
         guard engine.socPowerQuality == .measured, engine.socCPUWatts > 0 else {
             return engine.socPowerQuality.badge
         }
-        return tf("{p} · CPU {p} · GPU {p}", engine.socPowerQuality.badge,
+        return tf("{p} · CPU {p} W · GPU {p} W", engine.socPowerQuality.badge,
                   String(format: "%.1f", engine.socCPUWatts),
                   String(format: "%.1f", engine.socGPUWatts))
-    }
-
-    // MARK: - Live metrics
-
-    /// The pack's own readings plus the host's, in one grid. Four separate cards
-    /// with four different anatomies used to sit here (one had a progress ring,
-    /// one had no note, two had notes of different lengths).
-    private var liveMetricsCard: some View {
-        // Read the same published sample the 风扇控制 page shows, so the two
-        // pages can never display different numbers for the same instant.
-        let readings = fans.fans
-        let fanRPM = readings.map { $0.currentRPM }.max() ?? 0
-        let fanCeiling = readings.map { $0.maxRPM }.max() ?? 0
-        let hasFan = !readings.isEmpty
-
-        return Card {
-            VStack(alignment: .leading, spacing: Spacing.m) {
-                CardHeader(title: t("实时指标"), symbol: "gauge", tint: theme.textSecondary) {
-                    Text(t("全部本地测量"))
-                        .font(Typography.micro)
-                        .foregroundColor(theme.textTertiary)
-                }
-
-                LazyVGrid(columns: gridColumns, alignment: .leading, spacing: Spacing.m) {
-                    metricTile(t("电池温度"),
-                               engine.temperature > 0 ? String(format: "%.1f", engine.temperature) : "--",
-                               "°C", symbol: "thermometer.medium",
-                               tint: engine.temperature >= engine.highTemperature ? theme.danger : theme.textPrimary,
-                               note: tf("保护阈值 {p}°C", "\(Int(engine.highTemperature))"))
-                    metricTile(t("剩余容量"), String(format: "%.0f", engine.remainingCapacityMAh), "mAh",
-                               symbol: "battery.50", tint: theme.textPrimary)
-                    metricTile(t("SoC 功耗"),
-                               engine.socPowerQuality == .unavailable
-                                   ? "--" : String(format: "%.1f", engine.socPowerWatts),
-                               "W", symbol: "cpu", tint: theme.chartOrange, note: socNote)
-                    metricTile(t("屏幕功耗"),
-                               engine.displayPowerQuality == .unavailable
-                                   ? "--" : String(format: "%.1f", engine.displayPowerWatts),
-                               "W", symbol: "display", tint: theme.chartBlue,
-                               note: engine.displayPowerQuality.badge)
-                    metricTile(t("CPU 温度"),
-                               engine.cpuTemperature > 0 ? String(format: "%.0f", engine.cpuTemperature) : "--",
-                               "°C", symbol: "thermometer.sun",
-                               tint: engine.cpuTemperature >= 85 ? theme.danger : theme.chartOrange,
-                               note: engine.cpuTemperature >= 85 ? t("偏高") : nil)
-                    metricTile(t("风扇转速"),
-                               hasFan ? "\(fanRPM)" : "--", "RPM",
-                               symbol: "fanblades.fill",
-                               tint: hasFan ? theme.chartPurple : theme.textTertiary,
-                               note: hasFan
-                                   ? (fanRPM > 0
-                                      ? tf("上限 {p} RPM", "\(fanCeiling)")
-                                      : t("已停转（正常待机）"))
-                                   : t("此机型无风扇"))
-                }
-            }
-        }
     }
 
     // MARK: - Scopes
@@ -796,7 +789,10 @@ struct CalibrationPanel: View {
                     ForEach(Array(chunked(cells, 3).enumerated()), id: \.offset) { row in
                         HStack(alignment: .top, spacing: Spacing.m) {
                             ForEach(row.element) { cell in
-                                curveCell(cell).frame(height: 110)
+                                // 110 → 96: the plot keeps the same reading
+                                // resolution, the empty band above/below the
+                                // line does not.
+                                curveCell(cell).frame(height: 96)
                             }
                         }
                     }
@@ -1048,6 +1044,39 @@ private struct CalibrationRing: View {
 
 // MARK: - Live scope
 
+/// Axis arithmetic shared by the card and its canvas, so the tick labels, the
+/// tooltip and the "steady" test all agree on the same numbers.
+private enum ScopeAxis {
+    /// Decimals a tick needs. Three ticks used to print "12V / 12V / 12V" for a
+    /// 0.18 V window — the axis looked broken because it was rounding a real
+    /// difference away.
+    static func decimals(_ steps: [Double]) -> Int {
+        let sorted = steps.sorted()
+        guard let low = sorted.first, let high = sorted.last else { return 0 }
+        let span = abs(high - low)
+        if span >= 10 { return 0 }
+        if span >= 1 { return 1 }
+        return 2
+    }
+
+    static func label(_ value: Double, unit: String, decimals: Int) -> String {
+        String(format: "%.\(decimals)f", value) + unit
+    }
+
+    static func spread(_ points: [CalibrationSample],
+                       _ keyPath: KeyPath<CalibrationSample, Double>) -> Double {
+        let values = points.map { $0[keyPath: keyPath] }
+        guard let low = values.min(), let high = values.max() else { return 0 }
+        return max(0, high - low)
+    }
+
+    /// Below 2 % of the drawn range the series is a straight line: there is
+    /// nothing to see, and drawing it as an area implies there is.
+    static func isFlat(_ spread: Double, in domain: ClosedRange<Double>) -> Bool {
+        spread <= max(1e-9, (domain.upperBound - domain.lowerBound) * 0.02)
+    }
+}
+
 private struct CalibrationScopeCard: View {
     private var theme: Theme { Theme.current }
     let title: String
@@ -1062,6 +1091,10 @@ private struct CalibrationScopeCard: View {
 
     @StateObject private var probe = UIValue<CalibrationSample?>(nil)
     @StateObject private var probeX = UIValue<CGFloat?>(nil)
+
+    private var spread: Double { ScopeAxis.spread(points, keyPath) }
+    private var isFlat: Bool { points.count >= 2 && ScopeAxis.isFlat(spread, in: domain) }
+    private var decimals: Int { ScopeAxis.decimals(steps) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -1082,6 +1115,18 @@ private struct CalibrationScopeCard: View {
                             .foregroundColor(theme.textPrimary)
                     }
                 } else {
+                    // A flat line is a reading, not a failure: say so on the
+                    // card instead of leaving the user to wonder why six charts
+                    // are six horizontal strokes.
+                    if isFlat {
+                        Text(t("平稳"))
+                            .font(Typography.micro)
+                            .foregroundColor(theme.textTertiary)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1)
+                            .background(Capsule().fill(theme.innerControl))
+                            .help(tf("窗口内波动 {p}{p}", ScopeAxis.label(spread, unit: unit, decimals: decimals)))
+                    }
                     HStack(alignment: .firstTextBaseline, spacing: 2) {
                         Text(badge)
                             .font(Typography.label.weight(.bold).monospaced())
@@ -1103,7 +1148,7 @@ private struct CalibrationScopeCard: View {
                 ZStack(alignment: .topLeading) {
                     CalibrationScopeChart(points: points, keyPath: keyPath, tint: tint,
                                           domain: domain, steps: steps, unit: unit,
-                                          isDark: theme.isDark,
+                                          isDark: theme.isDark, isFlat: isFlat,
                                           probe: probe.value)
                         .overlay(
                             CalibrationPointerView(
@@ -1156,7 +1201,10 @@ private struct CalibrationScopeCard: View {
 }
 
 private enum CalibrationScopeLayout {
-    static let leadingInset: CGFloat = 32
+    /// Wide enough for a signed two-decimal tick ("12.11V", "-1.20A"): at 32 pt
+    /// the leading digits were clipped once the ticks stopped rounding to
+    /// integers.
+    static let leadingInset: CGFloat = 44
     static let bottomInset: CGFloat = 18
     static let topInset: CGFloat = 6
     static let trailingInset: CGFloat = 4
@@ -1180,6 +1228,7 @@ private struct CalibrationScopeChart: View {
     let steps: [Double]
     let unit: String
     let isDark: Bool
+    let isFlat: Bool
     let probe: CalibrationSample?
 
     var body: some View {
@@ -1224,14 +1273,27 @@ private struct CalibrationScopeChart: View {
         }
 
         if points.count >= 2 {
-            var area = line
-            area.addLine(to: CGPoint(x: x(last.timestamp), y: plot.maxY))
-            area.addLine(to: CGPoint(x: x(first.timestamp), y: plot.maxY))
-            area.closeSubpath()
-            context.fill(area, with: .linearGradient(
-                Gradient(colors: [tint.opacity(isDark ? 0.24 : 0.16), tint.opacity(0.012)]),
-                startPoint: CGPoint(x: plot.midX, y: plot.minY),
-                endPoint: CGPoint(x: plot.midX, y: plot.maxY)))
+            if isFlat {
+                // A steady reading has no area: filling down to the axis drew a
+                // solid block that read as "area chart of nothing". The band is
+                // the window the line actually moves in — 2 pt minimum so the
+                // smallest real variation is still visible.
+                let values = points.map { $0[keyPath: keyPath] }
+                let top = y(values.max() ?? 0)
+                let bottom = max(y(values.min() ?? 0), top + 2)
+                context.fill(Path(CGRect(x: plot.minX, y: top,
+                                         width: plot.width, height: bottom - top)),
+                             with: .color(tint.opacity(isDark ? 0.16 : 0.12)))
+            } else {
+                var area = line
+                area.addLine(to: CGPoint(x: x(last.timestamp), y: plot.maxY))
+                area.addLine(to: CGPoint(x: x(first.timestamp), y: plot.maxY))
+                area.closeSubpath()
+                context.fill(area, with: .linearGradient(
+                    Gradient(colors: [tint.opacity(isDark ? 0.24 : 0.16), tint.opacity(0.012)]),
+                    startPoint: CGPoint(x: plot.midX, y: plot.minY),
+                    endPoint: CGPoint(x: plot.midX, y: plot.maxY)))
+            }
             context.stroke(line, with: .color(tint),
                            style: StrokeStyle(lineWidth: 1.7, lineCap: .round, lineJoin: .round))
         }
@@ -1258,6 +1320,10 @@ private struct CalibrationScopeChart: View {
 
     private func drawGrid(context: inout GraphicsContext, plot: CGRect, y: (Double) -> CGFloat) {
         let gridColor = Color.primary.opacity(isDark ? 0.10 : 0.07)
+        let decimals = ScopeAxis.decimals(steps)
+        // Two steps can round to the same string; printing both makes the axis
+        // look like it is lying about the scale.
+        var drawnLabels = Set<String>()
 
         for step in steps {
             let position = y(step)
@@ -1267,7 +1333,9 @@ private struct CalibrationScopeChart: View {
             line.addLine(to: CGPoint(x: plot.maxX, y: position))
             context.stroke(line, with: .color(gridColor), style: StrokeStyle(lineWidth: 0.5, dash: [2, 3]))
 
-            let label = Text(String(format: "%.0f%@", step, unit))
+            let text = ScopeAxis.label(step, unit: unit, decimals: decimals)
+            guard drawnLabels.insert(text).inserted else { continue }
+            let label = Text(text)
                 .font(Typography.micro.monospaced())
                 .foregroundColor(Color.secondary)
             context.draw(label, at: CGPoint(x: plot.minX - 5, y: position), anchor: .trailing)

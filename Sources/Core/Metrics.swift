@@ -14,17 +14,17 @@ enum Spacing {
     static let m: CGFloat = 12
     static let l: CGFloat = 16
     static let xl: CGFloat = 20
-    static let xxl: CGFloat = 24
-    static let xxxl: CGFloat = 32
 }
 
-/// Four radii, down from eleven. Anything smaller than `chip` is a progress
+/// Three radii, down from eleven. Anything smaller than `chip` is a progress
 /// bar and should be a `Capsule` instead.
+///
+/// There is no `sheet` step: macOS draws the sheet's own corner, so a token for
+/// it never had — and never should have — a caller.
 enum Radius {
     static let chip: CGFloat = 6
     static let control: CGFloat = 8
     static let card: CGFloat = 12
-    static let sheet: CGFloat = 16
 }
 
 /// Two card insets, down from four. `regular` is the default; `compact` is for

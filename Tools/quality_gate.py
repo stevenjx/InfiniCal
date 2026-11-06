@@ -115,7 +115,7 @@ def tests():
     quality = checkpoint_file[checkpoint_file.index("struct CalibrationQuality:"):checkpoint_file.index("struct CalibrationConditions:")]
     conditions = checkpoint_file[checkpoint_file.index("struct CalibrationConditions:"):checkpoint_file.index("struct CalibrationPhaseEvent:")]
     export = checkpoint_file[checkpoint_file.index("struct CalibrationPhaseEvent:"):checkpoint_file.index("/// Result of one completed")]
-    record = checkpoint_file[checkpoint_file.index("struct CalibrationRecord:"):checkpoint_file.index("/// Weighted blend")]
+    record = checkpoint_file[checkpoint_file.index("struct CalibrationRecord:"):checkpoint_file.index("enum CalibrationStore {")]
     smc_source = (ROOT / "Sources/Core/SMC.swift").read_text()
     smc_info = smc_source[smc_source.index("struct SMCKeyInfo {"):smc_source.index("enum SMCError:")]
     smc_loads = smc_source[smc_source.index("    fileprivate static func loadU8"):smc_source.index("    // MARK: - Typed helpers")]

@@ -111,8 +111,6 @@ final class DeviceProfileStore: ObservableObject {
         message = tf("已回滚到规则库 v{p}", "\(next.current.version)")
     }
 
-    func clearMessage() { message = nil }
-
     private func save() throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let encoder = JSONEncoder()

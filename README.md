@@ -33,7 +33,7 @@ InfiniCal reads local IORegistry, SMC and IOHID data to **measure real battery h
 
 Get the latest version from [Releases](https://github.com/stevenjx/InfiniCal/releases).
 
-**Current version: 1.0.19** · universal arm64 + x86_64 package · macOS 12 Monterey or later
+**Current version: 1.0.29** · universal arm64 + x86_64 package · macOS 12 Monterey or later
 
 > The app is ad-hoc signed and not notarized by Apple. macOS may require approval on first launch.
 
@@ -116,7 +116,7 @@ InfiniCal 从本机 IORegistry、SMC 和 IOHID 读取数据，用于**测量真�
 
 前往 [Releases](https://github.com/stevenjx/InfiniCal/releases) 下载最新版本。
 
-**当前版本：1.0.19** · arm64 + x86_64 通用包 · macOS 12 Monterey 及以上
+**当前版本：1.0.29** · arm64 + x86_64 通用包 · macOS 12 Monterey 及以上
 
 > 应用使用 ad-hoc 签名，未经 Apple 公证。首次打开可能需要在系统设置中允许运行。
 

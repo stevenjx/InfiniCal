@@ -274,8 +274,7 @@ private struct RetryStateContent: View {
 ///
 /// The corner radius is not set here. On macOS a `.sheet` is an AppKit sheet
 /// window and AppKit draws its corners; a rounded rectangle of our own inside it
-/// would be a second, slightly different curve. `Radius.sheet` therefore has no
-/// caller — see the plan's U1-09 notes.
+/// would be a second, slightly different curve.
 struct SheetScaffold<Content: View, Footer: View>: View {
     private var theme: Theme { Theme.current }
 

@@ -16,6 +16,16 @@ else
   SDK="$(xcrun --show-sdk-path)"
 fi
 
+# Xcode 27 keeps the SwiftUI macro plugin under the platform directory instead
+# of the toolchain's default plugin search path. Without an explicit
+# -plugin-path every `@State` fails with "SwiftUIMacros could not be found".
+# Older toolchains simply do not have that directory, so the flag is skipped.
+PLUGIN_PATH="$DEV/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins"
+PLUGIN_FLAGS=()
+if [ -d "$PLUGIN_PATH" ]; then
+  PLUGIN_FLAGS=(-plugin-path "$PLUGIN_PATH")
+fi
+
 # Reject source/version drift and run hardware-free regression tests before build.
 python3 "$ROOT/Tools/quality_gate.py" source
 python3 "$ROOT/Tools/quality_gate.py" test
@@ -46,7 +56,6 @@ SOURCES=(
   "$ROOT/Sources/Core/CalibrationMath.swift"
   "$ROOT/Sources/Core/CalibrationEngine.swift"
   "$ROOT/Sources/Core/GPUStress.swift"
-  "$ROOT/Sources/Core/ProcessSampler.swift"
   "$ROOT/Sources/Core/HIDThermal.swift"
   "$ROOT/Sources/Core/HistoryStore.swift"
   "$ROOT/Sources/Core/SparkleUpdater.swift"
@@ -90,6 +99,7 @@ build_arch() {
   local arch="$1"
   echo "==> building $arch"
   "$SWIFTC" -O -swift-version 5 -sdk "$SDK" -target "$arch-apple-macos$MIN" \
+    "${PLUGIN_FLAGS[@]+"${PLUGIN_FLAGS[@]}"}" \
     -module-name InfiniCal -o "$BUILD/obj/InfiniCal-$arch" \
     -F "$ROOT/Vendor" -framework Sparkle \
     -Xlinker -rpath -Xlinker "@executable_path/../Frameworks" \

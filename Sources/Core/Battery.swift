@@ -49,7 +49,6 @@ struct BatterySnapshot: Equatable {
     var instantAmperage: Double = 0     // A, negative while discharging
     var power: Double = 0               // W, negative while discharging
     var temperature: Double = 0         // °C
-    var batterySerial: String = ""
     var cellVoltages: [Double] = []     // V per series cell group
     var timeToEmpty: Int? = nil         // minutes
     var timeToFull: Int? = nil          // minutes
@@ -130,7 +129,6 @@ enum BatteryReader {
         snap.instantAmperage = Double(intValue(props["InstantAmperage"]) ?? 0) / 1000.0
         if snap.instantAmperage == 0 { snap.instantAmperage = snap.amperage }
         snap.power = snap.voltage * snap.amperage
-        snap.batterySerial = (props["Serial"] as? String) ?? ""
 
         if let data = props["BatteryData"] as? [String: Any] {
             snap.designCapacity = intValue(data["DesignCapacity"]) ?? 0
