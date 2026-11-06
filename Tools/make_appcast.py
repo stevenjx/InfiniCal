@@ -91,6 +91,19 @@ def build(dist, output):
     if not entries:
         sys.exit("no eligible DMG in " + dist)
 
+    # The feed is rebuilt from dist/, so a DMG that was deleted locally drops
+    # out of it — and a feed that forgets a version cannot offer it to anyone.
+    # Say so loudly instead of silently publishing a shorter feed.
+    if os.path.exists(output):
+        with open(output, encoding="utf-8") as handle:
+            existing = handle.read().count("<item>")
+        if existing > len(entries):
+            print("WARNING  %s lists %d versions but %s only has %d DMG(s); "
+                  "the new feed will drop %d. Restore those DMGs (or merge the "
+                  "old items back) before publishing."
+                  % (os.path.basename(output), existing, os.path.basename(dist),
+                     len(entries), existing - len(entries)), file=sys.stderr)
+
     entries.sort(key=lambda e: version_key(e["short"]), reverse=True)
 
     lines = ['<?xml version="1.0" standalone="yes"?>',

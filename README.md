@@ -63,6 +63,8 @@ python3 Tools/quality_gate.py all
 Tools/package_dmg.sh                     # writes dist/InfiniCal-<version>.dmg
 
 # 2. Produce the signed appcast (needs the Sparkle tools).
+#    dist/ must still hold the earlier DMGs: the feed is rebuilt from that
+#    folder, so a deleted DMG drops out of appcast.xml.
 python3 Tools/make_appcast.py
 
 # 3. Publish, uploading both the DMG and appcast.xml as release assets.
@@ -146,6 +148,8 @@ python3 Tools/quality_gate.py all
 Tools/package_dmg.sh                     # 产出 dist/InfiniCal-<版本>.dmg
 
 # 2. 生成带 EdDSA 签名的 appcast（需要 Sparkle 工具）
+#    dist/ 里必须保留历史 DMG：feed 是按这个目录重建的，删掉的包会从
+#    appcast.xml 里消失。
 python3 Tools/make_appcast.py
 
 # 3. 创建 Release，上传 DMG 与 appcast.xml 两个资产
