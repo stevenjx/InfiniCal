@@ -243,6 +243,13 @@ enum CalibrationStore {
         StoreIO.discard(file: fileURL)
     }
 
+    /// Whole-list replacement after a merge import. Goes through the same
+    /// `save` as everything else so the backup rotation still applies.
+    static func replaceAll(_ records: [CalibrationRecord]) {
+        safeToRotate = true
+        save(records)
+    }
+
     static func acknowledgeReadIssue() {
         readStatus = .clean
     }

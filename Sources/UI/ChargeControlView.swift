@@ -6,6 +6,7 @@ import SwiftUI
 
 struct ChargeControlView: View {
     @EnvironmentObject private var state: AppState
+    @State private var storageMessage: String?
     private var theme: Theme { Theme.current }
 
     var body: some View {
@@ -24,6 +25,9 @@ struct ChargeControlView: View {
 
             SectionLabel(text: t("场景"))
             scenarioCard
+
+            SectionLabel(text: t("长期存放"))
+            storageCard
 
             SectionLabel(text: t("按时间充满"))
             smartChargeCard
@@ -200,6 +204,80 @@ struct ChargeControlView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Storage mode
+
+    /// "This Mac is going in a drawer." Destructive enough to need a
+    /// confirmation, and specific enough that the copy has to say what it does:
+    /// discharge to 55 %, then hold there.
+    private var storageCard: some View {
+        Card {
+            VStack(alignment: .leading, spacing: Spacing.s) {
+                if let started = state.storageStartedAt {
+                    HStack(alignment: .firstTextBaseline, spacing: Spacing.s) {
+                        Image(systemName: "shippingbox")
+                            .font(Glyph.inline)
+                            .foregroundColor(theme.accent)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(tf("存放中 · 已 {p} 天", "\(StorageMode.daysStored(startedAt: started) ?? 0)"))
+                                .font(Typography.label)
+                                .foregroundColor(theme.textPrimary)
+                            Text(tf("目标是 {p}%；每 {p} 天补电到该电量，避免长期空置。",
+                                    "\(StorageMode.targetPercentage)", "\(StorageMode.reminderDays)"))
+                                .font(Typography.caption)
+                                .foregroundColor(theme.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    if StorageMode.needsTopUp(startedAt: started) {
+                        Text(tf("距开始已超过 {p} 天，建议补电到 {p}%。", "\(StorageMode.reminderDays)", "\(StorageMode.targetPercentage)"))
+                            .font(Typography.caption)
+                            .foregroundColor(theme.warning)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    SmallActionButton(title: t("退出存放模式"), symbol: "arrow.uturn.backward") {
+                        storageMessage = state.exitStorageMode()
+                    }
+                } else {
+                    HStack(alignment: .firstTextBaseline, spacing: Spacing.s) {
+                        Image(systemName: "shippingbox")
+                            .font(Glyph.inline)
+                            .foregroundColor(theme.textSecondary)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(tf("放到 {p}% 后停住，适合几个月不用的机器", "\(StorageMode.targetPercentage)"))
+                                .font(Typography.label)
+                                .foregroundColor(theme.textPrimary)
+                            Text(t("锂电长期满电或空电存放都会加速老化；55% 左右是压力最小的区间。放电沿用现有的温度保护与拔电中断路径。"))
+                                .font(Typography.caption)
+                                .foregroundColor(theme.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    SmallActionButton(title: t("进入存放模式"), symbol: "shippingbox") {
+                        confirmStorage()
+                    }
+                }
+                if let storageMessage {
+                    Text(storageMessage)
+                        .font(Typography.caption)
+                        .foregroundColor(theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    private func confirmStorage() {
+        let alert = NSAlert()
+        alert.messageText = tf("进入存放模式（放到 {p}%）？", "\(StorageMode.targetPercentage)")
+        alert.informativeText = t("会先放电到目标电量再停止充电。放电期间请保持电源连接，拔电或温度过高会中断。")
+        alert.addButton(withTitle: t("开始"))
+        alert.addButton(withTitle: t("取消"))
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        storageMessage = state.enterStorageMode()
     }
 
     // MARK: - Scenarios

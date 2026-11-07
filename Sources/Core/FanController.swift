@@ -756,6 +756,12 @@ final class FanController: ObservableObject {
         return result
     }
 
+    /// Whole-list replacement after a merge import.
+    func replacePresets(_ merged: [FanPreset]) {
+        presets = merged
+        persistPresets()
+    }
+
     func exportDocument() throws -> Data {
         try FanPresetIO.encode(FanPresetDocument.make(presets: presets))
     }

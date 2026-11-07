@@ -405,6 +405,14 @@ final class ChargeSessionStore: ObservableObject {
         clearLive()
     }
 
+    func replaceAll(_ merged: [ChargeSession]) {
+        sessions = merged
+        prune()
+        dirty = true
+        safeToRotate = true
+        save()
+    }
+
     func acknowledgeReadIssue() { readStatus = .clean }
 
     func save() {

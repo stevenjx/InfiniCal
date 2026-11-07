@@ -148,6 +148,14 @@ final class SleepSessionStore: ObservableObject {
         StoreIO.discard(file: fileURL)
     }
 
+    func replaceAll(_ merged: [SleepSession]) {
+        sessions = merged
+        prune()
+        dirty = true
+        safeToRotate = true
+        save()
+    }
+
     func acknowledgeReadIssue() { readStatus = .clean }
 
     func save() {

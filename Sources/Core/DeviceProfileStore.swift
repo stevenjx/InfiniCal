@@ -102,6 +102,14 @@ final class DeviceProfileStore: ObservableObject {
         message = tf("已导入规则库 v{p}", "\(library.version)")
     }
 
+    /// Installs a validated library without presenting it as a user action in
+    /// the banner: used by the migration import, which reports its own result.
+    func installQuietly(_ library: CapabilityRuleLibrary) {
+        guard library.validationError == nil else { return }
+        archive = archive.installing(library)
+        try? save()
+    }
+
     func rollback() throws {
         guard let next = archive.rollingBack() else {
             throw CapabilityRuleError.invalid(t("没有可回滚的规则库版本"))

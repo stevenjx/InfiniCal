@@ -42,6 +42,8 @@ struct AdviceInput: Equatable {
 
     var days: [Day] = []
     var sessions: [Session] = []
+    /// Set while the machine is in storage mode; drives the top-up reminder.
+    var storageStartedAt: Date?
     /// Current charge ceiling; 100 means "no ceiling", so overshoot is moot.
     var chargeLimit: Int = 100
     var now: Date = Date()
@@ -98,6 +100,7 @@ enum AdviceEngine {
         if let item = limitOvershoot(days, limit: input.chargeLimit) { items.append(item) }
         if let item = resistanceRise(sessions) { items.append(item) }
         if let item = deepCalibrationCooldown(input.sessions, now: input.now) { items.append(item) }
+        if let item = storageTopUp(input.storageStartedAt, now: input.now) { items.append(item) }
         items.sort { lhs, rhs in
             if lhs.level != rhs.level { return lhs.level == .attention }
             return lhs.id < rhs.id
@@ -198,6 +201,22 @@ enum AdviceEngine {
             evidence: [
                 tf("最近一次深度校准在 {p}（{p} 天前）", day(last.date), "\(daysAgo)"),
                 t("深度校准会把电池放到接近空电，短期内重复做不会带来更多信息。"),
+            ])
+    }
+
+    /// Storage mode has one failure mode worth a reminder: the pack is left
+    /// alone for so long that self-discharge takes it below the safe floor.
+    private static func storageTopUp(_ startedAt: Date?, now: Date) -> AdviceItem? {
+        guard let startedAt, StorageMode.needsTopUp(startedAt: startedAt, now: now) else { return nil }
+        let days = StorageMode.daysStored(startedAt: startedAt, now: now) ?? 0
+        return AdviceItem(
+            id: "storage-topup",
+            level: .attention,
+            title: t("存放中的电池该补电了"),
+            advice: tf("接上电源充到 {p}% 再继续存放。", "\(StorageMode.targetPercentage)"),
+            evidence: [
+                tf("已存放 {p} 天（建议每 {p} 天补一次）", "\(days)", "\(StorageMode.reminderDays)"),
+                t("长期空置会因自放电进入低压区，那部分容量不可逆。"),
             ])
     }
 

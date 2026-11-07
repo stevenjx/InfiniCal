@@ -68,6 +68,8 @@ SOURCES=(
   "$ROOT/Sources/Core/FanPresetFile.swift"
   "$ROOT/Sources/Core/HealthReport.swift"
   "$ROOT/Sources/Core/PDFCanvas.swift"
+  "$ROOT/Sources/Core/Migration.swift"
+  "$ROOT/Sources/Core/StorageMode.swift"
   "$ROOT/Sources/Core/SparkleUpdater.swift"
   "$ROOT/Sources/UI/UpdatePanel.swift"
   "$ROOT/Sources/Core/Notifier.swift"

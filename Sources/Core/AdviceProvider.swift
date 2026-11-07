@@ -11,7 +11,8 @@ import Foundation
 enum AdviceProvider {
 
     static func input(days: [DailyStat], records: [CalibrationRecord],
-                      chargeLimit: Int, now: Date = Date()) -> AdviceInput {
+                      chargeLimit: Int, now: Date = Date(),
+                      storageStartedAt: Date? = nil) -> AdviceInput {
         AdviceInput(days: days.map { day in
             AdviceInput.Day(date: day.day,
                             highTemperatureSeconds: day.highTemperatureSeconds ?? 0,
@@ -28,11 +29,13 @@ enum AdviceProvider {
                                 preset: record.conditions?.preset,
                                 startPercentage: record.startDischargePercentage,
                                 eligible: record.quality?.eligibleForAggregation == true)
-        }, chargeLimit: chargeLimit, now: now)
+        }, storageStartedAt: storageStartedAt, chargeLimit: chargeLimit, now: now)
     }
 
     static func report(days: [DailyStat], records: [CalibrationRecord],
-                       chargeLimit: Int, now: Date = Date()) -> AdviceReport {
-        AdviceEngine.evaluate(input(days: days, records: records, chargeLimit: chargeLimit, now: now))
+                       chargeLimit: Int, now: Date = Date(),
+                       storageStartedAt: Date? = nil) -> AdviceReport {
+        AdviceEngine.evaluate(input(days: days, records: records, chargeLimit: chargeLimit,
+                                    now: now, storageStartedAt: storageStartedAt))
     }
 }

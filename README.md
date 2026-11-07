@@ -33,7 +33,7 @@ InfiniCal reads local IORegistry, SMC and IOHID data to **measure real battery h
 
 Get the latest version from [Releases](https://github.com/stevenjx/InfiniCal/releases).
 
-**Current version: 1.0.34** · universal arm64 + x86_64 package · macOS 12 Monterey or later
+**Current version: 1.0.35** · universal arm64 + x86_64 package · macOS 12 Monterey or later
 
 > The app is ad-hoc signed and not notarized by Apple. macOS may require approval on first launch.
 
@@ -88,6 +88,10 @@ open -g "infinical://status"        # writes ~/Library/Application Support/Infin
 
 # Battery health report as a PDF, without opening the window:
 InfiniCal --report ~/Desktop/report.pdf
+
+# Move a battery's history to another Mac:
+InfiniCal --export-archive ~/Desktop/mac.infinicalarchive
+InfiniCal --verify-archive ~/Desktop/mac.infinicalarchive   # dry-run the merge
 ```
 
 The app does not need to be frontmost — a cold start is handled too. Requirements and behaviour:
@@ -142,7 +146,7 @@ InfiniCal 从本机 IORegistry、SMC 和 IOHID 读取数据，用于**测量真�
 
 前往 [Releases](https://github.com/stevenjx/InfiniCal/releases) 下载最新版本。
 
-**当前版本：1.0.34** · arm64 + x86_64 通用包 · macOS 12 Monterey 及以上
+**当前版本：1.0.35** · arm64 + x86_64 通用包 · macOS 12 Monterey 及以上
 
 > 应用使用 ad-hoc 签名，未经 Apple 公证。首次打开可能需要在系统设置中允许运行。
 
@@ -197,6 +201,10 @@ open -g "infinical://status"        # 写入 ~/Library/Application Support/Infin
 
 # 不打开窗口直接生成 PDF 体检报告：
 InfiniCal --report ~/Desktop/report.pdf
+
+# 把电池历史带到另一台机器：
+InfiniCal --export-archive ~/Desktop/mac.infinicalarchive
+InfiniCal --verify-archive ~/Desktop/mac.infinicalarchive   # 只做合并试算
 ```
 
 应用不需要在前台，冷启动也会处理。规则：

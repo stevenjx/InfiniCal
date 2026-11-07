@@ -65,6 +65,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
            index + 1 < CommandLine.arguments.count {
             writeReportAndExit(path: CommandLine.arguments[index + 1])
         }
+        // `--export-archive <path>` and `--verify-archive <path>`: the two
+        // halves of migration without the file dialog. Export is read-only;
+        // verify decodes and dry-runs the merge, so a script can check an
+        // archive before it is imported (which stays a deliberate UI action).
+        if let index = CommandLine.arguments.firstIndex(of: "--export-archive"),
+           index + 1 < CommandLine.arguments.count {
+            writeArchiveAndExit(path: CommandLine.arguments[index + 1])
+        }
+        if let index = CommandLine.arguments.firstIndex(of: "--verify-archive"),
+           index + 1 < CommandLine.arguments.count {
+            verifyArchiveAndExit(path: CommandLine.arguments[index + 1])
+        }
         // The app may run as an accessory (no Dock icon) or a regular app; the
         // status item is always present, so closing the window is never a dead end.
         Task { @MainActor in SparkleUpdater.shared.checkInBackground() }
@@ -101,6 +113,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func writeArchiveAndExit(path: String) {
+        state.snapshot = BatteryReader.read()
+        do {
+            let data = try Migration.encode(state.makeArchive())
+            try data.write(to: URL(fileURLWithPath: path), options: .atomic)
+            print(path)
+            exit(0)
+        } catch {
+            FileHandle.standardError.write(Data((error.localizedDescription + "\n").utf8))
+            exit(2)
+        }
+    }
+
+    private func verifyArchiveAndExit(path: String) {
+        do {
+            let data = try Data(contentsOf: URL(fileURLWithPath: path))
+            let archive: MigrationArchive
+            switch Migration.decode(data) {
+            case .success(let value): archive = value
+            case .failure(let error):
+                FileHandle.standardError.write(Data((error.message + "\n").utf8))
+                exit(2)
+            }
+            let merged = Migration.merge(archive,
+                                         into: DailyHistory.shared.days,
+                                         calibration: CalibrationStore.load(),
+                                         sessions: ChargeSessionStore.shared.sessions,
+                                         sleeps: SleepSessionStore.shared.sessions,
+                                         fanPresets: FanController.shared.presets)
+            print("\(archive.machine.model) · \(archive.machine.healthPercent)% · \(merged.result.summary)")
+            exit(0)
+        } catch {
+            FileHandle.standardError.write(Data((error.localizedDescription + "\n").utf8))
+            exit(2)
+        }
+    }
+
     /// Reopen path: the window is closable but the process keeps running.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         showWindow()
@@ -126,7 +175,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showWindow() {
         if window == nil {
             let hosting = NSHostingView(rootView: ThemedRoot().environmentObject(state))
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1080, height: 720),
+            // `--window-size 1080x1400` exists for the screenshot pipeline:
+            // several pages are longer than 720 pt, and a capture that only
+            // shows the top half cannot verify what was added at the bottom.
+            let size = Self.requestedWindowSize ?? NSSize(width: 1080, height: 720)
+            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: size.width, height: size.height),
                                   styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                                   backing: .buffered,
                                   defer: false)
@@ -143,6 +196,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         window?.makeKeyAndOrderFront(nil)
         NSApp.activateInFront()
+    }
+
+    /// Parsed once; nil means "use the default".
+    static var requestedWindowSize: NSSize? {
+        guard let index = CommandLine.arguments.firstIndex(of: "--window-size"),
+              index + 1 < CommandLine.arguments.count else { return nil }
+        let parts = CommandLine.arguments[index + 1].lowercased().split(separator: "x")
+        guard parts.count == 2, let width = Double(parts[0]), let height = Double(parts[1]),
+              width >= 980, height >= 640 else { return nil }
+        return NSSize(width: width, height: height)
     }
 
     private func observeThemeChanges() {

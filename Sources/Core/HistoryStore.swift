@@ -331,6 +331,16 @@ final class DailyHistory: ObservableObject {
         StoreIO.discard(file: fileURL)
     }
 
+    /// Replaces the whole series after a merge import. Writes immediately:
+    /// this is a user-initiated, one-off operation and losing it to a crash
+    /// would be indistinguishable from the import having failed.
+    func replaceAll(_ stats: [DailyStat]) {
+        days = stats
+        dirty = true
+        safeToRotate = true
+        save()
+    }
+
     /// Dismisses the startup banner without touching the quarantined file.
     func acknowledgeReadIssue() {
         readStatus = .clean

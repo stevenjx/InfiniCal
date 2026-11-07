@@ -155,6 +155,9 @@ final class AppState: ObservableObject {
     @Published var scenarioDesktop: Bool = false { didSet { store(scenarioDesktop, "scenarioDesktop") } }
     @Published var scenarioBoost: Bool = false { didSet { store(scenarioBoost, "scenarioBoost") } }
     @Published var scenarioNight: Bool = false { didSet { store(scenarioNight, "scenarioNight") } }
+    /// 存放模式的开始时间。用 nil 表示「不在存放中」，而不是再存一个 Bool：
+    /// 两个字段会不一致，一个日期不会。
+    @Published private(set) var storageStartedAt: Date?
     /// 「电量即将用尽」的提前量。开关本身不在这里：它是 `AnomalyAlerts` 里的
     /// 一条规则，「关闭此类」与设置页的开关必须是同一个状态，多存一份就会打架。
     @Published var lowPowerLeadMinutes: Int = LowPowerPolicy.defaultLeadMinutes { didSet { store(lowPowerLeadMinutes, "lowPowerLeadMinutes") } }
@@ -1441,6 +1444,86 @@ final class AppState: ObservableObject {
         return true
     }
 
+    // MARK: - Storage mode
+
+    var isInStorageMode: Bool { storageStartedAt != nil }
+
+    /// Discharges to the storage level and remembers when it started. Refuses
+    /// when the pack is already there instead of pretending to start.
+    @discardableResult
+    func enterStorageMode() -> String {
+        if let refusal = StorageMode.refusal(percentage: snapshot.percentage) {
+            return refusal
+        }
+        let started = Date()
+        storageStartedAt = started
+        defaults.set(started.timeIntervalSince1970, forKey: "storageStartedAt")
+        startDischarge(to: StorageMode.targetPercentage, origin: .user)
+        let message = statusNote.isEmpty
+            ? tf("已进入存放模式：放电至 {p}%", "\(StorageMode.targetPercentage)")
+            : statusNote + " · " + tf("已进入存放模式：放电至 {p}%", "\(StorageMode.targetPercentage)")
+        log(t("存放模式"), message)
+        return message
+    }
+
+    @discardableResult
+    func exitStorageMode() -> String {
+        storageStartedAt = nil
+        defaults.removeObject(forKey: "storageStartedAt")
+        let message = StorageMode.exitGuidance(percentage: snapshot.percentage)
+        statusNote = message
+        log(t("存放模式"), message)
+        return message
+    }
+
+    // MARK: - Migration
+
+    /// Everything an archive carries, read from the live stores.
+    func makeArchive() -> MigrationArchive {
+        var settings: [String: Int] = [:]
+        for key in Migration.settingKeys {
+            if let value = defaults.object(forKey: key) as? Int { settings[key] = value }
+        }
+        return MigrationArchive(exportedAt: Date(),
+                                machine: MachineSummary.current(),
+                                days: DailyHistory.shared.days,
+                                calibration: CalibrationStore.load(),
+                                sessions: ChargeSessionStore.shared.sessions,
+                                sleeps: SleepSessionStore.shared.sessions,
+                                settings: settings,
+                                fanPresets: FanController.shared.presets,
+                                rules: DeviceProfileStore.shared.library)
+    }
+
+    /// Merges an archive in. Nothing is overwritten: duplicates are counted.
+    func importArchive(_ data: Data) throws -> MigrationImportResult {
+        let archive: MigrationArchive
+        switch Migration.decode(data) {
+        case .success(let value): archive = value
+        case .failure(let error): throw error
+        }
+        let merged = Migration.merge(archive,
+                                     into: DailyHistory.shared.days,
+                                     calibration: CalibrationStore.load(),
+                                     sessions: ChargeSessionStore.shared.sessions,
+                                     sleeps: SleepSessionStore.shared.sessions,
+                                     fanPresets: FanController.shared.presets)
+        DailyHistory.shared.replaceAll(merged.days)
+        CalibrationStore.replaceAll(merged.calibration)
+        ChargeSessionStore.shared.replaceAll(merged.sessions)
+        SleepSessionStore.shared.replaceAll(merged.sleeps)
+        FanController.shared.replacePresets(merged.presets)
+        if let rules = archive.rules, rules.validationError == nil {
+            DeviceProfileStore.shared.installQuietly(rules)
+            _ = merged.result
+        }
+        ImportedMachineStore.shared.add(archive.machine)
+        var result = merged.result
+        result.rulesInstalled = archive.rules != nil
+        log(t("迁移"), result.summary)
+        return result
+    }
+
     // MARK: - Scheduled tasks
 
     /// `catchUp` is the 「自动补做未完成的任务」 path: a task whose time passed
@@ -1862,6 +1945,8 @@ final class AppState: ObservableObject {
         scenarioDesktop = bool("scenarioDesktop", false)
         scenarioBoost = bool("scenarioBoost", false)
         scenarioNight = bool("scenarioNight", false)
+        let stored = defaults.double(forKey: "storageStartedAt")
+        storageStartedAt = stored > 0 ? Date(timeIntervalSince1970: stored) : nil
         if let data = defaults.data(forKey: "scheduledTasks"),
            let decoded = try? JSONDecoder().decode([ScheduledTask].self, from: data) {
             tasks = decoded

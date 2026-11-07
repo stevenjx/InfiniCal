@@ -326,6 +326,10 @@ print("PASS update retry/cancellation transitions and fan persistence (no hardwa
     swift += (ROOT / "Sources/Core/ScenarioLimit.swift").read_text()
     # 预设文件只有 Foundation 依赖：编解码、校验与合并都是纯函数。
     swift += (ROOT / "Sources/Core/FanPresetFile.swift").read_text()
+    # 迁移合并与存放模式的策略都是纯函数。
+    migration = (ROOT / "Sources/Core/Migration.swift").read_text()
+    swift += migration[:migration.index("/// Reading the live machine's identity")]
+    swift += (ROOT / "Sources/Core/StorageMode.swift").read_text()
     swift += '''
 func check(_ condition: Bool, _ message: String) { precondition(condition, message) }
 for sailing in [false, true] {
@@ -1572,7 +1576,81 @@ check(secondMerge.result.count == 2 && secondMerge.added == 1, "不同名预设�
 let again = FanPresetIO.merge([FanPreset(name: "B", modes: [0: .auto], rpms: [:])], into: secondMerge.result)
 check(again.result.count == 2 && again.added == 0, "同一个文件导入两次不增长")
 
-print("PASS pure policy/math/checkpoint/helper-validation/quality/trend/anomaly/profile/advice/arbitration/store/low-power/automation/session/usage/sleep/scenario/fanpreset tests (no hardware)")
+// ── 迁移包：编解码与合并规则 ────────────────────────────────────────────────
+func archiveDay(_ offset: Int, wh: Double = 10, now: Date) -> DailyStat {
+    var day = DailyStat(day: Calendar.current.startOfDay(for: now.addingTimeInterval(-Double(offset) * 86400)))
+    day.dischargeWh = wh
+    return day
+}
+let archiveNow = Calendar.current.startOfDay(for: at(500_000))
+let localDays = [archiveDay(2, wh: 10, now: archiveNow), archiveDay(1, wh: 12, now: archiveNow)]
+let incomingDays = [archiveDay(1, wh: 99, now: archiveNow), archiveDay(0, wh: 14, now: archiveNow)]
+var archive = MigrationArchive(exportedAt: archiveNow,
+                               machine: MachineSummary(model: "Mac14,9", exportedAt: archiveNow,
+                                                       healthPercent: 88, cycleCount: 240,
+                                                       designCapacityMAh: 6000, maxCapacityMAh: 5280,
+                                                       appVersion: "1.0.35"),
+                               days: incomingDays)
+let mergedDays = Migration.merge(archive, into: localDays, calibration: [], sessions: [],
+                                 sleeps: [], fanPresets: [])
+check(mergedDays.result.daysAdded == 1, "只新增本地没有的那一天")
+check(mergedDays.result.daysSkipped == 1, "同一天被计为跳过而不是覆盖")
+check(mergedDays.days.count == 3, "合并后共三天")
+// 本地那天的值必须保留：导入不能悄悄改写已有记录。
+let keptDay = mergedDays.days.first { Calendar.current.isDate($0.day, inSameDayAs: localDays[1].day) }
+check(abs((keptDay?.dischargeWh ?? 0) - 12) < 0.001, "重复的那天保留本地数值")
+
+// 编解码往返
+guard let archiveData = try? Migration.encode(archive) else { fatalError("archive encode") }
+switch Migration.decode(archiveData) {
+case .success(let decoded):
+    check(decoded.days.count == 2 && decoded.machine.model == "Mac14,9", "迁移包往返保留内容")
+case .failure(let error):
+    check(false, "迁移包往返失败：" + error.message)
+}
+check(Migration.decode(Data("{}".utf8)) == .failure(.notAnArchive), "非迁移包被拒")
+var futureArchive = archive; futureArchive.version = 7
+if let futureData = try? Migration.encode(futureArchive) {
+    check(Migration.decode(futureData) == .failure(.newerVersion(7)), "过新版本被拒")
+} else { check(false, "无法编码未来版本") }
+var emptyArchive = archive; emptyArchive.days = []
+if let emptyData = try? Migration.encode(emptyArchive) {
+    check(Migration.decode(emptyData) == .failure(.empty), "空迁移包被拒")
+} else { check(false, "无法编码空迁移包") }
+
+// 记录类按 id 去重：同一个 id 不会变成两条。
+let record = CalibrationRecord(startDate: archiveNow, endDate: archiveNow,
+                               calculatedCapacityMAh: 5000, batteryHealthPercentage: 83)
+var withRecord = archive; withRecord.calibration = [record]
+let twice = Migration.merge(withRecord, into: [], calibration: [record], sessions: [],
+                            sleeps: [], fanPresets: [])
+check(twice.result.calibrationsSkipped == 1 && twice.calibration.count == 1, "校准记录按 id 去重")
+// 预设沿用同名替换规则。
+var withPreset = archive
+withPreset.fanPresets = [FanPreset(name: "A", modes: [0: .full], rpms: [0: 6000])]
+let presetMerge = Migration.merge(withPreset, into: [],
+                                  calibration: [], sessions: [], sleeps: [],
+                                  fanPresets: [FanPreset(name: "A", modes: [0: .auto], rpms: [:])])
+check(presetMerge.result.presetsReplaced == 1 && presetMerge.presets.count == 1, "同名预设被替换而不是重复")
+check(!presetMerge.result.summary.isEmpty, "导入结果有可读摘要")
+// 设置白名单不含任何身份信息。
+check(!Migration.settingKeys.contains("showInDock"), "启动项不随迁移包走")
+check(Migration.settingKeys.contains("chargeVal"), "充电上限随迁移包走")
+
+// ── 存放模式 ────────────────────────────────────────────────────────────────
+check(StorageMode.targetPercentage == 55, "存放目标是 55%")
+check(StorageMode.refusal(percentage: 60) == nil, "高于目标时可以开始放电")
+check(StorageMode.refusal(percentage: 55) != nil, "已经低于目标时不假装开始")
+check(!StorageMode.needsTopUp(startedAt: nil, now: archiveNow), "不在存放中不提醒")
+let storageStart = archiveNow.addingTimeInterval(-Double(StorageMode.reminderDays) * 86400 + 3600)
+check(!StorageMode.needsTopUp(startedAt: storageStart, now: archiveNow), "差一小时不提醒")
+let oldStart = archiveNow.addingTimeInterval(-Double(StorageMode.reminderDays) * 86400)
+check(StorageMode.needsTopUp(startedAt: oldStart, now: archiveNow), "满 90 天提醒补电")
+check(StorageMode.daysStored(startedAt: oldStart, now: archiveNow) == StorageMode.reminderDays,
+      "存放天数按整天计算")
+check(StorageMode.exitGuidance(percentage: 10).contains("20"), "过低时给出安全下限")
+
+print("PASS pure policy/math/checkpoint/helper-validation/quality/trend/anomaly/profile/advice/arbitration/store/low-power/automation/session/usage/sleep/scenario/fanpreset/migration/storage tests (no hardware)")
 '''
     with tempfile.TemporaryDirectory(prefix="infinical-tests-") as directory:
         main = Path(directory) / "main.swift"

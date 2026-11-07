@@ -18,13 +18,16 @@ struct HistoryView: View {
     /// `CalibrationStore.readStatus` is a static, so acknowledging it does not
     /// publish and the card would otherwise stay until a relaunch.
     @StateObject private var recoveryDismissed = UIFlag(false)
+    @StateObject private var machines = ImportedMachineStore.shared
+    @State private var migrationMessage: String?
     private var theme: Theme { Theme.current }
 
     private var stats: [DailyStat] { history.series(days: range.value) }
     private var isEmpty: Bool { stats.allSatisfy { $0.isEmpty } }
     private var advice: AdviceReport {
         AdviceProvider.report(days: history.days, records: calibration.records,
-                              chargeLimit: state.chargeVal)
+                              chargeLimit: state.chargeVal,
+                              storageStartedAt: state.storageStartedAt)
     }
 
     var body: some View {
@@ -45,6 +48,7 @@ struct HistoryView: View {
                 listCard
             }
             healthTrends
+            migrationCard
 
             Text(t("按自然日聚合，数据来自本机电池的电压 × 电流积分；App 未运行时不计入。"))
                 .font(Typography.caption)
@@ -138,6 +142,83 @@ struct HistoryView: View {
                     .font(Typography.caption)
                     .foregroundColor(theme.textTertiary)
             }
+        }
+    }
+
+    // MARK: - Migration
+
+    /// Export / import for moving history to another Mac, plus the list of
+    /// machines already imported. The list is the "compare two Macs" feature in
+    /// its honest form: two health numbers side by side, not overlaid curves
+    /// whose x-axis (calendar time) means different things on different machines.
+    private var migrationCard: some View {
+        Card {
+            VStack(alignment: .leading, spacing: Spacing.s) {
+                CardHeader(title: t("迁移与多机对比"),
+                           subtitle: t("导出的文件只包含电量、容量、会话与设置，不含序列号、用户名或路径。"))
+                HStack(spacing: Spacing.s) {
+                    SmallActionButton(title: t("导出迁移包"), symbol: "square.and.arrow.up") { exportArchive() }
+                    SmallActionButton(title: t("导入迁移包"), symbol: "square.and.arrow.down") { importArchive() }
+                    Spacer(minLength: 0)
+                }
+                if let migrationMessage {
+                    Text(migrationMessage)
+                        .font(Typography.caption)
+                        .foregroundColor(theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if !machines.machines.isEmpty {
+                    Divider().background(theme.divider)
+                    ForEach(machines.machines) { machine in
+                        HStack(alignment: .firstTextBaseline, spacing: Spacing.s) {
+                            Image(systemName: "laptopcomputer")
+                                .font(Glyph.inline)
+                                .foregroundColor(theme.textTertiary)
+                            Text(machine.model).font(Typography.caption).foregroundColor(theme.textPrimary)
+                            Spacer(minLength: Spacing.s)
+                            Text(tf("健康度 {p}% · {p} 次循环", "\(machine.healthPercent)", "\(machine.cycleCount)"))
+                                .font(Typography.caption.monospacedDigit())
+                                .foregroundColor(theme.textSecondary)
+                            Text(machine.exportedAt.formatted(date: .abbreviated, time: .omitted))
+                                .font(Typography.micro)
+                                .foregroundColor(theme.textTertiary)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func exportArchive() {
+        let panel = NSSavePanel()
+        let stamp = DateFormatter()
+        stamp.locale = Locale(identifier: "en_US_POSIX")
+        stamp.dateFormat = "yyyyMMdd"
+        panel.nameFieldStringValue = "InfiniCal-\(stamp.string(from: Date())).infinicalarchive"
+        panel.message = t("导出迁移包")
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let data = try Migration.encode(state.makeArchive())
+            try data.write(to: url, options: .atomic)
+            migrationMessage = tf("已导出迁移包（{p} KB）", "\(max(1, data.count / 1024))")
+        } catch {
+            migrationMessage = error.localizedDescription
+        }
+    }
+
+    private func importArchive() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.message = t("选择 .infinicalarchive 文件")
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let data = try Data(contentsOf: url)
+            let result = try state.importArchive(data)
+            migrationMessage = result.summary
+        } catch let error as MigrationError {
+            migrationMessage = error.message
+        } catch {
+            migrationMessage = error.localizedDescription
         }
     }
 
