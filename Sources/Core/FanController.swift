@@ -59,6 +59,13 @@ struct FanPreset: Codable, Identifiable, Equatable {
     /// Fan index → fixed RPM.
     var rpms: [Int: Int]
     var curveEnabled: Bool = false
+    /// Curve shape, carried by exported presets. Optional so presets stored by
+    /// earlier versions (which only kept `curveEnabled`) still decode.
+    var curveSensorKey: String? = nil
+    var curveStartTemperature: Double? = nil
+    var curveMidTemperature: Double? = nil
+    var curveMidPercent: Double? = nil
+    var curvePeakTemperature: Double? = nil
 }
 
 struct ThermalReading: Identifiable, Equatable {
@@ -706,16 +713,61 @@ final class FanController: ObservableObject {
     func savePreset(named name: String) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        let preset = FanPreset(name: trimmed, modes: modes, rpms: fixedRPM, curveEnabled: curveEnabled)
+        let preset = FanPreset(name: trimmed, modes: modes, rpms: fixedRPM,
+                               curveEnabled: curveEnabled,
+                               curveSensorKey: curveSensorKey,
+                               curveStartTemperature: curveStartTemperature,
+                               curveMidTemperature: curveMidTemperature,
+                               curveMidPercent: curveMidPercent,
+                               curvePeakTemperature: curvePeakTemperature)
         presets.removeAll { $0.name == trimmed }
         presets.append(preset)
         persistPresets()
         activePresetName = trimmed
     }
 
+    /// Sensor keys this machine actually exposes, for preset validation.
+    var availableSensorKeys: [String] { sensors.map(\.key) }
+
+    /// Where a curve should point when a preset names a sensor this Mac does
+    /// not have: the hottest one currently readable. Nil when nothing reads.
+    var hottestSensorKey: String? {
+        sensors.filter { $0.celsius.isFinite && $0.celsius > 0 }
+            .max { $0.celsius < $1.celsius }?.key
+    }
+
+    /// Validates a preset file against this machine and merges what survives.
+    /// `FanPresetIO` owns the rules; this only supplies the hardware facts and
+    /// writes the result.
+    func importPresets(_ data: Data) throws -> FanPresetImportResult {
+        let document: FanPresetDocument
+        switch FanPresetIO.decode(data) {
+        case .success(let value): document = value
+        case .failure(let error): throw error
+        }
+        var result = FanPresetIO.validate(document.presets,
+                                          fanCount: fans.count,
+                                          sensorKeys: availableSensorKeys,
+                                          fallbackSensor: hottestSensorKey)
+        guard !result.imported.isEmpty else { throw FanPresetImportError.noUsablePreset }
+        let merged = FanPresetIO.merge(result.imported, into: presets)
+        presets = merged.result
+        persistPresets()
+        return result
+    }
+
+    func exportDocument() throws -> Data {
+        try FanPresetIO.encode(FanPresetDocument.make(presets: presets))
+    }
+
     func apply(_ preset: FanPreset) {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
+            if let key = preset.curveSensorKey { self.curveSensorKey = key }
+            if let value = preset.curveStartTemperature { self.curveStartTemperature = value }
+            if let value = preset.curveMidTemperature { self.curveMidTemperature = value }
+            if let value = preset.curveMidPercent { self.curveMidPercent = value }
+            if let value = preset.curvePeakTemperature { self.curvePeakTemperature = value }
             self.curveEnabled = preset.curveEnabled
             self.modes = preset.modes
             self.fixedRPM = preset.rpms

@@ -128,6 +128,10 @@ struct HistoryView: View {
                 ChipButton(title: t("30 天"), selected: range.value == 30) { range.value = 30 }
                 ChipButton(title: t("90 天"), selected: range.value == 90) { range.value = 90 }
             }
+            Button(t("生成 PDF 报告")) { exportPDF() }
+                .buttonStyle(.plain)
+                .font(Typography.caption)
+                .foregroundColor(theme.accent)
             if !history.days.isEmpty {
                 Button(t("清除")) { confirmClear() }
                     .buttonStyle(.plain)
@@ -597,6 +601,29 @@ struct HistoryView: View {
 
     private func energy(_ wh: Double) -> String {
         wh >= 1000 ? String(format: "%.2f kWh", wh / 1000) : String(format: "%.1f Wh", wh)
+    }
+
+    /// One click, one file. The panel opens before the work so a slow disk
+    /// shows the system's own progress rather than a frozen window.
+    private func exportPDF() {
+        let panel = NSSavePanel()
+        let stamp = DateFormatter()
+        stamp.locale = Locale(identifier: "en_US_POSIX")
+        stamp.dateFormat = "yyyyMMdd"
+        panel.nameFieldStringValue = "InfiniCal-Report-\(stamp.string(from: Date())).pdf"
+        panel.message = t("导出电池体检报告")
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let data = HealthReportCollector.collect()
+        guard let pdf = HealthReport.makePDF(data) else {
+            state.lastMessage = t("报告生成失败")
+            return
+        }
+        do {
+            try pdf.write(to: url, options: .atomic)
+            state.lastMessage = tf("报告已导出（{p} KB）", "\(max(1, pdf.count / 1024))")
+        } catch {
+            state.lastMessage = error.localizedDescription
+        }
     }
 
     private func confirmClear() {

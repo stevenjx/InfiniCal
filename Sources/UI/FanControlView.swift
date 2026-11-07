@@ -9,6 +9,9 @@ struct FanControlPage: View {
     @EnvironmentObject private var state: AppState
     @StateObject private var controller = FanController.shared
     @StateObject private var showAllSensors = UIFlag()
+    /// Import/export outcome. A file that is refused has to say why on the page;
+    /// a silent no-op would look like the import succeeded.
+    @State private var presetMessage: String?
     private var theme: Theme { Theme.current }
 
     var body: some View {
@@ -49,6 +52,12 @@ struct FanControlPage: View {
             curveCard
 
             presetRow
+            if let presetMessage {
+                Text(presetMessage)
+                    .font(Typography.caption)
+                    .foregroundColor(theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             if !state.helperInstalled {
                 helperNotice
@@ -356,6 +365,56 @@ struct FanControlPage: View {
                 savePreset()
             }
             .frame(width: 96)
+            Button {
+                importPresets()
+            } label: {
+                Image(systemName: "square.and.arrow.down").font(Glyph.inline)
+            }
+            .buttonStyle(.plain)
+            .foregroundColor(theme.textSecondary)
+            .help(t("导入预设文件"))
+            Button {
+                exportPresets()
+            } label: {
+                Image(systemName: "square.and.arrow.up").font(Glyph.inline)
+            }
+            .buttonStyle(.plain)
+            .foregroundColor(theme.textSecondary)
+            .help(t("导出全部预设"))
+            .disabled(controller.presets.isEmpty)
+        }
+    }
+
+    /// Import is the one place a foreign file reaches the hardware, so it goes
+    /// through `FanPresetIO.validate` first: a preset naming a sensor or fan
+    /// this Mac does not have is re-pointed or trimmed, and the result says so.
+    private func importPresets() {
+        let panel = NSOpenPanel()
+        panel.allowedFileTypes = ["json", "infinicalfan"]
+        panel.allowsMultipleSelection = false
+        panel.message = t("选择 InfiniCal 风扇预设文件")
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            let data = try Data(contentsOf: url)
+            let result = try controller.importPresets(data)
+            presetMessage = result.summary ?? t("预设已导入")
+        } catch let error as FanPresetImportError {
+            presetMessage = error.message
+        } catch {
+            presetMessage = error.localizedDescription
+        }
+    }
+
+    private func exportPresets() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "InfiniCal-FanPresets.json"
+        panel.message = t("导出全部风扇预设")
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try controller.exportDocument().write(to: url, options: .atomic)
+            presetMessage = tf("已导出 {p} 个预设", "\(controller.presets.count)")
+        } catch {
+            presetMessage = error.localizedDescription
         }
     }
 

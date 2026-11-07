@@ -58,6 +58,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
            let panel = Panel(rawValue: CommandLine.arguments[index + 1]) {
             state.selectedPanel = panel
         }
+        // `--report <path>` writes the PDF and exits. The save panel is the
+        // normal way in, but a report a script can produce is the difference
+        // between "export this for me" and "export this every month".
+        if let index = CommandLine.arguments.firstIndex(of: "--report"),
+           index + 1 < CommandLine.arguments.count {
+            writeReportAndExit(path: CommandLine.arguments[index + 1])
+        }
         // The app may run as an accessory (no Dock icon) or a regular app; the
         // status item is always present, so closing the window is never a dead end.
         Task { @MainActor in SparkleUpdater.shared.checkInBackground() }
@@ -73,6 +80,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         observeThemeChanges()
         // Anything that arrived during the cold start can run now.
         AutomationCenter.shared.markReady()
+    }
+
+    /// Headless report generation. Reads the battery directly because the 2 s
+    /// tick has not run yet at this point in the launch.
+    private func writeReportAndExit(path: String) {
+        state.snapshot = BatteryReader.read()
+        let data = HealthReportCollector.collect()
+        guard let pdf = HealthReport.makePDF(data) else {
+            FileHandle.standardError.write(Data("report failed\n".utf8))
+            exit(2)
+        }
+        do {
+            try pdf.write(to: URL(fileURLWithPath: path), options: .atomic)
+            print(path)
+            exit(0)
+        } catch {
+            FileHandle.standardError.write(Data((error.localizedDescription + "\n").utf8))
+            exit(2)
+        }
     }
 
     /// Reopen path: the window is closable but the process keeps running.

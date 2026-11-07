@@ -149,6 +149,7 @@ func handleWrite(_ request: [String: Any]) -> [String: Any] {
     swift += (ROOT / "Sources/Core/ChargeArbitration.swift").read_text()
     app_state = (ROOT / "Sources/Core/AppState.swift").read_text()
     fan_source = (ROOT / "Sources/Core/FanController.swift").read_text()
+    fan_types = fan_source[fan_source.index("enum FanMode:"):fan_source.index("struct ThermalReading:")]
     update_methods = app_state[app_state.index("    func prepareForUpdate()"):app_state.index("    private func tick()", app_state.index("    func prepareForUpdate()"))]
     fan_cancel = fan_source[fan_source.index("    func completeUpdateCancellation()"):fan_source.index("    // MARK: - Persistence")]
     fan_properties = fan_source[fan_source.index("    @Published var modes:"):fan_source.index("    @Published var curveSensorKey:")].replace("@Published ", "").replace("UserDefaults.standard", "defaults")
@@ -199,7 +200,7 @@ final class TestCalibration {
     func prepareIdleForUpdate() { suspended = true }
     func resumeAfterUpdateCancellation() { suspended = false; resumes += 1 }
 }
-enum FanMode { case auto, fixed, full }
+''' + fan_types + '''
 struct TestFan { let index: Int }
 final class TestDefaults {
     var curve = true
@@ -323,6 +324,8 @@ print("PASS update retry/cancellation transitions and fan persistence (no hardwa
     sleep_source = (ROOT / "Sources/Core/SleepSession.swift").read_text()
     swift += sleep_source[:sleep_source.index("final class SleepSessionStore")]
     swift += (ROOT / "Sources/Core/ScenarioLimit.swift").read_text()
+    # 预设文件只有 Foundation 依赖：编解码、校验与合并都是纯函数。
+    swift += (ROOT / "Sources/Core/FanPresetFile.swift").read_text()
     swift += '''
 func check(_ condition: Bool, _ message: String) { precondition(condition, message) }
 for sailing in [false, true] {
@@ -1509,7 +1512,67 @@ let dockedNight = ScenarioLimit.resolve(scenarioInput(desktop: true, night: true
                                                       displays: 1, hour: 23))
 check(dockedNight?.kind == .desktop, "桌面模式优先于夜间窗口")
 
-print("PASS pure policy/math/checkpoint/helper-validation/quality/trend/anomaly/profile/advice/arbitration/store/low-power/automation/session/usage/sleep/scenario tests (no hardware)")
+// ── 风扇预设文件：编解码、跨机校验与合并 ────────────────────────────────────
+let quiet = FanPreset(name: "安静", modes: [0: .fixed, 1: .fixed], rpms: [0: 1800, 1: 1800],
+                      curveEnabled: false, curveSensorKey: "cpu-die",
+                      curveStartTemperature: 50, curveMidTemperature: 68,
+                      curveMidPercent: 45, curvePeakTemperature: 85)
+let doc = FanPresetDocument.make(presets: [quiet], appVersion: "1.0.34")
+guard let encoded = try? FanPresetIO.encode(doc) else { fatalError("encode") }
+switch FanPresetIO.decode(encoded) {
+case .success(let decoded):
+    check(decoded.presets.count == 1 && decoded.presets[0].name == "安静", "编解码往返保留预设")
+    check(decoded.presets[0].curveSensorKey == "cpu-die", "曲线传感器随预设一起保存")
+case .failure(let error):
+    check(false, "往返解码失败：" + error.message)
+}
+// 不是本应用的文件：拒绝并说明
+check(FanPresetIO.decode(Data("{}".utf8)) == .failure(.notAFanPresetFile), "空对象被拒")
+check(FanPresetIO.decode(Data("not json".utf8)) == .failure(.notAFanPresetFile), "非 JSON 被拒")
+// 版本过新：拒绝而不是猜
+var future = doc; future.version = 9
+if let futureData = try? FanPresetIO.encode(future) {
+    check(FanPresetIO.decode(futureData) == .failure(.unsupportedVersion(9)), "过新版本被拒")
+} else { check(false, "无法编码未来版本，测试无效") }
+// 空预设数组
+var emptyDoc = doc; emptyDoc.presets = []
+if let emptyData = try? FanPresetIO.encode(emptyDoc) {
+    check(FanPresetIO.decode(emptyData) == .failure(.empty), "空预设被拒")
+} else { check(false, "无法编码空预设，测试无效") }
+
+// 跨机校验：本机只有 1 个风扇、没有 cpu-die 传感器。
+let foreign = FanPreset(name: "别人的曲线", modes: [0: .fixed, 1: .full], rpms: [0: 3000],
+                        curveEnabled: true, curveSensorKey: "gpu-die",
+                        curveStartTemperature: 60, curveMidTemperature: 70,
+                        curveMidPercent: 50, curvePeakTemperature: 90)
+let validated = FanPresetIO.validate([foreign], fanCount: 1,
+                                     sensorKeys: ["TB0T", "Tp01"],
+                                     fallbackSensor: "Tp01")
+check(validated.imported.count == 1, "仍然可导入")
+check(validated.imported[0].modes.count == 1, "多出来的风扇被裁掉")
+check(validated.imported[0].curveSensorKey == "Tp01", "缺失传感器回落到本机最热的一个")
+check(validated.sensorFallbacks == ["别人的曲线"], "回落被记为需要告知用户")
+check(validated.summary?.contains("Tp01") == true, "提示里写明改用了哪个传感器")
+// 本机完全没有风扇：整条不可用，跳过而不是导入空壳。
+let noFans = FanPresetIO.validate([foreign], fanCount: 0, sensorKeys: [], fallbackSensor: nil)
+check(noFans.imported.isEmpty && noFans.skipped == ["别人的曲线"], "没有风扇时不导入")
+// 本机有该传感器：原样保留，不触发回落。
+let native = FanPreset(name: "本机", modes: [0: .auto], rpms: [:],
+                       curveEnabled: true, curveSensorKey: "TB0T")
+let kept = FanPresetIO.validate([native], fanCount: 2, sensorKeys: ["TB0T"], fallbackSensor: "TB0T")
+check(kept.sensorFallbacks.isEmpty && kept.imported[0].curveSensorKey == "TB0T", "本机传感器不被改写")
+
+// 合并：同名替换，不同名追加；同一文件导入两次不增长。
+let existing = [FanPreset(name: "A", modes: [0: .auto], rpms: [:])]
+let firstMerge = FanPresetIO.merge([FanPreset(name: "A", modes: [0: .full], rpms: [0: 6000])], into: existing)
+check(firstMerge.result.count == 1 && firstMerge.replaced == 1, "同名预设被替换")
+check(firstMerge.result[0].modes[0] == .full, "替换后内容是新值")
+let secondMerge = FanPresetIO.merge([FanPreset(name: "B", modes: [0: .auto], rpms: [:])], into: firstMerge.result)
+check(secondMerge.result.count == 2 && secondMerge.added == 1, "不同名预设被追加")
+let again = FanPresetIO.merge([FanPreset(name: "B", modes: [0: .auto], rpms: [:])], into: secondMerge.result)
+check(again.result.count == 2 && again.added == 0, "同一个文件导入两次不增长")
+
+print("PASS pure policy/math/checkpoint/helper-validation/quality/trend/anomaly/profile/advice/arbitration/store/low-power/automation/session/usage/sleep/scenario/fanpreset tests (no hardware)")
 '''
     with tempfile.TemporaryDirectory(prefix="infinical-tests-") as directory:
         main = Path(directory) / "main.swift"
