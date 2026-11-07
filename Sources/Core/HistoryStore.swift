@@ -228,9 +228,13 @@ final class DailyHistory: ObservableObject {
     static let shared = DailyHistory()
 
     @Published private(set) var days: [DailyStat] = []
+    /// How the last read went. Set at launch, cleared when the user
+    /// acknowledges it. `needsAttention` is what the UI keys off.
+    @Published private(set) var readStatus: StoreReadStatus = .clean
 
     private let calendar = Calendar.current
     private var dirty = false
+    private var safeToRotate = false
     private let retentionDays = 400
 
     private init() {
@@ -300,29 +304,36 @@ final class DailyHistory: ObservableObject {
 
     func clear() {
         days = []
-        dirty = true
-        save()
+        dirty = false
+        // Deleting only the main file would leave the backup behind, and the
+        // next start would "recover" the history the user just wiped.
+        StoreIO.discard(file: fileURL)
+    }
+
+    /// Dismisses the startup banner without touching the quarantined file.
+    func acknowledgeReadIssue() {
+        readStatus = .clean
     }
 
     // MARK: - Persistence
 
-    private var fileURL: URL {
+    var fileURL: URL {
         CalibrationStore.directory.appendingPathComponent("daily.json")
     }
 
     func save() {
         guard dirty else { return }
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        guard let data = try? encoder.encode(days) else { return }
-        guard (try? data.write(to: fileURL, options: [.atomic])) != nil else { return }
+        guard StoreIO.save(days, to: fileURL, rotate: safeToRotate) else { return }
+        // After the first successful save the file on disk is known good, so
+        // the next save may copy it into the backup slot.
+        safeToRotate = true
         dirty = false
     }
 
     private func load() {
-        guard let data = try? Data(contentsOf: fileURL) else { return }
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        days = (try? decoder.decode([DailyStat].self, from: data)) ?? []
+        let read = StoreIO.load(DailyStat.self, from: fileURL)
+        days = read.value
+        readStatus = read.status
+        safeToRotate = read.safeToRotate
     }
 }

@@ -6,6 +6,7 @@ import SwiftUI
 
 struct SleepEnergyView: View {
     @EnvironmentObject private var state: AppState
+    @ObservedObject private var alerts = AnomalyAlerts.shared
     private var theme: Theme { Theme.current }
     @StateObject private var advanced = UIFlag()
 
@@ -27,6 +28,10 @@ struct SleepEnergyView: View {
         (1, t("中等使用量（macOS 默认值）")),
         (2, t("高使用量"))
     ]
+
+    private var lowPowerLeadOptions: [(Int, String)] {
+        LowPowerPolicy.leadOptions.map { ($0, tf("{p} 分钟", "\($0)")) }
+    }
 
     var body: some View {
         PageScaffold(title: Panel.sleep.title,
@@ -92,6 +97,30 @@ struct SleepEnergyView: View {
                 applyLowPowerMode(value)
             }), options: lpmOptions, width: 190)
             ToggleRow(symbol: "arrow.clockwise.circle", title: t("后台仪表板更新"), help: t("窗口在后台时也持续刷新仪表板数据。"), isOn: $state.dashboardBackgroundUpdates)
+
+            SectionLabel(text: t("提醒"))
+            Card {
+                VStack(spacing: 4) {
+                    // One state, not two: the switch is the same `disabled` set
+                    // that 「关闭此类」 writes in 历史 → 异常告警. A separate
+                    // `lowPowerAlertEnabled` flag would let the two disagree
+                    // about whether the alert is on.
+                    ToggleRow(symbol: "battery.25",
+                              title: t("电量即将用尽时提醒"),
+                              help: t("按最近 3 分钟的放电功率估算剩余时间，低于提前量时通知一次；电量低于 5% 也会提醒。"),
+                              isOn: Binding(get: { !alerts.disabled.contains("lowPower") },
+                                            set: { alerts.setDisabled("lowPower", !$0) }))
+                    Divider().background(theme.divider)
+                    PickerRow(symbol: "clock.badge.exclamationmark",
+                              title: t("提前量"),
+                              help: t("剩余可用时间少于这个值时提醒。"),
+                              selection: $state.lowPowerLeadMinutes,
+                              options: lowPowerLeadOptions,
+                              width: 120)
+                        .disabled(alerts.disabled.contains("lowPower"))
+                        .opacity(alerts.disabled.contains("lowPower") ? 0.45 : 1)
+                }
+            }
 
             HStack(spacing: 10) {
                 IconBadge(symbol: "bolt.fill")

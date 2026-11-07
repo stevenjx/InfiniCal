@@ -127,7 +127,31 @@ struct HardwareDiagnosticReport: Codable {
             for item in assessment.limitations { lines.append("[Limit] \(t(item))") }
             for item in assessment.recommendations { lines.append("[Advice] \(t(item))") }
         }
+        // Data health belongs in a support report: "my history is empty" and
+        // "the file failed to decode" look identical from the outside.
+        for line in Self.storeLines(daily: DailyHistory.shared.readStatus,
+                                    calibration: CalibrationStore.readStatus) {
+            lines.append(line)
+        }
         return lines.joined(separator: "\n")
+    }
+
+    /// One `[Store]` line per store that needed attention this launch. Paths go
+    /// through `StoreIO.displayPath`, so the account name never leaves the Mac.
+    static func storeLines(daily: StoreReadStatus, calibration: StoreReadStatus) -> [String] {
+        func describe(_ name: String, _ status: StoreReadStatus) -> String? {
+            switch status {
+            case .clean:
+                return nil
+            case .recoveredFromBackup(let path):
+                return "[Store] \(name)=recovered-from-backup"
+                    + (path.map { " quarantine=" + StoreIO.displayPath(URL(fileURLWithPath: $0)) } ?? "")
+            case .startedEmpty(let path):
+                return "[Store] \(name)=unreadable-started-empty"
+                    + (path.map { " quarantine=" + StoreIO.displayPath(URL(fileURLWithPath: $0)) } ?? "")
+            }
+        }
+        return [describe("daily", daily), describe("calibration", calibration)].compactMap { $0 }
     }
 }
 

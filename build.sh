@@ -58,6 +58,8 @@ SOURCES=(
   "$ROOT/Sources/Core/GPUStress.swift"
   "$ROOT/Sources/Core/HIDThermal.swift"
   "$ROOT/Sources/Core/HistoryStore.swift"
+  "$ROOT/Sources/Core/StoreIO.swift"
+  "$ROOT/Sources/Core/LowPower.swift"
   "$ROOT/Sources/Core/SparkleUpdater.swift"
   "$ROOT/Sources/UI/UpdatePanel.swift"
   "$ROOT/Sources/Core/Notifier.swift"

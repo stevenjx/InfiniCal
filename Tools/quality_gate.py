@@ -303,6 +303,10 @@ print("PASS update retry/cancellation transitions and fan persistence (no hardwa
     alerts = (ROOT / "Sources/Core/AnomalyAlerts.swift").read_text()
     swift += alerts[alerts.index("struct AnomalyRule {"):alerts.index("struct AnomalyEvidence:")]
     swift += history[history.index("struct DailyStat:"):history.index("final class DailyHistory:")]
+    # StoreIO and LowPower are pure value types over the filesystem and clocks,
+    # so the recovery and estimation rules can be exercised without a battery.
+    swift += (ROOT / "Sources/Core/StoreIO.swift").read_text()
+    swift += (ROOT / "Sources/Core/LowPower.swift").read_text()
     swift += '''
 func check(_ condition: Bool, _ message: String) { precondition(condition, message) }
 for sailing in [false, true] {
@@ -992,7 +996,216 @@ let latchedHeat = arbitrationInput {
 }
 check(arbitrated(latchedHeat)?.winner.strategy == .heatProtect, "过热锁存期间仍由过热保护持有")
 
-print("PASS pure policy/math/checkpoint/helper-validation/quality/trend/anomaly/profile/advice/arbitration tests (no hardware)")
+// MARK: - 存储自愈：读失败不得变成"数据清零"
+let storeDir = FileManager.default.temporaryDirectory
+    .appendingPathComponent("infinical-store-" + UUID().uuidString)
+try FileManager.default.createDirectory(at: storeDir, withIntermediateDirectories: true)
+let storeFile = storeDir.appendingPathComponent("daily.json")
+let storeBackup = StoreIO.backupURL(for: storeFile)
+check(storeBackup.lastPathComponent == "daily.bak.json", "备份文件名由主文件推导")
+check(StoreIO.quarantineURL(for: storeFile, now: Date(timeIntervalSince1970: 0))
+        .lastPathComponent == "daily.corrupt-19700101-000000.json", "隔离文件名带 UTC 时间戳")
+check(StoreIO.displayPath(URL(fileURLWithPath: NSHomeDirectory() + "/x/y.json")) == "~/x/y.json",
+      "展示路径不泄露账户名")
+
+let goodDays = [DailyStat(day: Date(timeIntervalSince1970: 1_000), temperatureSamples: 1,
+                          cycleCount: 12, reportedCapacityMAh: 5000)]
+// 首次运行：文件不存在不是故障，也不该触发轮转。
+let firstRun = StoreIO.load(DailyStat.self, from: storeFile)
+check(firstRun.value.isEmpty && firstRun.status == .clean && !firstRun.safeToRotate,
+      "首次运行不报错、不轮转")
+
+check(StoreIO.save(goodDays, to: storeFile, rotate: false), "首写成功")
+check(!FileManager.default.fileExists(atPath: storeBackup.path), "首写不产生备份")
+
+// 第二次写：轮转后主文件是新值，备份是旧值。
+let dayTwo = [DailyStat(day: Date(timeIntervalSince1970: 2_000), cycleCount: 13)]
+check(StoreIO.save(dayTwo, to: storeFile, rotate: true), "轮转写成功")
+check(FileManager.default.fileExists(atPath: storeBackup.path), "轮转产生备份")
+check(StoreIO.load(DailyStat.self, from: storeFile).value.first?.cycleCount == 13, "主文件是新值")
+
+// 主文件被截断：备份必须接管，坏文件必须留着。
+let truncated = Data("[{\\"day\\":\\"2026-01-01T00:00:00Z\\",\\"cyc".utf8)
+try truncated.write(to: storeFile)
+let recovered = StoreIO.load(DailyStat.self, from: storeFile)
+check(recovered.value.map { $0.cycleCount } == [12], "备份接管而不是返回空")
+if case .recoveredFromBackup(let path) = recovered.status {
+    check(path != nil, "隔离路径必须报告出来")
+    check(FileManager.default.fileExists(atPath: path!), "坏文件原样保留")
+    let kept = try Data(contentsOf: URL(fileURLWithPath: path!))
+    check(kept == truncated, "隔离文件字节不变")
+} else {
+    check(false, "可恢复时必须报告 recoveredFromBackup")
+}
+check(recovered.safeToRotate, "恢复出的数据可以继续轮转")
+check(StoreIO.load(DailyStat.self, from: storeFile).value.map { $0.cycleCount } == [12],
+      "恢复后主文件被重写成可读内容")
+
+// 主文件与备份都坏：从空白开始，但两个坏文件都不能被覆盖。
+try Data("not json".utf8).write(to: storeFile)
+try Data("also not json".utf8).write(to: storeBackup)
+let dead = StoreIO.load(DailyStat.self, from: storeFile)
+check(dead.value.isEmpty && !dead.safeToRotate, "双坏时从空白开始且禁止轮转")
+if case .startedEmpty(let path) = dead.status {
+    check(path != nil && FileManager.default.fileExists(atPath: path!), "双坏时同样保留原件")
+} else {
+    check(false, "双坏时必须报告 startedEmpty")
+}
+
+// 主文件被删除但备份还在：等价于主文件损坏，必须恢复而不是从零开始。
+try? FileManager.default.removeItem(at: storeFile)
+try? FileManager.default.removeItem(at: storeBackup)
+_ = StoreIO.save(goodDays, to: storeFile, rotate: false)
+_ = StoreIO.save(dayTwo, to: storeFile, rotate: true)
+try? FileManager.default.removeItem(at: storeFile)
+let deleted = StoreIO.load(DailyStat.self, from: storeFile)
+check(deleted.value.map { $0.cycleCount } == [12], "主文件被删时从备份恢复")
+if case .recoveredFromBackup(let path) = deleted.status {
+    check(path == nil, "主文件消失时没有可隔离的文件")
+} else {
+    check(false, "主文件消失但有备份时必须报告 recoveredFromBackup")
+}
+check(FileManager.default.fileExists(atPath: storeFile.path), "恢复后主文件重新落盘")
+
+// 主文件与备份都不在：这才是真正的首次运行。
+try? FileManager.default.removeItem(at: storeFile)
+try? FileManager.default.removeItem(at: storeBackup)
+let trulyFirst = StoreIO.load(DailyStat.self, from: storeFile)
+check(trulyFirst.status == .clean && !trulyFirst.safeToRotate, "没有主文件也没有备份时按首次运行处理")
+
+// 清空必须连备份一起删，否则下次启动会把用户删掉的历史"恢复"回来。
+check(StoreIO.save(goodDays, to: storeFile, rotate: false), "重建主文件")
+StoreIO.save(goodDays, to: storeFile, rotate: true)
+check(FileManager.default.fileExists(atPath: storeBackup.path), "清空前有备份")
+StoreIO.discard(file: storeFile)
+check(!FileManager.default.fileExists(atPath: storeFile.path)
+      && !FileManager.default.fileExists(atPath: storeBackup.path), "清空后主文件与备份都不在")
+check(!StoreIO.hasBackup(for: storeFile), "清空后不再报告有备份")
+try? FileManager.default.removeItem(at: storeDir)
+
+// MARK: - 低电量：估算、门槛、关闭
+// 60 Wh 的包以 30 W 放电 = 2 小时。
+check(LowPowerPolicy.minutesLeft(remainingMAh: 5000, voltage: 12, watts: 30) == 120,
+      "剩余分钟 = 瓦时 ÷ 瓦 × 60")
+check(LowPowerPolicy.minutesLeft(remainingMAh: 5000, voltage: 12, watts: 0.2) == nil,
+      "电流过小时拒绝给出估算")
+check(LowPowerPolicy.minutesLeft(remainingMAh: 0, voltage: 12, watts: 30) == nil, "没有容量就没有估算")
+check(LowPowerPolicy.minutesLeft(remainingMAh: 5000, voltage: 0, watts: 30) == nil, "没有电压就没有估算")
+
+check(LowPowerPolicy.shouldWarn(minutesLeft: 15, lead: 20, percentage: 40), "低于提前量要提醒")
+check(!LowPowerPolicy.shouldWarn(minutesLeft: 25, lead: 20, percentage: 40), "高于提前量不提醒")
+check(!LowPowerPolicy.shouldWarn(minutesLeft: nil, lead: 20, percentage: 40), "没有估算不报")
+check(LowPowerPolicy.shouldWarn(minutesLeft: nil, lead: 20, percentage: 3), "低于 5% 无需估算也报")
+check(LowPowerPolicy.shouldWarn(minutesLeft: 600, lead: 20, percentage: 4), "临界电量优先于估算")
+check(!LowPowerPolicy.shouldWarn(minutesLeft: 600, lead: 20, percentage: 0),
+      "读不到电量（0%）时不按临界处理")
+check(!LowPowerPolicy.isCritical(0) && !LowPowerPolicy.isCritical(6), "临界区间是 1…5")
+
+// 放电均值：过旧与充电样本都不能算进"现在还剩多久"。
+var watch = DischargeWatch()
+let watchStart = Date(timeIntervalSince1970: 10_000)
+check(watch.average(at: watchStart) == nil, "没有样本时不给均值")
+watch.record(watts: 10, at: watchStart)
+watch.record(watts: 30, at: watchStart.addingTimeInterval(1))
+check(watch.average(at: watchStart.addingTimeInterval(1)) == 20, "两样本取均值")
+watch.record(watts: -5, at: watchStart.addingTimeInterval(2))
+check(watch.sampleCount == 2, "充电（负功率）样本不参与")
+watch.record(watts: Double.nan, at: watchStart.addingTimeInterval(2))
+check(watch.sampleCount == 2, "非有限值样本不参与")
+// 窗口外的旧样本必须滑出。
+watch.record(watts: 40, at: watchStart.addingTimeInterval(DischargeWatch.window + 60))
+check(watch.sampleCount == 1 && watch.average(at: watchStart.addingTimeInterval(DischargeWatch.window + 60)) == 40,
+      "窗口外的样本滑出")
+// 全部过期后不再给出均值。
+check(watch.average(at: watchStart.addingTimeInterval(DischargeWatch.window + 60 + DischargeWatch.staleAfter + 1)) == nil,
+      "样本过期后不给均值")
+watch.reset()
+check(watch.sampleCount == 0, "reset 清空窗口")
+
+// 证据行：有估算时说清功率与窗口，没有估算时不编造数字。
+let withEstimate = LowPowerPolicy.evidence(percentage: 12, leadMinutes: 20,
+                                          averageWatts: 30, minutesLeft: 120, windowSeconds: 180)
+check(withEstimate.contains("12%") && withEstimate.contains("30.0 W")
+      && withEstimate.contains("180 s") && withEstimate.contains("120 min"),
+      "证据行包含电量、功率、窗口与剩余时间")
+let withoutEstimate = LowPowerPolicy.evidence(percentage: 3, leadMinutes: 20,
+                                             averageWatts: nil, minutesLeft: nil, windowSeconds: 180)
+check(withoutEstimate.contains("无法估算") && !withoutEstimate.contains("→ 剩余"),
+      "没有估算时不下结论")
+check(!withoutEstimate.contains("0.0 W"), "没有估算时不写 0 W")
+
+// 恢复门槛必须高于触发门槛，否则规则会在阈值附近反复触发。
+check(LowPowerPolicy.recoveryMinutes(lead: 20) == 25, "20 分钟提前量的恢复门槛是 25 分钟")
+check(LowPowerPolicy.recoveryMinutes(lead: 60) > LowPowerPolicy.recoveryMinutes(lead: 20),
+      "提前量越大恢复门槛越高")
+check(LowPowerPolicy.recoveryMinutes(lead: 5) >= 6, "极小提前量也留出余量")
+for lead in LowPowerPolicy.leadOptions {
+    check(LowPowerPolicy.recoveryMinutes(lead: lead) > lead, "恢复门槛永远高于触发门槛")
+}
+
+// 端到端：把策略接进门控跑一遍"放电 → 告警 → 回升 → 再降"。
+// `AnomalyGate` 在采样间隔 > 10 s 时会清空证据，所以这里每 5 秒一步。
+var lowGate = AnomalyGate()
+let lowRule = AnomalyRule(id: "lowPower", title: "电量即将用尽", duration: 30, cooldown: 600)
+let t0 = Date(timeIntervalSince1970: 500_000)
+func lowStep(_ seconds: Double, minutes: Int?, percentage: Int, plugged: Bool = false) -> Bool {
+    let now = t0.addingTimeInterval(seconds)
+    lowGate.beginSample(at: now)
+    let warn = !plugged && LowPowerPolicy.shouldWarn(minutesLeft: minutes, lead: 20, percentage: percentage)
+    let recover = LowPowerPolicy.shouldRecover(percentage: percentage, minutesLeft: minutes,
+                                               lead: 20, pluggedIn: plugged)
+    return lowGate.evaluate(lowRule, trigger: warn, recover: recover, now: now)
+}
+check(!lowStep(0, minutes: 90, percentage: 60), "电量充足时不提醒")
+check(!lowStep(5, minutes: 18, percentage: 30), "刚进入提前量时先累积证据")
+check(!lowStep(15, minutes: 18, percentage: 30), "持续不足 30 秒仍不提醒")
+check(!lowStep(25, minutes: 18, percentage: 30), "第 25 秒仍在累积")
+check(lowStep(35, minutes: 18, percentage: 30), "持续 30 秒后提醒")
+check(!lowStep(40, minutes: 17, percentage: 29), "冷却期内不重复提醒")
+check(!lowStep(45, minutes: 40, percentage: 32), "回升到恢复门槛以上时解除")
+check(!lowStep(55, minutes: 18, percentage: 30), "再次进入提前量后重新累积证据")
+check(!lowStep(65, minutes: 18, percentage: 30), "冷却未结束时仍不提醒")
+check(!lowStep(80, minutes: 18, percentage: 30), "冷却期内不重复提醒（600 秒）")
+// 冷却结束后重新累积 30 秒证据再提醒（步长必须 ≤ 10 s，否则门控会重置证据）。
+check(!lowStep(640, minutes: 18, percentage: 30), "冷却结束后重新计时")
+for step in stride(from: 645.0, through: 665.0, by: 5) {
+    check(!lowStep(step, minutes: 18, percentage: 30), "证据仍在累积")
+}
+check(lowStep(670, minutes: 18, percentage: 30), "冷却结束后可再次提醒")
+check(!lowStep(675, minutes: 18, percentage: 30, plugged: true), "插电即恢复")
+
+// 临界电量：没有估算也要提醒，插电同样恢复。单独一个门控，避免冷却期串扰。
+var criticalGate = AnomalyGate()
+func criticalStep(_ seconds: Double, percentage: Int, plugged: Bool = false) -> Bool {
+    let now = t0.addingTimeInterval(seconds)
+    criticalGate.beginSample(at: now)
+    let warn = !plugged && LowPowerPolicy.shouldWarn(minutesLeft: nil, lead: 20, percentage: percentage)
+    let recover = LowPowerPolicy.shouldRecover(percentage: percentage, minutesLeft: nil,
+                                               lead: 20, pluggedIn: plugged)
+    return criticalGate.evaluate(lowRule, trigger: warn, recover: recover, now: now)
+}
+check(!criticalStep(0, percentage: 8), "8% 且无估算时不提醒")
+check(!criticalStep(5, percentage: 4), "临界电量先累积 30 秒证据")
+for step in stride(from: 10.0, through: 30.0, by: 5) {
+    check(!criticalStep(step, percentage: 4), "临界证据仍在累积")
+}
+check(criticalStep(35, percentage: 4), "4% 无估算也提醒")
+_ = criticalStep(40, percentage: 4, plugged: true)
+check(!criticalStep(45, percentage: 4, plugged: true), "插电后临界也不提醒")
+
+// 恢复条件：插电即恢复；电量在临界区上方的估算回升才恢复；无估算视为恢复。
+check(LowPowerPolicy.shouldRecover(percentage: 30, minutesLeft: 5, lead: 20, pluggedIn: true),
+      "插电即恢复")
+check(!LowPowerPolicy.shouldRecover(percentage: 30, minutesLeft: 15, lead: 20, pluggedIn: false),
+      "仍低于门槛时不恢复")
+check(LowPowerPolicy.shouldRecover(percentage: 30, minutesLeft: 26, lead: 20, pluggedIn: false),
+      "超过恢复门槛后恢复")
+check(!LowPowerPolicy.shouldRecover(percentage: 4, minutesLeft: 600, lead: 20, pluggedIn: false),
+      "临界电量高于门槛下也不该清除提醒")
+check(LowPowerPolicy.shouldRecover(percentage: 30, minutesLeft: nil, lead: 20, pluggedIn: false),
+      "没有估算（几乎无功耗）时不再算低电量")
+
+print("PASS pure policy/math/checkpoint/helper-validation/quality/trend/anomaly/profile/advice/arbitration/store/low-power tests (no hardware)")
 '''
     with tempfile.TemporaryDirectory(prefix="infinical-tests-") as directory:
         main = Path(directory) / "main.swift"

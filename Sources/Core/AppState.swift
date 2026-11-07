@@ -149,6 +149,9 @@ final class AppState: ObservableObject {
     @Published var dashboardBackgroundUpdates: Bool = false { didSet { store(dashboardBackgroundUpdates, "dashboardBackgroundUpdates") } }
     @Published var showProcessesInHighUsage: Bool = false { didSet { store(showProcessesInHighUsage, "showProcessesInHighUsage") } }
     @Published var energyThreshold: Int = 1 { didSet { store(energyThreshold, "appsSignificantEnergyThreshold") } }
+    /// 「电量即将用尽」的提前量。开关本身不在这里：它是 `AnomalyAlerts` 里的
+    /// 一条规则，「关闭此类」与设置页的开关必须是同一个状态，多存一份就会打架。
+    @Published var lowPowerLeadMinutes: Int = LowPowerPolicy.defaultLeadMinutes { didSet { store(lowPowerLeadMinutes, "lowPowerLeadMinutes") } }
     @Published var colorMode: Int = 2 { didSet { store(colorMode, "colorMode"); syncTheme() } }
     /// 0 = follow the system, 1 = Chinese, 2 = English. Every string is resolved
     /// through `t()` while a body is built, so publishing this is enough to
@@ -510,7 +513,8 @@ final class AppState: ObservableObject {
         AnomalyAlerts.shared.sample(snapshot, limit: chargeVal,
             intentionalDrain: manualDischargeTarget != nil || ChargeController.shared.activeAdapterKey != nil || ChargeController.shared.heldCeiling != nil || calibrationEngine.isRunning,
             suppressLimit: calibrationEngine.isRunning || calibrationEngine.needsRecovery,
-            calibration: calibrationEngine, fanError: FanController.shared.lastError)
+            calibration: calibrationEngine, fanError: FanController.shared.lastError,
+            lowPowerLeadMinutes: lowPowerLeadMinutes)
         notifyLimitReached()
         // `ps` is a process spawn; skip it while nobody can see the list.
         if tickCount % 10 == 0, dashboardBackgroundUpdates || NSApp.isActive {
@@ -1639,6 +1643,7 @@ final class AppState: ObservableObject {
         showInDock = bool("showInDock", true)
         launchAtLogin = bool("launchAtLogin", false)
         startTasksAfterDue = bool("startTasksAfterDue", false)
+        lowPowerLeadMinutes = int("lowPowerLeadMinutes", LowPowerPolicy.defaultLeadMinutes)
         if let data = defaults.data(forKey: "scheduledTasks"),
            let decoded = try? JSONDecoder().decode([ScheduledTask].self, from: data) {
             tasks = decoded

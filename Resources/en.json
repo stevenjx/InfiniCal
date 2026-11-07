@@ -819,5 +819,19 @@
  "平稳": "Steady",
  "窗口内波动 {p}{p}": "Window range {p}{p}",
  "健康度与容量来自最近一次有效校准，其余为该瞬间的实时读数；每项的来源标在标签右侧。": "Health and capacity come from the last valid calibration; the other readings are instantaneous. Each tile names its source next to its label.",
- "{p} · CPU {p} W · GPU {p} W": "{p} · CPU {p} W · GPU {p} W"
+ "{p} · CPU {p} W · GPU {p} W": "{p} · CPU {p} W · GPU {p} W",
+ "电量即将用尽": "Battery almost empty",
+ "请尽快接入电源或保存工作。剩余时间按最近的放电功率估算。": "Plug in or save your work. The remaining time is estimated from recent discharge power.",
+ "提前提醒": "Lead time",
+ "电量即将用尽时提醒": "Warn when the battery is about to run out",
+ "按最近 3 分钟的放电功率估算剩余时间，低于提前量时通知一次；电量低于 5% 也会提醒。": "Estimates the remaining time from the last 3 minutes of discharge power and notifies once when it drops below the lead time. A charge below 5% also notifies.",
+ "提前量": "Lead time",
+ "剩余可用时间少于这个值时提醒。": "Notify when the remaining runtime falls below this value.",
+ "提醒": "Notifications",
+ "本地数据已自动恢复": "Local data was recovered automatically",
+ "读取失败的数据文件已原样保留，没有被覆盖。": "The files that could not be read were kept as they were — nothing was overwritten.",
+ "每日历史": "Daily history",
+ "{p}读取失败，已从备份恢复；损坏的文件保留在旁边。": "{p} could not be read and was restored from the backup; the damaged file is kept next to it.",
+ "{p}与备份都无法读取，本次从空白开始；原来的文件保留在旁边，可手动检查。": "Neither {p} nor its backup could be read, so this session starts empty. The original file is kept next to it for inspection.",
+ "我已了解": "Got it"
 }

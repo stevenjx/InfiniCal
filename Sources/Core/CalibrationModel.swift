@@ -199,21 +199,30 @@ enum CalibrationStore {
         return base
     }
 
-    private static var fileURL: URL { directory.appendingPathComponent("calibration.json") }
+    static var fileURL: URL { directory.appendingPathComponent("calibration.json") }
+
+    /// How the last read went. `append`/`delete` go through `load`, so one
+    /// damaged file cannot silently empty the store and then be overwritten by
+    /// the write that follows.
+    private(set) static var readStatus: StoreReadStatus = .clean
+    /// False after a failed recovery: the next save must not rotate a possibly
+    /// corrupt backup over an unknown one.
+    private static var safeToRotate = false
 
     static func load() -> [CalibrationRecord] {
-        guard let data = try? Data(contentsOf: fileURL) else { return [] }
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return (try? decoder.decode([CalibrationRecord].self, from: data)) ?? []
+        let read = StoreIO.load(CalibrationRecord.self, from: fileURL)
+        safeToRotate = read.safeToRotate
+        // Sticky until acknowledged: `load` also runs on every append/delete,
+        // and a routine reload must not make the startup banner disappear
+        // before the user has seen it.
+        if read.status.needsAttention { readStatus = read.status }
+        return read.value
     }
 
     static func save(_ records: [CalibrationRecord]) {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted]
-        encoder.dateEncodingStrategy = .iso8601
-        guard let data = try? encoder.encode(records) else { return }
-        try? data.write(to: fileURL, options: [.atomic])
+        if StoreIO.save(records, to: fileURL, rotate: safeToRotate) {
+            safeToRotate = true
+        }
     }
 
     static func append(_ record: CalibrationRecord) -> [CalibrationRecord] {
@@ -230,6 +239,11 @@ enum CalibrationStore {
     }
 
     static func clear() {
-        save([])
+        safeToRotate = false
+        StoreIO.discard(file: fileURL)
+    }
+
+    static func acknowledgeReadIssue() {
+        readStatus = .clean
     }
 }

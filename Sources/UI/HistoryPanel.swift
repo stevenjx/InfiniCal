@@ -13,6 +13,10 @@ struct HistoryView: View {
     @ObservedObject private var calibration = CalibrationEngine.shared
     @EnvironmentObject private var state: AppState
     @StateObject private var range = UIValue<Int>(7)
+    /// The recovery card is dismissed by the user, not by the next redraw:
+    /// `CalibrationStore.readStatus` is a static, so acknowledging it does not
+    /// publish and the card would otherwise stay until a relaunch.
+    @StateObject private var recoveryDismissed = UIFlag(false)
     private var theme: Theme { Theme.current }
 
     private var stats: [DailyStat] { history.series(days: range.value) }
@@ -27,6 +31,7 @@ struct HistoryView: View {
                      symbol: Panel.history.symbol,
                      help: t("每天充入与放出的电量、温度区间和接电时长。用于观察长期使用习惯，不参与健康度计算。"),
                      toolbar: { rangeToolbar }) {
+            storeIssueCard
             AdviceCard(report: advice)
             alertCenter
 
@@ -46,6 +51,72 @@ struct HistoryView: View {
     }
 
     // MARK: - Header
+
+    /// The startup recovery notice. It is a card rather than a banner because
+    /// the user has to be able to read the quarantine path and copy it.
+    ///
+    /// Two mysteries this card exists to prevent: "my history is empty" (the
+    /// file did not decode) and "my history came back from yesterday" (the
+    /// backup was used). Both are stated plainly, and neither is thrown away
+    /// silently.
+    @ViewBuilder
+    private var storeIssueCard: some View {
+        let daily = history.readStatus
+        let calibration = recoveryDismissed.value ? .clean : CalibrationStore.readStatus
+        if !recoveryDismissed.value, daily.needsAttention || calibration.needsAttention {
+            Card {
+                VStack(alignment: .leading, spacing: Spacing.s) {
+                    CardHeader(title: t("本地数据已自动恢复"),
+                               symbol: "externaldrive.badge.exclamationmark",
+                               tint: theme.chartOrange,
+                               subtitle: t("读取失败的数据文件已原样保留，没有被覆盖。"))
+                    if daily.needsAttention {
+                        storeIssueLine(t("每日历史"), daily)
+                    }
+                    if calibration.needsAttention {
+                        storeIssueLine(t("校准记录"), calibration)
+                    }
+                    HStack(spacing: 8) {
+                        SmallActionButton(title: t("我已了解"), symbol: "checkmark") {
+                            recoveryDismissed.value = true
+                            history.acknowledgeReadIssue()
+                            CalibrationStore.acknowledgeReadIssue()
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.top, 2)
+                }
+            }
+        }
+    }
+
+    private func storeIssueLine(_ name: String, _ status: StoreReadStatus) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(storeIssueSummary(name, status))
+                .font(Typography.caption)
+                .foregroundColor(theme.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let path = status.quarantinePath {
+                Text(path)
+                    .font(Typography.micro.monospaced())
+                    .foregroundColor(theme.textTertiary)
+                    .textSelection(.enabled)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+        }
+    }
+
+    private func storeIssueSummary(_ name: String, _ status: StoreReadStatus) -> String {
+        switch status {
+        case .clean:
+            return ""
+        case .recoveredFromBackup:
+            return tf("{p}读取失败，已从备份恢复；损坏的文件保留在旁边。", name)
+        case .startedEmpty:
+            return tf("{p}与备份都无法读取，本次从空白开始；原来的文件保留在旁边，可手动检查。", name)
+        }
+    }
 
     /// Range chips and the clear action: the page's toolbar, right of the title.
     private var rangeToolbar: some View {
