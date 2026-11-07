@@ -117,7 +117,7 @@ days = (try? decoder.decode([DailyStat].self, from: data)) ?? []   // 失败即�
 
 ---
 
-### N0-02 自动化出口：URL scheme 优先，Shortcuts 次之
+### N0-02 自动化出口：URL scheme 优先，Shortcuts 次之 — ✅ 已完成（1.0.31）
 
 **目标**：把已经存在的动作变成系统可调用的接口，让脚本、Raycast、Shortcuts、
 Stream Deck 都能控制这台机器的充电。
@@ -133,10 +133,11 @@ Stream Deck 都能控制这台机器的充电。
 ```text
 infinical://limit/60          设置上限 60%
 infinical://pause             暂停充电（保持当前电量）
+infinical://resume            取消暂停（1.0.31 新增，此前无出口）
 infinical://topup/90          充到 90% 后回落
 infinical://discharge/50      放电到 50%
 infinical://calibrate/standard
-infinical://status            （不打开窗口）把一行 JSON 写到临时文件或返回 URL
+infinical://status            （不打开窗口）把一行 JSON 写到固定路径
 ```
 
 - 在 `applicationWillFinishLaunching` 注册 `NSAppleEventManager` 的 `kAEGetURL`：
@@ -148,18 +149,49 @@ infinical://status            （不打开窗口）把一行 JSON 写到临时�
 - 参数校验：百分比 5…100、预设只接受三个枚举值，非法参数直接拒绝并记录。
 - 文档：README 加一节「Automation」，给 6 条示例（含 `open -g "infinical://limit/60"`）。
 
-**暂不做 App Intents**：它需要 Shortcuts 的 `AppShortcutsProvider` 与额外 plist，
-收益（在「快捷指令」里多一个原生动作）小于成本；URL scheme 已经能被 Shortcuts 的
-「打开 URL」直接调用。等有真实需求再补。
+**实现说明（1.0.31）**
 
-**验收**
+- 分成两半，边界就是能不能测：`AutomationURL.parse` 是纯函数（URL 进、
+  `Result<AutomationCommand, AutomationFailure>` 出），`AutomationCenter` 是执行器。
+  门禁只编译 `Automation.swift` 到 `// MARK: - Executor` 之前的部分，30 条断言覆盖
+  每一种接受与拒绝。
+- 三种到达路径都接住了：① 冷启动 → Apple Event，`AutomationCenter` 在
+  `markReady()` 之前把 URL 排队（否则登录后第一条命令会丢）；② 运行中 → Apple Event；
+  ③ LaunchServices 另起了一个实例 → `main.swift` 的单实例守卫把 argv 里的 URL 用
+  `DistributedNotificationCenter` 转发给存活的实例再退出（曾经这里是直接 `exit(0)`，
+  命令会随之消失）。
+- `infinical:///limit/60`（三斜杠）没有 host 只有 path，以前会解析成空动作；现在
+  退化到 path 的第一个分量，与两斜杠等价。
+- 拒绝信息必须点名可用形式：`未知动作「explode」；可用：limit / pause / ...`、
+  `参数 4 超出范围 5…100`。脚本作者只能看到这一行字，说不清楚等于没说。
+- `status.json` 固定在 `~/Library/Application Support/InfiniCal/`，原子替换；字段含
+  版本、电量、上限、暂停、充电中、策略、助手状态、`note`（最后一句话）。固定路径
+  是为了让 shell 不用猜；带 `note` 是因为脚本拿到 `false` 之后必须能知道为什么。
 
-- 未安装特权助手时调用 `infinical://limit/60`：返回明确失败原因，不假装成功。
-- 校准进行中调用 `infinical://limit/60`：被 `ChargeArbiter` 记为「校准压过手动」，
-  诊断页可见这条冲突。
-- 连续调用 50 次不产生崩溃、不刷屏通知（沿用 `ControlJournal` 的重复折叠）。
+**顺带修掉的两个真 bug**
 
-**成本**：M（约 250 行 + README）　**依赖**：N0-01（失败要有地方记）
+1. `pauseCharging` 原来只写 `userPaused = true` 就报「已暂停」，不检查
+   `setCharging(false)` 的返回值。系统上限后端在 80% 地板以下会拒绝写入（界面截图里
+   的 `SMC operation failed: Battery is below the 80% system limit floor` 就是它），
+   于是状态栏说「已暂停」而电流还在。现在返回 `Bool`，自动化按真实结果回答。
+2. `topUp()` 写死 `chargeVal = 100`，`infinical://topup/90` 的第二句
+   `setLimit(90)` 立刻触发 `chargeVal.didSet` 里的「用户改上限 → 取消一次性充满」，
+  结果上限停在 90、`topUpRestore` 已经是 nil，变成一个没有终点的普通上限。
+   现在 `topUp(target:)` 自带目标值（`topUpTarget`，随 restore 一起持久化，
+   `evaluateTopUp` 按它判定完成），界面也随之显示「一次性充电至 92%」而不是
+   「充满至 100%」。
+3. 附带：`CalibrationEngine.start()` 在 `recoveryError != nil` 时直接 `return false`，
+   不设 `startFailureReason`，调用方只能显示「校准未能开始」。现在把恢复原因写进
+   失败原因。
+
+**未覆盖**
+
+- 没有 App Intents。Shortcuts 用「打开 URL」已经能做全部 7 个动作，原生动作的
+  增量收益不值得额外 plist 与 `AppShortcutsProvider`。等有真实需求再补。
+- 没有回调参数（例如 `?callback=`）。脚本要读结果就轮询 `status.json`；回写方案
+  （写哪个文件、谁清理）比命令本身复杂，先不做。
+
+**成本**：M　**依赖**：N0-01（失败要有地方记）
 
 ---
 
@@ -477,7 +509,7 @@ id, 开始/结束时间, 起始%/结束%,
 
 ```text
 1.0.30  N0-01 数据自愈  →  N0-03 低电量告警       ✅ 已发布
-1.0.31  N0-02 URL scheme                          （一次性把出口打开）
+1.0.31  N0-02 URL scheme                          ✅ 已发布
 1.0.32  N1-01 充电会话  →  N1-02 使用画像          （分析类的地基与第一层）
 1.0.33  N1-03 睡眠耗电  →  N1-04 场景化上限
 1.0.34  N2-01 PDF 报告  →  N2-03 风扇预设导出

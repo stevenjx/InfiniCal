@@ -169,8 +169,12 @@ struct TaskConditions: Codable, Equatable {
 
 /// Where a control request came from. Automation must not mistake its own
 /// writes for the user's, which is what the manual-override rule depends on.
+///
+/// `automation` is the `infinical://` entry point: still an outside request,
+/// still allowed to act, but it stands down after the user's own action just
+/// like a scheduled task does. A script must not be able to undo a tap.
 enum ControlOrigin {
-    case user, scheduled, automatic
+    case user, scheduled, automatic, automation
 }
 
 enum TaskOutcome: String, Codable {

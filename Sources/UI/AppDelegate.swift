@@ -21,6 +21,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBar: MenuBarController?
     private let state = AppState.shared
 
+    /// Registered before the first window exists: a cold start from
+    /// `open infinical://limit/60` delivers the Apple Event between
+    /// `willFinishLaunching` and `didFinishLaunching`, so the handler has to be
+    /// in place by then. The event is queued by `AutomationCenter` until the
+    /// timers are up.
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        NSAppleEventManager.shared().setEventHandler(
+            self,
+            andSelector: #selector(handleURLEvent(_:withReply:)),
+            forEventClass: AEEventClass(kInternetEventClass),
+            andEventID: AEEventID(kAEGetURL))
+        // The other arrival path: a second copy launched by LaunchServices
+        // forwards the URL it was given instead of dropping it on exit.
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(handleForwardedURL(_:)),
+            name: Notification.Name(AutomationURL.notificationName),
+            object: nil)
+    }
+
+    @objc private func handleURLEvent(_ event: NSAppleEventDescriptor,
+                                      withReply reply: NSAppleEventDescriptor) {
+        guard let string = event.paramDescriptor(forKeyword: AEKeyword(keyDirectObject))?.stringValue,
+              let url = URL(string: string) else { return }
+        AutomationCenter.shared.handle(url)
+    }
+
+    @objc private func handleForwardedURL(_ note: Notification) {
+        guard let string = note.object as? String, let url = URL(string: string) else { return }
+        AutomationCenter.shared.handle(url)
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         if let index = CommandLine.arguments.firstIndex(of: "--panel"), index + 1 < CommandLine.arguments.count,
            let panel = Panel(rawValue: CommandLine.arguments[index + 1]) {
@@ -39,6 +71,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         observeThemeChanges()
+        // Anything that arrived during the cold start can run now.
+        AutomationCenter.shared.markReady()
     }
 
     /// Reopen path: the window is closable but the process keeps running.

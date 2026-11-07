@@ -408,7 +408,7 @@ struct MenuBarPanel: View {
 
     private var summaryLine: String {
         if let restore = state.topUpRestoreLimit {
-            return tf("一次性充满中 · 完成后恢复 {p}%", "\(restore)")
+            return tf("一次性充电中 · 完成后恢复 {p}%", "\(restore)")
         }
         guard state.snapshot.isPresent else { return t("未检测到电池") }
         return tf("充电限制 {p}%", "\(state.chargeVal)")

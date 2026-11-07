@@ -307,6 +307,10 @@ print("PASS update retry/cancellation transitions and fan persistence (no hardwa
     # so the recovery and estimation rules can be exercised without a battery.
     swift += (ROOT / "Sources/Core/StoreIO.swift").read_text()
     swift += (ROOT / "Sources/Core/LowPower.swift").read_text()
+    # The URL grammar is a pure function over a URL: the executor half of
+    # Automation.swift needs a running app and is exercised on real hardware.
+    automation = (ROOT / "Sources/Core/Automation.swift").read_text()
+    swift += automation[:automation.index("// MARK: - Executor")]
     swift += '''
 func check(_ condition: Bool, _ message: String) { precondition(condition, message) }
 for sailing in [false, true] {
@@ -1205,7 +1209,45 @@ check(!LowPowerPolicy.shouldRecover(percentage: 4, minutesLeft: 600, lead: 20, p
 check(LowPowerPolicy.shouldRecover(percentage: 30, minutesLeft: nil, lead: 20, pluggedIn: false),
       "没有估算（几乎无功耗）时不再算低电量")
 
-print("PASS pure policy/math/checkpoint/helper-validation/quality/trend/anomaly/profile/advice/arbitration/store/low-power tests (no hardware)")
+// ── infinical:// 解析：接受的形式与每一种拒绝都要可断言 ──────────────────────
+func parsed(_ text: String) -> Result<AutomationCommand, AutomationFailure> {
+    guard let url = URL(string: text) else { return .failure(.malformedValue(text)) }
+    return AutomationURL.parse(url)
+}
+check(parsed("infinical://limit/60") == .success(.limit(60)), "limit/60")
+check(parsed("infinical://limit/5") == .success(.limit(5)), "下限 5% 可用")
+check(parsed("infinical://limit/100") == .success(.limit(100)), "上限 100% 可用")
+check(parsed("INFINICAL://Limit/60") == .success(.limit(60)), "scheme 与动作大小写不敏感")
+check(parsed("infinical://limit/4") == .failure(.outOfRange(4, 5...100)), "4% 越界")
+check(parsed("infinical://limit/101") == .failure(.outOfRange(101, 5...100)), "101% 越界")
+check(parsed("infinical://limit/abc") == .failure(.malformedValue("abc")), "非整数被拒")
+check(parsed("infinical://limit") == .failure(.missingValue("limit")), "limit 缺参数被拒")
+check(parsed("infinical://topup") == .success(.topUp(100)), "topup 无参数默认 100")
+check(parsed("infinical://topup/90") == .success(.topUp(90)), "topup/90")
+check(parsed("infinical://discharge") == .success(.discharge(50)), "discharge 无参数默认 50")
+check(parsed("infinical://discharge/50") == .success(.discharge(50)), "discharge/50")
+check(parsed("infinical://pause") == .success(.pause), "pause")
+check(parsed("infinical://resume") == .success(.resume), "resume")
+check(parsed("infinical://status") == .success(.status), "status")
+check(parsed("infinical://calibrate/standard") == .success(.calibrate(.standard)), "calibrate/standard")
+check(parsed("infinical://calibrate/quick") == .success(.calibrate(.quickCheck)), "calibrate/quick")
+check(parsed("infinical://calibrate/deep") == .success(.calibrate(.deep)), "calibrate/deep")
+check(parsed("infinical://calibrate/full") == .failure(.unknownPreset("full")), "未知预设被拒")
+check(parsed("infinical://explode") == .failure(.unknownAction("explode")), "未知动作被拒")
+check(parsed("infinical:///limit/60") == .success(.limit(60)), "三个斜杠也接受")
+check(parsed("https://limit/60") == .failure(.wrongScheme("https")), "别的 scheme 被拒")
+check(parsed("infinical://") == .failure(.unknownAction("（空）")), "空动作被拒")
+// 文档里的每个例子都必须能被自己解析，否则 README 会教人写出失败的命令。
+for command in [AutomationCommand.limit(60), .topUp(90), .discharge(50), .pause, .resume,
+                .calibrate(.standard), .status] {
+    check(AutomationURL.parse(AutomationURL.url(for: command)) == .success(command),
+          "文档 URL 与解析器一致：" + command.name)
+}
+// 拒绝原因必须点名可用的形式，否则脚本作者只看得到"失败"。
+check(AutomationFailure.unknownAction("x").message.contains("limit"), "拒绝原因列出可用动作")
+check(AutomationFailure.outOfRange(4, 5...100).message.contains("5"), "拒绝原因给出范围")
+
+print("PASS pure policy/math/checkpoint/helper-validation/quality/trend/anomaly/profile/advice/arbitration/store/low-power/automation tests (no hardware)")
 '''
     with tempfile.TemporaryDirectory(prefix="infinical-tests-") as directory:
         main = Path(directory) / "main.swift"

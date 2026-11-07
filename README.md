@@ -33,7 +33,7 @@ InfiniCal reads local IORegistry, SMC and IOHID data to **measure real battery h
 
 Get the latest version from [Releases](https://github.com/stevenjx/InfiniCal/releases).
 
-**Current version: 1.0.30** · universal arm64 + x86_64 package · macOS 12 Monterey or later
+**Current version: 1.0.31** · universal arm64 + x86_64 package · macOS 12 Monterey or later
 
 > The app is ad-hoc signed and not notarized by Apple. macOS may require approval on first launch.
 
@@ -72,6 +72,27 @@ gh release create v<version> dist/InfiniCal-<version>.dmg appcast.xml
 ```
 
 `Tools/make_appcast.py` skips archives whose app has no `SUPublicEDKey` and explains why.
+
+## Automation
+
+Every charge action is also reachable from a URL, so Shortcuts, Raycast, a Stream Deck key or a shell script can drive the app:
+
+```bash
+open -g "infinical://limit/60"      # set the charge limit to 60 %
+open -g "infinical://pause"         # hold the current level
+open -g "infinical://resume"        # undo a pause
+open -g "infinical://topup/90"      # charge to 90 %, then restore the limit
+open -g "infinical://discharge/50"  # discharge to 50 % (adapter connected)
+open -g "infinical://calibrate/standard"
+open -g "infinical://status"        # writes ~/Library/Application Support/InfiniCal/status.json
+```
+
+The app does not need to be frontmost — a cold start is handled too. Requirements and behaviour:
+
+- Percentages must be within **5…100**; `calibrate` accepts only `quick`, `standard`, `deep`. Anything else is refused with a reason, both in `statusNote` and in the control journal (诊断 → 最近的控制结果).
+- Hardware control needs the privileged helper. Without it the command fails loudly instead of pretending to work.
+- Requests are recorded as `automation` origin. They act immediately, but a **manual** change by the user still wins for 30 minutes — a script cannot undo a tap.
+- `status.json` is replaced atomically, so polling it never reads a half-written object.
 
 ## Permissions and compatibility
 
@@ -118,7 +139,7 @@ InfiniCal 从本机 IORegistry、SMC 和 IOHID 读取数据，用于**测量真�
 
 前往 [Releases](https://github.com/stevenjx/InfiniCal/releases) 下载最新版本。
 
-**当前版本：1.0.30** · arm64 + x86_64 通用包 · macOS 12 Monterey 及以上
+**当前版本：1.0.31** · arm64 + x86_64 通用包 · macOS 12 Monterey 及以上
 
 > 应用使用 ad-hoc 签名，未经 Apple 公证。首次打开可能需要在系统设置中允许运行。
 
@@ -157,6 +178,27 @@ gh release create v<版本> dist/InfiniCal-<版本>.dmg appcast.xml
 ```
 
 `Tools/make_appcast.py` 会跳过不含 `SUPublicEDKey` 的旧包，并提示原因。
+
+## 自动化
+
+所有充电动作都可以用 URL 调用，Shortcuts、Raycast、Stream Deck 或一行 shell 都能控制：
+
+```bash
+open -g "infinical://limit/60"      # 充电上限设为 60%
+open -g "infinical://pause"         # 暂停充电（保持当前电量）
+open -g "infinical://resume"        # 取消暂停
+open -g "infinical://topup/90"      # 充到 90% 后恢复原上限
+open -g "infinical://discharge/50"  # 放电到 50%（需连接电源）
+open -g "infinical://calibrate/standard"
+open -g "infinical://status"        # 写入 ~/Library/Application Support/InfiniCal/status.json
+```
+
+应用不需要在前台，冷启动也会处理。规则：
+
+- 百分比必须在 **5…100** 之间；`calibrate` 只接受 `quick`、`standard`、`deep`。非法参数会被拒绝，原因写进状态栏与控制记录（诊断 → 最近的控制结果）。
+- 硬件控制依赖特权助手；未安装时会明确失败，不会假装成功。
+- 来源记为 `automation`：立即生效，但用户**手动**操作仍有 30 分钟优先权——脚本不能覆盖你的点击。
+- `status.json` 原子替换，轮询不会读到半个对象。
 
 ## 权限与兼容性
 

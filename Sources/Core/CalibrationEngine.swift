@@ -644,7 +644,15 @@ final class CalibrationEngine: ObservableObject {
         sessionStressMode = stressMode
         sessionPreset = preset
         saveCheckpoint(reason: "preparing")
-        guard recoveryError == nil else { return false }
+        guard recoveryError == nil else {
+            // A pending recovery blocks the run, and the reason used to be lost
+            // here: `beginCalibration` then fell back to 「校准未能开始」, which
+            // tells the user nothing about what to fix.
+            let message = recoveryError ?? t("请先处理上次校准的恢复记录")
+            startFailureReason = message
+            append(message)
+            return false
+        }
         // Fresh key table: the log below is what identifies this machine's
         // control mechanism, so it must not come from a stale launch-time scan.
         _ = ChargeController.shared.detectCapabilities()

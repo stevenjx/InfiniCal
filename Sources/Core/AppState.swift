@@ -210,6 +210,8 @@ final class AppState: ObservableObject {
     /// One-shot top-up: raise the ceiling to 100 %, then put the user's limit
     /// back once the pack is full and unplugged, or when the safety window ends.
     private var topUpRestore: Int?
+    /// Where this top-up stops. 100 from the window, less from a script.
+    private var topUpTarget: Int = 100
     private var topUpDeadline: Date?
     private var suppressTopUpCancel = false
     private var wakeObserver: NSObjectProtocol?
@@ -884,6 +886,10 @@ final class AppState: ObservableObject {
 
     var topUpRestoreLimit: Int? { topUpRestore }
 
+    /// Where the running top-up stops. 100 for the window's 「充满」, less when a
+    /// script asked for `infinical://topup/90`.
+    var topUpTargetLimit: Int { topUpTarget }
+
     /// All non-calibration actions share the same ownership barrier.
     private func ordinaryControlAllowed() -> Bool {
         guard !updatePreparationActive,
@@ -894,20 +900,36 @@ final class AppState: ObservableObject {
         return true
     }
 
-    func topUp(origin: ControlOrigin = .user) {
+    /// One-shot top-up: raise the ceiling, then put the user's limit back once
+    /// the pack reaches the target and is unplugged, or when the safety window
+    /// ends.
+    ///
+    /// `target` is 100 from the window's 「充满」. A script may ask for less
+    /// (`infinical://topup/90`); the override then simply ends at 90 instead of
+    /// 100. The target is stored with the restore value because a relaunch in
+    /// the middle of a top-up has to know where it was heading.
+    func topUp(origin: ControlOrigin = .user, target: Int = 100) {
         guard ordinaryControlAllowed() else { return }
+        let ceiling = max(1, min(100, target))
+        guard ceiling > chargeVal else {
+            statusNote = tf("当前上限 {p}% 已不低于目标 {p}%，无需充满", "\(chargeVal)", "\(ceiling)")
+            return
+        }
         if topUpRestore == nil { topUpRestore = chargeVal }
         let restore = topUpRestore ?? chargeVal
+        topUpTarget = ceiling
         userPaused = false
         suppressTopUpCancel = true
-        chargeVal = 100
+        chargeVal = ceiling
         suppressTopUpCancel = false
         topUpDeadline = Date().addingTimeInterval(4 * 3600)
         persistTopUp()
         lastChargingAllowed = nil
         noteManual(origin, .topUp)
-        statusNote = tf("一次性充满至 100%，完成后恢复 {p}%", "\(restore)")
-        log(t("充满"), tf("一次性充满至 100%，完成后恢复 {p}%", "\(restore)"))
+        statusNote = ceiling >= 100
+            ? tf("一次性充满至 100%，完成后恢复 {p}%", "\(restore)")
+            : tf("一次性充电至 {p}%，完成后恢复 {p}%", "\(ceiling)", "\(restore)")
+        log(t("充满"), statusNote)
     }
 
     func cancelTopUp() {
@@ -917,7 +939,7 @@ final class AppState: ObservableObject {
 
     private func evaluateTopUp() {
         guard let restore = topUpRestore else { return }
-        let full = snapshot.percentage >= 99
+        let full = snapshot.percentage >= topUpTarget - 1
         if let deadline = topUpDeadline, Date() >= deadline {
             finishTopUp(restore: restore, reason: t("已超过 4 小时"))
         } else if full, !snapshot.isPluggedIn {
@@ -949,10 +971,13 @@ final class AppState: ObservableObject {
     /// top-up used to leave the limit at 100 % for good.
     private func persistTopUp() {
         defaults.set(topUpRestore, forKey: "topUpRestoreLimit")
+        defaults.set(topUpTarget, forKey: "topUpTargetLimit")
         defaults.set(topUpDeadline?.timeIntervalSince1970, forKey: "topUpDeadline")
     }
 
     private func clearTopUpPersistence() {
+        defaults.removeObject(forKey: "topUpTargetLimit")
+        topUpTarget = 100
         defaults.removeObject(forKey: "topUpRestoreLimit")
         defaults.removeObject(forKey: "topUpDeadline")
     }
@@ -1092,8 +1117,13 @@ final class AppState: ObservableObject {
         return formatter
     }()
 
-    func pauseCharging(origin: ControlOrigin = .user) {
-        guard ordinaryControlAllowed() else { return }
+    /// Returns whether charging actually stopped. `userPaused` is intent; the
+    /// write can still fail (this is what "SMC operation failed: Battery is
+    /// below the 80% system limit floor" was), and a caller that only reads the
+    /// intent would report a pause that never happened.
+    @discardableResult
+    func pauseCharging(origin: ControlOrigin = .user) -> Bool {
+        guard ordinaryControlAllowed() else { return false }
         userPaused = true
         // Pausing overrides a running top-up: the user asked for it to stop.
         topUpRestore = nil
@@ -1101,8 +1131,23 @@ final class AppState: ObservableObject {
         clearTopUpPersistence()
         smartChargeStartedFor = nil
         lastChargingAllowed = nil
-        if setCharging(false) { statusNote = t("充电已暂停") }
+        let stopped = setCharging(false)
+        if stopped { statusNote = t("充电已暂停") }
         noteManual(origin, .stopCharging)
+        return stopped
+    }
+
+    /// Undo a pause.
+    ///
+    /// Before this, the only ways out of a pause were to change the limit or
+    /// start a top-up — both of which changed something else as a side effect.
+    /// The flag is cleared and the loop decides again on the next tick, so the
+    /// arbiter still owns the outcome.
+    func resumeCharging() {
+        guard userPaused else { return }
+        userPaused = false
+        lastChargingAllowed = nil
+        statusNote = t("已恢复充电")
     }
 
 
@@ -1127,11 +1172,12 @@ final class AppState: ObservableObject {
 
     /// User path: the preset decides how deep the cycle goes and the stress mode
     /// how hard the load is. Both are explicit choices, never inherited silently.
-    func startCalibration(preset: CalibrationPreset, mode: DischargeStressMode) {
+    func startCalibration(preset: CalibrationPreset, mode: DischargeStressMode,
+                          origin: ControlOrigin = .user) {
         calibrationEngine.preset = preset
         calibrationEngine.stressMode = mode
         calibrationEngine.dischargeTarget = preset.dischargeTarget
-        noteManual(.user, .calibrate)
+        noteManual(origin, .calibrate)
         beginCalibration()
     }
 
@@ -1215,23 +1261,28 @@ final class AppState: ObservableObject {
     /// BCLM and then called `setChargingAllowed(false)`, which on a BCLM Mac
     /// immediately re-pinned the ceiling to the current charge and cancelled the
     /// discharge it had just started.
-    func startDischarge(to target: Int, origin: ControlOrigin = .user) {
-        guard ordinaryControlAllowed() else { return }
-        guard target >= 1, target < snapshot.percentage else { return }
+    /// Returns whether the discharge actually began. The window ignores the
+    /// result and reads `statusNote`; automation needs the yes/no to answer a
+    /// script without string-matching the message.
+    @discardableResult
+    func startDischarge(to target: Int, origin: ControlOrigin = .user) -> Bool {
+        guard ordinaryControlAllowed() else { return false }
+        guard target >= 1, target < snapshot.percentage else { return false }
         userPaused = false
         guard snapshot.isPluggedIn else {
             statusNote = t("仅连接充电器时才能设置放电")
-            return
+            return false
         }
         if let failure = ChargeController.shared.beginDischarge(to: target) {
             statusNote = failure
             log(t("放电"), failure)
-            return
+            return false
         }
         manualDischargeTarget = target
         noteManual(origin, .startDischarge)
         statusNote = tf("放电至 {p}%", "\(target)")
         log(t("放电"), tf("开始放电至 {p}%", "\(target)"))
+        return true
     }
 
     // MARK: - Scheduled tasks
@@ -1333,8 +1384,15 @@ final class AppState: ObservableObject {
     /// Raising or lowering the ceiling by hand. Goes through here rather than
     /// the bare setter so the automation knows to stand down.
     func userSetLimit(_ value: Int) {
+        setLimit(value, origin: .user)
+    }
+
+    /// Shared by the window and by `infinical://limit/N`. The origin decides
+    /// only one thing: whether the scheduled tasks consider this a manual
+    /// override. Both paths write the same value through the same setter.
+    func setLimit(_ value: Int, origin: ControlOrigin) {
         chargeVal = value
-        noteManual(.user, .setLimit)
+        noteManual(origin, .setLimit)
     }
 
     func addTask(_ task: ScheduledTask) {
@@ -1610,6 +1668,7 @@ final class AppState: ObservableObject {
         chargeVal = int("chargeVal", 80)
         // A top-up that was still running when the app quit picks up where it
         // left off; if its deadline passed meanwhile, the first tick restores.
+        topUpTarget = int("topUpTargetLimit", 100)
         if defaults.object(forKey: "topUpRestoreLimit") != nil {
             topUpRestore = defaults.integer(forKey: "topUpRestoreLimit")
             let stamp = defaults.double(forKey: "topUpDeadline")

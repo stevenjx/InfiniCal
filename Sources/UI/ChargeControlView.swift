@@ -97,7 +97,9 @@ struct ChargeControlView: View {
         // would print it twice, 800 pt apart.
         if let restore = state.topUpRestoreLimit {
             notice(symbol: "bolt.fill",
-                   text: tf("一次性充满至 100%，完成后恢复 {p}%", "\(restore)")) {
+                   text: state.topUpTargetLimit >= 100
+                       ? tf("一次性充满至 100%，完成后恢复 {p}%", "\(restore)")
+                       : tf("一次性充电至 {p}%，完成后恢复 {p}%", "\(state.topUpTargetLimit)", "\(restore)")) {
                 Button(t("取消")) { state.cancelTopUp() }
                     .buttonStyle(.plain)
                     .font(Typography.label)

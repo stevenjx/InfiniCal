@@ -12,6 +12,21 @@ let application = NSApplication.shared
 let identifier = Bundle.main.bundleIdentifier ?? "com.infinitycomputer.infinical"
 if let other = NSRunningApplication.runningApplications(withBundleIdentifier: identifier)
     .first(where: { $0.processIdentifier != getpid() }) {
+    // `open infinical://pause` sometimes lands here instead of reusing the
+    // running copy: LaunchServices started us for the URL. The URL is in argv,
+    // so hand it to the instance that will survive before exiting — otherwise
+    // the command disappears with this process.
+    if let url = CommandLine.arguments.first(where: { $0.lowercased().hasPrefix("infinical://") }),
+       let parsed = URL(string: url) {
+        DistributedNotificationCenter.default().postNotificationName(
+            Notification.Name(AutomationURL.notificationName),
+            object: parsed.absoluteString,
+            userInfo: nil,
+            deliverImmediately: true)
+        // Distributed notifications are asynchronous across processes; the
+        // poster has to stay alive long enough for the delivery to happen.
+        Thread.sleep(forTimeInterval: 0.25)
+    }
     other.activateInFront()
     exit(0)
 }
