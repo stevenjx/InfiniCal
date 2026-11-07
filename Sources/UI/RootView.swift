@@ -29,7 +29,7 @@ struct RootView: View {
         .background(theme.windowBackground)
         .preferredColorScheme(theme.isDark ? .dark : .light)
         .sheet(isPresented: $state.showFirstRunHelperPrompt) {
-            FirstRunHelperSheet()
+            OnboardingSheet()
                 .environmentObject(state)
         }
     }

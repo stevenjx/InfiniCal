@@ -160,11 +160,6 @@ enum StoreIO {
         try? FileManager.default.removeItem(at: backupURL(for: file))
     }
 
-    /// True when the store has a readable backup on disk.
-    static func hasBackup(for file: URL) -> Bool {
-        FileManager.default.fileExists(atPath: backupURL(for: file).path)
-    }
-
     // MARK: - Encoding
 
     private static func decoder() -> JSONDecoder {

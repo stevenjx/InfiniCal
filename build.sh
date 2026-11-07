@@ -97,7 +97,7 @@ SOURCES=(
   "$ROOT/Sources/UI/RootView.swift"
   "$ROOT/Sources/UI/AppDelegate.swift"
   "$ROOT/Sources/UI/MenuBar.swift"
-  "$ROOT/Sources/UI/FirstRunHelperSheet.swift"
+  "$ROOT/Sources/UI/OnboardingSheet.swift"
   "$ROOT/Sources/main.swift"
 )
 

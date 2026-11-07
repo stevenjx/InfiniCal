@@ -1103,7 +1103,6 @@ check(FileManager.default.fileExists(atPath: storeBackup.path), "清空前有备
 StoreIO.discard(file: storeFile)
 check(!FileManager.default.fileExists(atPath: storeFile.path)
       && !FileManager.default.fileExists(atPath: storeBackup.path), "清空后主文件与备份都不在")
-check(!StoreIO.hasBackup(for: storeFile), "清空后不再报告有备份")
 try? FileManager.default.removeItem(at: storeDir)
 
 // MARK: - 低电量：估算、门槛、关闭

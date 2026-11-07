@@ -211,8 +211,7 @@ struct DashboardView: View {
     /// Kept short on purpose: the card is ~180 pt wide, and the full sentence
     /// ("assumes the next 14 days look like the last 14") lives in the tooltip.
     private var usageForecastText: String? {
-        let profile = UsageProfile.build(from: DailyHistory.shared.days)
-        let forecast = UsageProfile.forecast(profile: profile,
+        let forecast = UsageProfile.forecast(profile: state.usageProfile,
                                              remainingWh: state.snapshot.energyWattHours,
                                              currentWatts: state.energyUseWatts)
         guard case .profile(let days) = forecast.basis else { return nil }
@@ -227,8 +226,8 @@ struct DashboardView: View {
 
     /// Spelled out where there is room for it.
     private var usageForecastHelp: String {
-        let profile = UsageProfile.build(from: DailyHistory.shared.days)
-        let forecast = UsageProfile.forecast(profile: profile, remainingWh: state.snapshot.energyWattHours,
+        let forecast = UsageProfile.forecast(profile: state.usageProfile,
+                                             remainingWh: state.snapshot.energyWattHours,
                                              currentWatts: state.energyUseWatts)
         guard case .profile(let days) = forecast.basis else {
             return t("需要至少 5 天的按小时记录才能按使用习惯估算；现在显示的是按当前功耗的线性外推。")

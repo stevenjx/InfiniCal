@@ -67,7 +67,7 @@
 		5B33DBE485137809FED3CB9B /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16391DEEF67014DD085A970B /* RootView.swift */; };
 		8C24697B5A7D76623EDA6658 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = EE2A8A9347390182D90B3E69 /* AppDelegate.swift */; };
 		0D87E1E6D6838B6491264169 /* MenuBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 788BC3E992F50BFFA0EDA052 /* MenuBar.swift */; };
-		2502144039B8E147F510C6B5 /* FirstRunHelperSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40A56898DC2DAD779BD1303C /* FirstRunHelperSheet.swift */; };
+		50FE973102BA8DBC6E1EBECD /* OnboardingSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31C98FC878421F005DD09378 /* OnboardingSheet.swift */; };
 		B63A2ECE489820D4A70687F4 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = B92499BCDDA3CB971E4C1FD9 /* main.swift */; };
 		63935B71979FAFCB682B3DC1 /* L10n.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C672018540F8CC8C6D71501 /* L10n.swift */; };
 		1A7C51B4F0F84BBE9239A3F3 /* SMC.swift in Sources */ = {isa = PBXBuildFile; fileRef = 66E13B2BFC76E18FB364B09E /* SMC.swift */; };
@@ -164,7 +164,7 @@
 		16391DEEF67014DD085A970B /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		EE2A8A9347390182D90B3E69 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		788BC3E992F50BFFA0EDA052 /* MenuBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBar.swift; sourceTree = "<group>"; };
-		40A56898DC2DAD779BD1303C /* FirstRunHelperSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirstRunHelperSheet.swift; sourceTree = "<group>"; };
+		31C98FC878421F005DD09378 /* OnboardingSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingSheet.swift; sourceTree = "<group>"; };
 		B92499BCDDA3CB971E4C1FD9 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		8C672018540F8CC8C6D71501 /* L10n.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = L10n.swift; sourceTree = "<group>"; };
 		66E13B2BFC76E18FB364B09E /* SMC.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SMC.swift; sourceTree = "<group>"; };
@@ -299,7 +299,7 @@
 				16391DEEF67014DD085A970B /* RootView.swift */,
 				EE2A8A9347390182D90B3E69 /* AppDelegate.swift */,
 				788BC3E992F50BFFA0EDA052 /* MenuBar.swift */,
-				40A56898DC2DAD779BD1303C /* FirstRunHelperSheet.swift */,
+				31C98FC878421F005DD09378 /* OnboardingSheet.swift */,
 			);
 			path = UI;
 			sourceTree = "<group>";
@@ -476,7 +476,7 @@
 				5B33DBE485137809FED3CB9B /* RootView.swift in Sources */,
 				8C24697B5A7D76623EDA6658 /* AppDelegate.swift in Sources */,
 				0D87E1E6D6838B6491264169 /* MenuBar.swift in Sources */,
-				2502144039B8E147F510C6B5 /* FirstRunHelperSheet.swift in Sources */,
+				50FE973102BA8DBC6E1EBECD /* OnboardingSheet.swift in Sources */,
 				B63A2ECE489820D4A70687F4 /* main.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -572,7 +572,7 @@
 				);
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 44;
+				CURRENT_PROJECT_VERSION = 45;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Resources/Info.plist;
@@ -584,7 +584,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.35;
+				MARKETING_VERSION = 1.0.36;
 				PRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -601,7 +601,7 @@
 				);
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 44;
+				CURRENT_PROJECT_VERSION = 45;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Resources/Info.plist;
@@ -613,7 +613,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.35;
+				MARKETING_VERSION = 1.0.36;
 				PRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -628,9 +628,9 @@
 					arm64,
 					x86_64,
 				);
-				CURRENT_PROJECT_VERSION = 44;
+				CURRENT_PROJECT_VERSION = 45;
 				GENERATE_INFOPLIST_FILE = NO;
-				MARKETING_VERSION = 1.0.35;
+				MARKETING_VERSION = 1.0.36;
 				PRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical.helper;
 				PRODUCT_NAME = com.infinitycomputer.infinical.helper;
 				SKIP_INSTALL = YES;
@@ -645,9 +645,9 @@
 					arm64,
 					x86_64,
 				);
-				CURRENT_PROJECT_VERSION = 44;
+				CURRENT_PROJECT_VERSION = 45;
 				GENERATE_INFOPLIST_FILE = NO;
-				MARKETING_VERSION = 1.0.35;
+				MARKETING_VERSION = 1.0.36;
 				PRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical.helper;
 				PRODUCT_NAME = com.infinitycomputer.infinical.helper;
 				SKIP_INSTALL = YES;

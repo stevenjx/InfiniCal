@@ -72,6 +72,9 @@ final class AppState: ObservableObject {
     @Published var capabilities = ChargeCapabilities()
     @Published var helperInstalled = false
     @Published var showFirstRunHelperPrompt = false
+    /// Progress of the privileged-helper install, so the onboarding sheet can
+    /// show "installing…" and a real failure instead of a silent no-op.
+    @Published private(set) var helperInstallPhase: HelperInstallPhase = .idle
     /// 「开始校准」asks which stress mode to use before the session starts,
     /// instead of starting silently with whatever was last selected.
     @Published var showingCalibrationMode = false
@@ -88,6 +91,10 @@ final class AppState: ObservableObject {
     /// Recorded by the arbiter so a conflict is visible instead of being
     /// silently resolved by whichever `if` came first.
     @Published private(set) var chargeArbitration: ChargeArbitration?
+    /// Usage profile for the dashboard forecast. Recomputed once a minute
+    /// rather than per redraw: building it walks 400 days × 24 buckets, and
+    /// SwiftUI calls the getter several times per frame.
+    @Published private(set) var usageProfile = UsageProfile.HourProfile()
 
     // MARK: - Settings (persisted with the same keys AlDente uses where applicable)
 
@@ -261,7 +268,7 @@ final class AppState: ObservableObject {
         syncTheme()
         loadHistory()
         helperInstalled = HelperClient.shared.refreshInstallState()
-        showFirstRunHelperPrompt = !helperInstalled || HelperClient.shared.needsUpdate
+        showFirstRunHelperPrompt = shouldShowOnboarding
         capabilities = ChargeController.shared.detectCapabilities()
         capabilities.hasHelper = helperInstalled
         ChargeController.shared.restoreAdapterLeftOff()
@@ -577,6 +584,9 @@ final class AppState: ObservableObject {
         }
         updateChargeState()
         recordChargeSession()
+        // Build the profile on the first tick so the dashboard has a forecast
+        // before the one-minute refresh lands.
+        if tickCount == 1 { usageProfile = UsageProfile.build(from: DailyHistory.shared.days) }
         AnomalyAlerts.shared.sample(snapshot, limit: chargeVal,
             intentionalDrain: manualDischargeTarget != nil || ChargeController.shared.activeAdapterKey != nil || ChargeController.shared.heldCeiling != nil || calibrationEngine.isRunning,
             suppressLimit: calibrationEngine.isRunning || calibrationEngine.needsRecovery,
@@ -594,6 +604,7 @@ final class AppState: ObservableObject {
                 capabilities = ChargeController.shared.detectCapabilities()
                 capabilities.hasHelper = helperInstalled
             }
+            usageProfile = UsageProfile.build(from: DailyHistory.shared.days)
             DailyHistory.shared.save()
             ChargeSessionStore.shared.save()
             // A crash must not cost the whole night's session.
@@ -1769,18 +1780,61 @@ final class AppState: ObservableObject {
         defaults.set(true, forKey: "didShowFirstRunHelperPrompt")
     }
 
-    func installHelper() {
-        do {
-            try HelperClient.shared.install()
-            helperInstalled = true
-            showFirstRunHelperPrompt = false
-            defaults.set(true, forKey: "didShowFirstRunHelperPrompt")
-            capabilities = ChargeController.shared.detectCapabilities()
-            capabilities.hasHelper = true
-            lastMessage = t("特权助手已安装")
-        } catch {
-            lastMessage = error.localizedDescription
+    /// The onboarding sheet is a one-time thing. It is shown on a machine that
+    /// has never been set up — no helper, or the prompt was never answered.
+    /// An existing installation that already finished setup is not nagged.
+    var shouldShowOnboarding: Bool {
+        if defaults.bool(forKey: "didCompleteOnboarding") { return false }
+        return !helperInstalled || HelperClient.shared.needsUpdate
+            || !defaults.bool(forKey: "didShowFirstRunHelperPrompt")
+    }
+
+    func completeOnboarding() {
+        defaults.set(true, forKey: "didCompleteOnboarding")
+        defaults.set(true, forKey: "didShowFirstRunHelperPrompt")
+        showFirstRunHelperPrompt = false
+    }
+
+    enum HelperInstallPhase: Equatable {
+        case idle
+        case installing
+        case failed(String)
+    }
+
+    /// Installs the privileged helper.
+    ///
+    /// `HelperClient.install()` runs the system authorization dialog on the main
+    /// thread and blocks until it closes, so the phase is published *before* the
+    /// call — otherwise the sheet would show nothing while the dialog is up.
+    /// The helper's own state is re-read afterwards rather than assumed: a
+    /// cancelled authorization must not leave the UI claiming success.
+    func installHelper(completion: (() -> Void)? = nil) {
+        guard helperInstallPhase != .installing else { return }
+        helperInstallPhase = .installing
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            do {
+                try HelperClient.shared.install()
+                helperInstalled = HelperClient.shared.refreshInstallState()
+                capabilities = ChargeController.shared.detectCapabilities()
+                capabilities.hasHelper = helperInstalled
+                if helperInstalled {
+                    helperInstallPhase = .idle
+                    defaults.set(true, forKey: "didShowFirstRunHelperPrompt")
+                    lastMessage = t("特权助手已安装")
+                } else {
+                    helperInstallPhase = .failed(t("安装未完成：助手没有通过启动检查"))
+                }
+            } catch {
+                helperInstallPhase = .failed(error.localizedDescription)
+                lastMessage = error.localizedDescription
+            }
+            completion?()
         }
+    }
+
+    func dismissHelperInstallFailure() {
+        if case .failed = helperInstallPhase { helperInstallPhase = .idle }
     }
 
 

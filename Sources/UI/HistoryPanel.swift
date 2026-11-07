@@ -251,8 +251,7 @@ struct HistoryView: View {
                     Divider().background(theme.divider)
                     sessionTable(report.sessions)
                 }
-                if let window = UsageProfile.bestChargingWindow(
-                    profile: UsageProfile.build(from: history.days)) {
+                if let window = UsageProfile.bestChargingWindow(profile: state.usageProfile) {
                     Divider().background(theme.divider)
                     HStack(spacing: Spacing.s) {
                         Image(systemName: "clock.badge.checkmark")

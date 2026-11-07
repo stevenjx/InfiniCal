@@ -214,7 +214,7 @@ struct ChargeControlView: View {
     private var storageCard: some View {
         Card {
             VStack(alignment: .leading, spacing: Spacing.s) {
-                if let started = state.storageStartedAt {
+                if state.isInStorageMode, let started = state.storageStartedAt {
                     HStack(alignment: .firstTextBaseline, spacing: Spacing.s) {
                         Image(systemName: "shippingbox")
                             .font(Glyph.inline)

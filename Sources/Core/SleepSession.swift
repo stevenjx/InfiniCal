@@ -59,9 +59,6 @@ enum SleepReport {
     /// More than 2 %/h on standby is the point where "something kept waking it"
     /// becomes the likely explanation rather than normal standby draw.
     static let abnormalPercentPerHour: Double = 2.0
-
-    /// Thermal state, used only to describe the sleep, never to judge it.
-    static func isHot(_ temperature: Double) -> Bool { temperature >= 35 }
 }
 
 enum SleepAnalyzer {

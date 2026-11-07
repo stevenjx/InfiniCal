@@ -161,8 +161,9 @@ final class SMC {
         return name
     }
 
-    /// Every key name the SMC exposes. Used to find a control key instead of
-    /// guessing at candidate names.
+    /// Every key name the SMC exposes. Used by the helper's `keys` command
+    /// (diagnostics), not by the app itself — `Sources/` never calls it, so a
+    /// scan that only looks at the app target will read this as dead code.
     func allKeys(limit: Int = 8192) -> [String] {
         guard let count = keyCount(), count > 0, count < limit else { return [] }
         return (0..<count).compactMap { key(at: $0) }

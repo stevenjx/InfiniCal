@@ -68,10 +68,6 @@ struct MigrationImportResult: Equatable {
     var rulesInstalled = false
     var machine: MachineSummary?
 
-    var totalAdded: Int {
-        daysAdded + calibrationsAdded + sessionsAdded + sleepsAdded + presetsAdded
-    }
-
     var summary: String {
         var parts: [String] = []
         if daysAdded > 0 { parts.append(tf("新增 {p} 天", "\(daysAdded)")) }
@@ -160,7 +156,11 @@ enum Migration {
         result.machine = incoming.machine
 
         let calendar = Calendar.current
-        var dayMap = Dictionary(uniqueKeysWithValues: days.map { (calendar.startOfDay(for: $0.day), $0) })
+        // Built with a loop, not `Dictionary(uniqueKeysWithValues:)`: that
+        // initialiser traps on a duplicate key, and a damaged `daily.json` is
+        // exactly the input this code has to survive.
+        var dayMap: [Date: DailyStat] = [:]
+        for day in days { dayMap[calendar.startOfDay(for: day.day)] = day }
         for day in incoming.days {
             let key = calendar.startOfDay(for: day.day)
             if dayMap[key] != nil {
@@ -172,7 +172,8 @@ enum Migration {
         }
         let mergedDays = dayMap.values.sorted { $0.day < $1.day }
 
-        var calibrationMap = Dictionary(uniqueKeysWithValues: calibration.map { ($0.id, $0) })
+        var calibrationMap: [UUID: CalibrationRecord] = [:]
+        for record in calibration { calibrationMap[record.id] = record }
         for record in incoming.calibration {
             if calibrationMap[record.id] != nil {
                 result.calibrationsSkipped += 1
