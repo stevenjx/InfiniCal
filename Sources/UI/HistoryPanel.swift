@@ -10,6 +10,7 @@ struct HistoryView: View {
 
     @ObservedObject private var history = DailyHistory.shared
     @ObservedObject private var alerts = AnomalyAlerts.shared
+    @ObservedObject private var sessions = ChargeSessionStore.shared
     @ObservedObject private var calibration = CalibrationEngine.shared
     @EnvironmentObject private var state: AppState
     @StateObject private var range = UIValue<Int>(7)
@@ -34,6 +35,7 @@ struct HistoryView: View {
             storeIssueCard
             AdviceCard(report: advice)
             alertCenter
+            chargeHabits
 
             if isEmpty {
                 emptyState
@@ -134,6 +136,129 @@ struct HistoryView: View {
             }
         }
     }
+
+    // MARK: - Charge habits
+
+    /// A plug-in session is the unit `DailyStat` cannot see: one night parked at
+    /// 100 % and one quick top-up to 80 % land in the same daily row. This card
+    /// is where that difference becomes visible and actionable.
+    private var chargeHabits: some View {
+        let report = ChargeHabitAnalyzer.analyze(sessions.sessions)
+        return Card {
+            VStack(alignment: .leading, spacing: Spacing.m) {
+                CardHeader(title: t("充电习惯"),
+                           subtitle: report.observedDays < ChargeHabitAnalyzer.Report.minimumDays
+                               ? tf("还需要 {p} 天数据才能给出结论", "\(max(0, ChargeHabitAnalyzer.Report.minimumDays - report.observedDays))")
+                               : tf("近 30 天 {p} 次插电会话", "\(report.sessions.count)"))
+                if report.findings.isEmpty {
+                    Text(report.observedDays < ChargeHabitAnalyzer.Report.minimumDays
+                         ? t("会话记录还不够：接上电源使用几天后，这里会按满电静置、深充深放、高温充电和浅充浅放给出结论。")
+                         : t("最近 30 天的充电方式没有需要调整的模式。"))
+                        .font(Typography.caption)
+                        .foregroundColor(theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    ForEach(report.findings) { finding in
+                        habitRow(finding)
+                    }
+                }
+                if !report.sessions.isEmpty {
+                    Divider().background(theme.divider)
+                    sessionTable(report.sessions)
+                }
+                if let window = UsageProfile.bestChargingWindow(
+                    profile: UsageProfile.build(from: history.days)) {
+                    Divider().background(theme.divider)
+                    HStack(spacing: Spacing.s) {
+                        Image(systemName: "clock.badge.checkmark")
+                            .font(Glyph.inline)
+                            .foregroundColor(theme.info)
+                        Text(tf("一天里放电最慢的是 {p}:00–{p}:00（约 {p} W）；补电安排在这里最省循环。",
+                                "\(window.startHour)", "\((window.startHour + 2) % 24)",
+                                String(format: "%.1f", window.watts)))
+                            .font(Typography.caption)
+                            .foregroundColor(theme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        }
+    }
+
+    private func habitRow(_ finding: ChargeHabitFinding) -> some View {
+        VStack(alignment: .leading, spacing: Spacing.xs) {
+            HStack(spacing: Spacing.s) {
+                Image(systemName: finding.isPositive ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    .font(Glyph.inline)
+                    .foregroundColor(finding.isPositive ? theme.success : theme.warning)
+                Text(finding.title).font(Typography.label)
+                Spacer(minLength: 0)
+            }
+            Text(finding.advice)
+                .font(Typography.caption)
+                .foregroundColor(theme.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+            ForEach(finding.evidence, id: \.self) { line in
+                Text("· " + line)
+                    .font(Typography.caption)
+                    .foregroundColor(theme.textTertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(Spacing.s)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Radius.control, style: .continuous).fill(theme.innerControl))
+    }
+
+    /// Newest first, eight rows. More than that is a log, not a summary.
+    private func sessionTable(_ sessions: [ChargeSession]) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                Text(t("开始"))
+                    .frame(width: 116, alignment: .leading)
+                Text(t("电量区间"))
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                Text(t("插电"))
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                Text(t("充电"))
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                Text(t("满电静置"))
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            .font(Typography.label)
+            .foregroundColor(theme.textTertiary)
+            .frame(height: 24)
+            ForEach(Array(sessions.prefix(8))) { session in
+                HStack(spacing: 0) {
+                    Text(Self.sessionFormatter.string(from: session.start))
+                        .frame(width: 116, alignment: .leading)
+                        .foregroundColor(theme.textPrimary)
+                    Text("\(session.startPercentage)–\(session.endPercentage)%")
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    Text(hours(session.pluggedHours))
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    Text(hours(session.chargingSeconds / 3600))
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    Text(session.fullHoldSeconds > 0 ? hours(session.fullHoldHours) : "—")
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                }
+                .font(Typography.caption.monospacedDigit())
+                .foregroundColor(theme.textSecondary)
+                .frame(height: 24)
+            }
+        }
+    }
+
+    private func hours(_ value: Double) -> String {
+        value >= 1 ? String(format: "%.1f h", value) : String(format: "%.0f min", value * 60)
+    }
+
+    private static let sessionFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "MM/dd HH:mm"
+        return formatter
+    }()
 
     private var alertCenter: some View {
         Card {

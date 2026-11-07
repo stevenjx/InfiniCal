@@ -71,6 +71,8 @@ struct DashboardView: View {
                 chartCard(title: t("耗电量"),
                           value: PowerFormat.watts(state.energyUseWatts),
                           caption: remainingTimeText,
+                          subcaption: usageForecastText,
+                          subcaptionHelp: usageForecastHelp,
                           symbol: "bolt.horizontal",
                           color: theme.chartPurple,
                           points: state.history.power,
@@ -182,13 +184,52 @@ struct DashboardView: View {
     // MARK: - Charts
 
     private func chartCard(title: String, value: String, caption: String? = nil,
+                           subcaption: String? = nil, subcaptionHelp: String? = nil,
                            symbol: String, color: Color,
                            points: [HistoryPoint], limit: Double?, range: ClosedRange<Double>?) -> some View {
         Card {
-            MiniChart(title: title, valueText: value, caption: caption, symbol: symbol, color: color,
+            MiniChart(title: title, valueText: value, caption: caption,
+                      subcaption: subcaption, subcaptionHelp: subcaptionHelp,
+                      symbol: symbol, color: color,
                       points: points, limitFraction: limit, range: range)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    /// The second, slower answer: "on your usual schedule, about N hours".
+    ///
+    /// Shown on and off the adapter, with different wording. Unplugged it is the
+    /// forecast; plugged in it answers the question a charge limit actually
+    /// raises — "if I unplug now, how long will this last?" — which is what
+    /// makes the number useful instead of absent for most of the day.
+    ///
+    /// Kept short on purpose: the card is ~180 pt wide, and the full sentence
+    /// ("assumes the next 14 days look like the last 14") lives in the tooltip.
+    private var usageForecastText: String? {
+        let profile = UsageProfile.build(from: DailyHistory.shared.days)
+        let forecast = UsageProfile.forecast(profile: profile,
+                                             remainingWh: state.snapshot.energyWattHours,
+                                             currentWatts: state.energyUseWatts)
+        guard case .profile(let days) = forecast.basis else { return nil }
+        guard let minutes = forecast.minutes else {
+            return tf("{p} 天习惯 · 超过 48 小时", "\(days)")
+        }
+        let span = tf("{p} 小时 {p} 分", "\(minutes / 60)", "\(minutes % 60)")
+        return state.snapshot.isPluggedIn
+            ? tf("拔电后 · {p}", span)
+            : tf("{p} 天习惯 · {p}", "\(days)", span)
+    }
+
+    /// Spelled out where there is room for it.
+    private var usageForecastHelp: String {
+        let profile = UsageProfile.build(from: DailyHistory.shared.days)
+        let forecast = UsageProfile.forecast(profile: profile, remainingWh: state.snapshot.energyWattHours,
+                                             currentWatts: state.energyUseWatts)
+        guard case .profile(let days) = forecast.basis else {
+            return t("需要至少 5 天的按小时记录才能按使用习惯估算；现在显示的是按当前功耗的线性外推。")
+        }
+        return tf("按最近 {p} 天同一时段的实测放电功率，从这里逐小时推算到耗尽。它假设接下来的用法与过去两周相同，所以只是量级参考，不是承诺。",
+                  "\(days)")
     }
 
     /// Remaining runtime = stored energy ÷ current draw.

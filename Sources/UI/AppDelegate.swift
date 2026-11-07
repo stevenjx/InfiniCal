@@ -89,6 +89,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         CalibrationEngine.shared.prepareForTermination()
         FanController.shared.restoreSystemControl()
+        state.closeChargeSession()
         state.saveHistory()
         DailyHistory.shared.save()
         if state.exitInhibitCharge {

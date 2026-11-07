@@ -61,6 +61,8 @@ SOURCES=(
   "$ROOT/Sources/Core/StoreIO.swift"
   "$ROOT/Sources/Core/LowPower.swift"
   "$ROOT/Sources/Core/Automation.swift"
+  "$ROOT/Sources/Core/ChargeSession.swift"
+  "$ROOT/Sources/Core/UsageProfile.swift"
   "$ROOT/Sources/Core/SparkleUpdater.swift"
   "$ROOT/Sources/UI/UpdatePanel.swift"
   "$ROOT/Sources/Core/Notifier.swift"

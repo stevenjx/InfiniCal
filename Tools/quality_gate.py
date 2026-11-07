@@ -241,6 +241,8 @@ final class TestAppState {
     var capabilities = TestCapabilities()
     var lastAppliedLimit: Int? = 80
     var lastChargingAllowed: Bool? = false
+    /// The real one closes the open plug-in session; the test has no store.
+    func closeChargeSession() {}
 ''' + update_methods + '''
 }
 let updateApp = TestAppState()
@@ -311,6 +313,11 @@ print("PASS update retry/cancellation transitions and fan persistence (no hardwa
     # Automation.swift needs a running app and is exercised on real hardware.
     automation = (ROOT / "Sources/Core/Automation.swift").read_text()
     swift += automation[:automation.index("// MARK: - Executor")]
+    # Session splitting and the habit rules are pure too; the store half needs
+    # the disk and is exercised by the recovery tests instead.
+    charge_session = (ROOT / "Sources/Core/ChargeSession.swift").read_text()
+    swift += charge_session[:charge_session.index("// MARK: - Store")]
+    swift += (ROOT / "Sources/Core/UsageProfile.swift").read_text()
     swift += '''
 func check(_ condition: Bool, _ message: String) { precondition(condition, message) }
 for sailing in [false, true] {
@@ -1247,7 +1254,177 @@ for command in [AutomationCommand.limit(60), .topUp(90), .discharge(50), .pause,
 check(AutomationFailure.unknownAction("x").message.contains("limit"), "拒绝原因列出可用动作")
 check(AutomationFailure.outOfRange(4, 5...100).message.contains("5"), "拒绝原因给出范围")
 
-print("PASS pure policy/math/checkpoint/helper-validation/quality/trend/anomaly/profile/advice/arbitration/store/low-power/automation tests (no hardware)")
+// ── 充电会话：切分规则与 4 条习惯规则 ────────────────────────────────────────
+func at(_ seconds: Double) -> Date { Date(timeIntervalSince1970: 700_000 + seconds) }
+func sample(_ seconds: Double, plugged: Bool, charging: Bool, percent: Int,
+            temp: Double = 30, watts: Double = 0, backend: String = "bclm",
+            heat: Bool = false) -> SessionBuilder.Sample {
+    SessionBuilder.Sample(at: at(seconds), pluggedIn: plugged, charging: charging,
+                          percentage: percent, temperature: temp, chargeWatts: watts,
+                          backend: backend, heatProtect: heat)
+}
+// 一次完整会话：插上、充、拔下。
+var builder = SessionBuilder()
+check(builder.ingest(sample(0, plugged: true, charging: true, percent: 50, watts: 45)) == nil,
+      "第一次插电不结束任何会话")
+_ = builder.ingest(sample(2, plugged: true, charging: true, percent: 51, watts: 45))
+_ = builder.ingest(sample(4, plugged: true, charging: false, percent: 80, watts: 0))
+_ = builder.ingest(sample(200, plugged: true, charging: false, percent: 80, watts: 0))
+let closed = builder.close(at: at(202), percentage: 80)
+check(closed != nil, "拔电后产生一条会话")
+check(closed?.startPercentage == 50 && closed?.endPercentage == 80, "起止电量")
+check((closed?.pluggedSeconds ?? 0) >= 4, "插电时长累加")
+check((closed?.chargeWh ?? 0) > 0, "充入能量来自实测功率")
+check(closed?.backend == "bclm", "后端随会话保存")
+
+// 太短的会话不入库：插拔一次不该污染习惯统计。
+var shortBuilder = SessionBuilder()
+_ = shortBuilder.ingest(sample(0, plugged: true, charging: true, percent: 60))
+let short = shortBuilder.close(at: at(30), percentage: 60)
+check(short == nil, "不足 2 分钟的会话被丢弃")
+
+// 跨睡眠：采样中断超过阈值要标记，但会话继续。
+var sleepBuilder = SessionBuilder()
+_ = sleepBuilder.ingest(sample(0, plugged: true, charging: true, percent: 40, watts: 30))
+_ = sleepBuilder.ingest(sample(4, plugged: true, charging: true, percent: 41, watts: 30))
+_ = sleepBuilder.ingest(sample(4000, plugged: true, charging: false, percent: 100, watts: 0))
+let slept = sleepBuilder.close(at: at(4002), percentage: 100)
+check(slept?.crossedSleep == true, "中断被标记为跨睡眠")
+check(slept != nil, "跨睡眠的会话仍然记录")
+// 中断的那一段不能计成插电时长，否则「插了 8 小时」是编的。
+check((slept?.pluggedSeconds ?? 0) < 100, "中断期间不计入插电时长")
+
+// 过热标记。
+var heatBuilder = SessionBuilder()
+_ = heatBuilder.ingest(sample(0, plugged: true, charging: true, percent: 50, watts: 20, heat: true))
+_ = heatBuilder.ingest(sample(200, plugged: true, charging: false, percent: 70))
+check(heatBuilder.close(at: at(400), percentage: 70)?.heatProtectTriggered == true,
+      "过热保护触发被记录")
+
+// 中位数用区间宽度，不用平均，避免一次完整循环拉偏「典型会话」。
+func session(_ index: Int, from: Int, to: Int, holdHours: Double = 0,
+             chargeHours: Double = 1, temp: Double = 30) -> ChargeSession {
+    ChargeSession(start: at(Double(index) * 3600), end: at(Double(index) * 3600 + chargeHours * 3600),
+                  startPercentage: from, endPercentage: to,
+                  pluggedSeconds: chargeHours * 3600, chargingSeconds: chargeHours * 3600,
+                  fullHoldSeconds: holdHours * 3600,
+                  // 平均值 = sum / samples，所以 sum 必须是 temp × samples。
+                  temperatureSum: temp * 10, temperatureSamples: 10, maxTemperature: temp + 2,
+                  chargeWh: 10, backend: "bclm")
+}
+let spans = [session(0, from: 70, to: 80), session(1, from: 60, to: 90),
+             session(2, from: 75, to: 80), session(3, from: 50, to: 100)]
+// 区间宽 10 / 30 / 5 / 50，排序后 5 10 30 50，中位是 30（count/2 取上中位）。
+check(ChargeHabitAnalyzer.medianSpan(spans) == 30, "区间中位数")
+
+// 数据不足时不出结论。
+let emptyReport = ChargeHabitAnalyzer.analyze([], now: at(200_000))
+check(emptyReport.findings.isEmpty, "没有会话时不产出建议")
+check(emptyReport.observedDays == 0, "没有会话时观测天数为 0")
+
+// 满电静置：30 天内累计 ≥ 20 小时才提示。会话必须落在窗口内，所以时间戳
+// 从窗口末尾往前排，而不是从纪元开始算。
+func recent(_ index: Int, from: Int, to: Int, holdHours: Double = 0,
+            chargeHours: Double = 1, temp: Double = 30) -> ChargeSession {
+    var s = session(0, from: from, to: to, holdHours: holdHours, chargeHours: chargeHours, temp: temp)
+    // 每天一次，最近 10 天（10 次深循环需要 10 条会话）。
+    s.start = at(200_000 - Double(10 - index) * 86_400)
+    s.end = s.start.addingTimeInterval(chargeHours * 3600)
+    return s
+}
+let holdSessions = (0..<8).map { recent($0, from: 80, to: 100, holdHours: 3) }
+let holdReport = ChargeHabitAnalyzer.analyze(holdSessions, now: at(200_000))
+check(holdReport.findings.contains { $0.kind == .fullHold }, "满电静置超 20 小时触发")
+let fewHold = (0..<8).map { recent($0, from: 80, to: 100, holdHours: 1) }
+check(!ChargeHabitAnalyzer.analyze(fewHold, now: at(200_000)).findings.contains { $0.kind == .fullHold },
+      "8 小时满电静置不触发")
+
+// 深度充放：≥ 10 次从 ≤15% 到 ≥95%。
+let deep = (0..<10).map { recent($0, from: 10, to: 100) }
+check(ChargeHabitAnalyzer.analyze(deep, now: at(200_000)).findings.contains { $0.kind == .deepCycle },
+      "10 次深度循环触发")
+let shallow = (0..<10).map { recent($0, from: 60, to: 80) }
+// 80 → 100% 不能被算成浅充：它停在满电，正是 fullHold 要提示的行为。
+let parked = (0..<10).map { recent($0, from: 80, to: 100) }
+check(!ChargeHabitAnalyzer.analyze(parked, now: at(200_000)).findings.contains { $0.kind == .shallowTopUp },
+      "充满到 100% 不算浅充浅放")
+let shallowReport = ChargeHabitAnalyzer.analyze(shallow, now: at(200_000))
+check(!shallowReport.findings.contains { $0.kind == .deepCycle }, "浅充不算深度循环")
+check(shallowReport.findings.contains { $0.kind == .shallowTopUp && $0.isPositive },
+      "浅充为主给正面结论")
+
+// 高温充电：平均 ≥40°C 的充电时长累计 > 5 小时。
+// 6 次 × 1 小时 = 6 小时，超过 5 小时阈值；高温只会「多算 chargeHours」，
+// 所以阈值就是总充电小时数。
+// 8 次 × 1 小时 = 8 小时，超过 5 小时阈值，同时满足 7 天最低观测。
+let hot: [ChargeSession] = (0..<8).map { recent($0, from: 50, to: 70, chargeHours: 1, temp: 42) }
+let hotReport2 = ChargeHabitAnalyzer.analyze(hot, now: at(200_000))
+// 结论只有在观测到至少 7 天时才产出，所以这里需要 8 次会话（每天一次）。
+check(hotReport2.findings.contains { $0.kind == .hotCharge },
+      "高温充电超 5 小时触发")
+let cool: [ChargeSession] = (0..<8).map { recent($0, from: 50, to: 70, chargeHours: 1, temp: 33) }
+check(!ChargeHabitAnalyzer.analyze(cool, now: at(200_000)).findings.contains { $0.kind == .hotCharge },
+      "常温充电不触发")
+// 窗口外的旧会话不参与统计。
+let stale = (0..<10).map { session($0 * 100_000, from: 10, to: 100) }
+check(ChargeHabitAnalyzer.analyze(stale, now: at(200_000)).findings.isEmpty, "窗口外的会话不计入")
+
+// ── 使用画像：小时桶、预测与最佳充电窗口 ────────────────────────────────────
+func hourDay(_ dayOffset: Int, watts: [Double], plugged: [Double]? = nil,
+             now: Date) -> DailyStat {
+    var day = DailyStat(day: Calendar.current.startOfDay(for: now.addingTimeInterval(-Double(dayOffset) * 86400)))
+    day.hourDischargeWh = watts.map { $0 * 3600 / 3600 }  // 每小时放电 Wh
+    day.hourPluggedSeconds = plugged ?? Array(repeating: 0, count: 24)
+    day.hourObservedSeconds = Array(repeating: 3600, count: 24)
+    return day
+}
+// 用本地午夜作为起点，预测结果与真实时区无关。
+let profileNow = Calendar.current.startOfDay(for: at(900_000))
+// 每天固定 24 条：上午 8 W，下午 10 W，深夜 4 W。
+let shaped: [Double] = (0..<24).map { hour in
+    hour < 6 ? 4 : (hour >= 12 && hour < 18 ? 10 : 8)
+}
+let profileDays = (0..<10).map { hourDay($0, watts: shaped, now: profileNow) }
+let profile = UsageProfile.build(from: profileDays, now: profileNow)
+check(profile.usableHours == 24, "完整的 24 小时都建立了画像")
+check((profile.watts[14] ?? 0) > 9.9 && (profile.watts[14] ?? 0) < 10.1, "14 点平均 10 W")
+check(profile.days[14] == 10, "14 点有 10 天样本")
+
+// 样本不足 → 退回当前功耗，并标记 basis。
+let thinProfile = UsageProfile.build(from: Array(profileDays.prefix(2)), now: profileNow)
+let fallback = UsageProfile.forecast(profile: thinProfile, remainingWh: 40, currentWatts: 10,
+                                     now: profileNow)
+check(fallback.basis == .currentDraw, "样本不足时退回当前功耗")
+check(fallback.minutes == 240, "40 Wh ÷ 10 W = 4 小时")
+
+// 有画像时按小时走：10 天 × 同样形状，从 0 点开始 40 Wh。
+let profileForecast = UsageProfile.forecast(profile: profile, remainingWh: 40, currentWatts: 20,
+                                            now: profileNow)
+check(profileForecast.basis == .profile(days: 10), "有画像时使用画像")
+// 从 0 点起：前 6 小时 4 W 用掉 24 Wh，剩 16 Wh 在 8 W 的小时里还要 2 小时，
+// 合计 8 小时 = 480 分钟。允许一个 15 分钟步长的误差。
+check((profileForecast.minutes ?? 0) >= 465 && (profileForecast.minutes ?? 0) <= 495,
+      "按画像走出的耗尽时间与手算一致")
+
+// 没有能量或没有功耗时不下结论。
+check(UsageProfile.forecast(profile: profile, remainingWh: 0, currentWatts: 10,
+                            now: profileNow).minutes == nil, "没有剩余能量时不预测")
+check(UsageProfile.forecast(profile: thinProfile, remainingWh: 40, currentWatts: 0,
+                            now: profileNow).minutes == nil, "没有可测功耗时不预测")
+
+// 插电的小时不算放电样本。
+var pluggedShaped = shaped
+let pluggedDay = hourDay(0, watts: pluggedShaped, plugged: Array(repeating: 3600, count: 24), now: profileNow)
+check(UsageProfile.build(from: [pluggedDay], now: profileNow).usableHours == 0,
+      "整小时插电的样本不参与画像")
+
+// 最佳充电窗口：深夜的 6 小时最低。
+let chargingWindow = UsageProfile.bestChargingWindow(profile: profile)
+check(chargingWindow != nil, "有足够画像时给出充电窗口")
+check(chargingWindow.map { (0..<6).contains($0.startHour) } == true, "窗口落在深夜低功耗时段")
+check(chargingWindow.map { $0.watts < 5 } == true, "窗口功耗取最低值")
+
+print("PASS pure policy/math/checkpoint/helper-validation/quality/trend/anomaly/profile/advice/arbitration/store/low-power/automation/session/usage tests (no hardware)")
 '''
     with tempfile.TemporaryDirectory(prefix="infinical-tests-") as directory:
         main = Path(directory) / "main.swift"

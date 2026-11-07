@@ -213,6 +213,8 @@ final class AppState: ObservableObject {
     /// Where this top-up stops. 100 from the window, less from a script.
     private var topUpTarget: Int = 100
     private var topUpDeadline: Date?
+    /// Folds the 2 s telemetry into plug-in sessions (N1-01).
+    private var sessionBuilder = SessionBuilder()
     private var suppressTopUpCancel = false
     private var wakeObserver: NSObjectProtocol?
     private var lastDailySample: Date?
@@ -440,6 +442,9 @@ final class AppState: ObservableObject {
         updatePreparationActive = true
         FanController.shared.updateSuspended = true
         calibrationEngine.prepareIdleForUpdate()
+        // The open plug-in session ends here: the process is about to be
+        // replaced and the new one starts a fresh builder.
+        closeChargeSession()
         let controller = ChargeController.shared
         helperInstalled = HelperClient.shared.refreshInstallState()
         capabilities = controller.detectCapabilities()
@@ -512,6 +517,7 @@ final class AppState: ObservableObject {
             evaluateChargeControl()
         }
         updateChargeState()
+        recordChargeSession()
         AnomalyAlerts.shared.sample(snapshot, limit: chargeVal,
             intentionalDrain: manualDischargeTarget != nil || ChargeController.shared.activeAdapterKey != nil || ChargeController.shared.heldCeiling != nil || calibrationEngine.isRunning,
             suppressLimit: calibrationEngine.isRunning || calibrationEngine.needsRecovery,
@@ -530,6 +536,9 @@ final class AppState: ObservableObject {
                 capabilities.hasHelper = helperInstalled
             }
             DailyHistory.shared.save()
+            ChargeSessionStore.shared.save()
+            // A crash must not cost the whole night's session.
+            ChargeSessionStore.shared.saveLive(sessionBuilder.current)
         }
         // ~150 KB of JSON per write. Five minutes is plenty for a rolling
         // three-hour window, and a crash loses at most that much.
@@ -563,6 +572,39 @@ final class AppState: ObservableObject {
                                        cycleCount: snapshot.cycleCount,
                                        reportedCapacityMAh: snapshot.maxCapacity,
                                        seconds: seconds)
+    }
+
+    // MARK: - Plug-in sessions
+    //
+    // Daily totals cannot tell a night parked at 100 % apart from a quick
+    // top-up to 80 %, and that difference is the whole point of a charge limit.
+    // One sample per tick goes into a pure builder; a completed session is
+    // appended to the store, which is pruned to 180 days.
+
+    private func recordChargeSession() {
+        let sample = SessionBuilder.Sample(
+            at: Date(),
+            pluggedIn: snapshot.isPluggedIn,
+            charging: snapshot.isCharging,
+            percentage: snapshot.percentage,
+            temperature: snapshot.temperature,
+            // Only energy going *in* counts toward the session; a discharging
+            // plugged state is a hold, and the current is negative there.
+            chargeWatts: max(0, snapshot.voltage * snapshot.instantAmperage),
+            backend: capabilities.strategy.rawValue,
+            heatProtect: heatPause)
+        if let finished = sessionBuilder.ingest(sample) {
+            ChargeSessionStore.shared.record(finished)
+        }
+    }
+
+    /// Called on quit and before a relaunch: the open session still happened.
+    func closeChargeSession() {
+        if let finished = sessionBuilder.close(at: Date(), percentage: snapshot.percentage,
+                                              backend: capabilities.strategy.rawValue) {
+            ChargeSessionStore.shared.record(finished)
+        }
+        ChargeSessionStore.shared.save()
     }
 
     /// One banner per crossing of the ceiling, not one per tick. A limit change

@@ -27,6 +27,15 @@ struct DailyStat: Codable, Identifiable, Equatable {
     var reportedCapacityMAh: Int? = nil
     var observedSeconds: Double? = nil
     var highTemperatureSeconds: Double? = nil
+    /// Energy out per hour of the day (0…23), measured. 24 doubles = 192 B a
+    /// day, which is what makes a usage profile possible without a second store.
+    var hourDischargeWh: [Double]? = nil
+    /// Seconds on the adapter per hour of the day. A profile hour with the
+    /// adapter connected is not a discharge sample and is excluded.
+    var hourPluggedSeconds: [Double]? = nil
+    /// Seconds the app actually sampled per hour of the day, so an hour the
+    /// machine was asleep is not read as "zero consumption".
+    var hourObservedSeconds: [Double]? = nil
 
     var id: Date { day }
     var averageTemperature: Double {
@@ -280,6 +289,18 @@ final class DailyHistory: ObservableObject {
             stat.observedSeconds = (stat.observedSeconds ?? 0) + seconds
             stat.highTemperatureSeconds = (stat.highTemperatureSeconds ?? 0) + (temperature >= 40 ? seconds : 0)
         }
+        // Hour buckets: the profile needs "what does 14:00 usually cost", which
+        // a daily total cannot answer.
+        let hour = calendar.component(.hour, from: Date())
+        var hourWh = stat.hourDischargeWh ?? Array(repeating: 0, count: 24)
+        var hourPlugged = stat.hourPluggedSeconds ?? Array(repeating: 0, count: 24)
+        var hourSeen = stat.hourObservedSeconds ?? Array(repeating: 0, count: 24)
+        hourWh[hour] += max(0, dischargeWh)
+        if plugged { hourPlugged[hour] += seconds }
+        hourSeen[hour] += seconds
+        stat.hourDischargeWh = hourWh
+        stat.hourPluggedSeconds = hourPlugged
+        stat.hourObservedSeconds = hourSeen
 
         days.append(stat)
         if days.count > retentionDays { days.removeFirst(days.count - retentionDays) }

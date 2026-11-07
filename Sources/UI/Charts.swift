@@ -15,6 +15,13 @@ struct MiniChart: View {
     let valueText: String
     /// Secondary line under the value (e.g. "剩余 4 小时 39 分").
     var caption: String? = nil
+    /// Third line, smaller: the usage-profile forecast and the assumption it
+    /// rests on. Kept separate from `caption` so "right now" and "on your usual
+    /// schedule" never read as one number.
+    var subcaption: String? = nil
+    /// Full explanation for `subcaption`, shown on hover. The line itself is
+    /// one row wide; the assumption behind a forecast does not fit there.
+    var subcaptionHelp: String? = nil
     var symbol: String? = nil
     var color: Color = .green
     var points: [HistoryPoint]
@@ -80,6 +87,14 @@ struct MiniChart: View {
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)
+            }
+            if let subcaption {
+                Text(subcaption)
+                    .font(Typography.micro)
+                    .foregroundColor(theme.textTertiary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .help(subcaptionHelp ?? subcaption)
             }
 
             HStack(alignment: .top, spacing: 6) {
