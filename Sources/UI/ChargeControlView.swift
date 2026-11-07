@@ -22,6 +22,9 @@ struct ChargeControlView: View {
                 adapterCard(adapter)
             }
 
+            SectionLabel(text: t("场景"))
+            scenarioCard
+
             SectionLabel(text: t("按时间充满"))
             smartChargeCard
 
@@ -196,6 +199,75 @@ struct ChargeControlView: View {
                         .frame(width: 108)
                 }
             }
+        }
+    }
+
+    // MARK: - Scenarios
+
+    /// A ceiling that follows the machine's situation. Every row names the
+    /// condition it needs, and the footer says which one is active *now* with
+    /// the evidence — an automatic rewrite of the limit that cannot be
+    /// explained from this page would be indistinguishable from a bug.
+    private var scenarioCard: some View {
+        Card {
+            VStack(alignment: .leading, spacing: Spacing.xs) {
+                ForEach(ScenarioKind.allCases) { kind in
+                    ToggleRow(symbol: kind.symbol,
+                              title: kind.title,
+                              help: kind.detail,
+                              isOn: binding(for: kind))
+                    if kind != ScenarioKind.allCases.last {
+                        Divider().background(theme.divider)
+                    }
+                }
+                Divider().background(theme.divider)
+                scenarioStatus
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var scenarioStatus: some View {
+        if let resolution = state.scenarioResolution {
+            HStack(alignment: .firstTextBaseline, spacing: Spacing.s) {
+                Image(systemName: "wand.and.stars")
+                    .font(Glyph.inline)
+                    .foregroundColor(theme.accent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(tf("当前由「{p}」接管：上限 {p}%", resolution.kind.title,
+                            "\(resolution.limit)"))
+                        .font(Typography.label)
+                        .foregroundColor(theme.textPrimary)
+                    Text(resolution.evidence
+                         + tf(" · 你的设定是 {p}%，关闭对应场景即可恢复", "\(state.chargeVal)"))
+                        .font(Typography.caption)
+                        .foregroundColor(theme.textTertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+        } else if !state.scenarioSettings.anyEnabled {
+            Text(t("三条都关闭：上限完全由上面的数值决定。打开任意一条，InfiniCal 会在条件满足时临时改写上限，并在条件消失后立即恢复。"))
+                .font(Typography.caption)
+                .foregroundColor(theme.textTertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: Spacing.s) {
+                Image(systemName: "checkmark.circle")
+                    .font(Glyph.inline)
+                    .foregroundColor(theme.textTertiary)
+                Text(tf("当前没有场景命中，使用你设定的 {p}%。", "\(state.chargeVal)"))
+                    .font(Typography.caption)
+                    .foregroundColor(theme.textTertiary)
+            }
+        }
+    }
+
+    private func binding(for kind: ScenarioKind) -> Binding<Bool> {
+        switch kind {
+        case .desktop: return $state.scenarioDesktop
+        case .boost: return $state.scenarioBoost
+        case .night: return $state.scenarioNight
         }
     }
 

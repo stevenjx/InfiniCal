@@ -55,7 +55,12 @@ struct DashboardView: View {
                           // The dashed limit line is only readable if the number
                           // it marks is written down somewhere; the axis ticks
                           // alone leave it "somewhere under 100".
-                          caption: tf("上限 {p}%", "\(state.chargeVal)"),
+                          // The enforced ceiling, not the stored one: a scenario
+                          // holding 55 % must not be labelled 80 %.
+                          caption: state.scenarioResolution == nil
+                              ? tf("上限 {p}%", "\(state.chargeVal)")
+                              : tf("上限 {p}%（{p}）", "\(state.effectiveLimit)",
+                                   state.scenarioResolution?.kind.title ?? ""),
                           symbol: "battery.100",
                           color: theme.chartGreen,
                           points: state.history.battery,

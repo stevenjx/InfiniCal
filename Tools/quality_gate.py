@@ -318,6 +318,11 @@ print("PASS update retry/cancellation transitions and fan persistence (no hardwa
     charge_session = (ROOT / "Sources/Core/ChargeSession.swift").read_text()
     swift += charge_session[:charge_session.index("// MARK: - Store")]
     swift += (ROOT / "Sources/Core/UsageProfile.swift").read_text()
+    # SleepSession's store half needs CalibrationStore and the disk; the record
+    # and the analyser are pure.
+    sleep_source = (ROOT / "Sources/Core/SleepSession.swift").read_text()
+    swift += sleep_source[:sleep_source.index("final class SleepSessionStore")]
+    swift += (ROOT / "Sources/Core/ScenarioLimit.swift").read_text()
     swift += '''
 func check(_ condition: Bool, _ message: String) { precondition(condition, message) }
 for sailing in [false, true] {
@@ -1424,7 +1429,87 @@ check(chargingWindow != nil, "有足够画像时给出充电窗口")
 check(chargingWindow.map { (0..<6).contains($0.startHour) } == true, "窗口落在深夜低功耗时段")
 check(chargingWindow.map { $0.watts < 5 } == true, "窗口功耗取最低值")
 
-print("PASS pure policy/math/checkpoint/helper-validation/quality/trend/anomaly/profile/advice/arbitration/store/low-power/automation/session/usage tests (no hardware)")
+// ── 睡眠耗电 ────────────────────────────────────────────────────────────────
+func sleep(_ hours: Double, from: Int, to: Int, plugged: Bool = false,
+           crossed: Bool = false, index: Int = 0) -> SleepSession {
+    let start = at(300_000 + Double(index) * 86_400)
+    return SleepSession(start: start, end: start.addingTimeInterval(hours * 3600),
+                        startPercentage: from, endPercentage: to,
+                        startTemperature: 30, endTemperature: 28,
+                        pluggedThroughout: plugged ? true : nil,
+                        crossedPowerSource: crossed, sleepSeconds: hours * 3600)
+}
+// 8 小时掉 8% = 1%/h，属于正常待机。
+let normalNight = sleep(8, from: 80, to: 72)
+check(abs((normalNight.percentPerHour ?? 0) - 1.0) < 0.001, "8 小时掉 8% = 1.0 %/h")
+check(!normalNight.isAbnormal, "1 %/h 不判为异常")
+// 8 小时掉 24% = 3%/h，超过阈值。
+let badNight = sleep(8, from: 80, to: 56)
+check(badNight.isAbnormal, "3 %/h 判为异常")
+// 太短的睡眠不产生每小时数字。
+let nap = sleep(0.1, from: 70, to: 69)
+check(nap.percentPerHour == nil, "不足 10 分钟的睡眠不计算每小时")
+// 电源变化时同样不计算。
+let crossed = sleep(8, from: 80, to: 60, crossed: true)
+check(crossed.percentPerHour == nil, "跨电源变化的睡眠不计算每小时")
+// 三次以上才给结论。
+let fewNights = [sleep(8, from: 80, to: 78, index: 0)]
+check(SleepAnalyzer.advice(SleepAnalyzer.summarize(fewNights, now: at(400_000))) == nil,
+      "少于三次睡眠不给建议")
+let manyBad = (0..<4).map { sleep(8, from: 80, to: 56, index: $0) }
+let badSummary = SleepAnalyzer.summarize(manyBad, now: at(800_000))
+check(badSummary.averagePercentPerHour.map { $0 > 2 } == true, "平均掉电反映多次睡眠")
+check(SleepAnalyzer.advice(badSummary) != nil, "多次异常睡眠给出建议")
+check(badSummary.worst?.percentPerHour != nil, "最差的一次被挑出来")
+// 汇总排除跨电源变化的会话。summarize 只看最近 60 次，所以跨电源的那条必须
+// 落在同一时间窗内（index 9 → 9 天后，仍在 now 之前）。
+let mixed = manyBad + [sleep(8, from: 80, to: 40, crossed: true, index: 9)]
+let mixedSummary = SleepAnalyzer.summarize(mixed, now: at(1_300_000))
+check(mixedSummary.excluded == 1, "跨电源变化的会话被排除")
+check(mixedSummary.count == 5, "五次睡眠都进入汇总")
+
+// ── 场景化上限 ──────────────────────────────────────────────────────────────
+func scenarioInput(desktop: Bool = false, boost: Bool = false, night: Bool = false,
+                   plugged: Bool = true, watts: Int = 96, displays: Int = 0,
+                   percentage: Int = 60, hour: Int = 14, limit: Int = 80) -> ScenarioInput {
+    ScenarioInput(settings: ScenarioSettings(desktop: desktop, boost: boost, night: night),
+                  pluggedIn: plugged, adapterWatts: watts, externalDisplays: displays,
+                  percentage: percentage, hour: hour, userLimit: limit)
+}
+// 全关时永不命中。
+check(ScenarioLimit.resolve(scenarioInput()) == nil, "全关时不改写上限")
+// 未插电时永不命中。
+check(ScenarioLimit.resolve(scenarioInput(desktop: true, plugged: false, displays: 2)) == nil,
+      "未插电时不改写上限")
+// 桌面模式：有外接屏且插电 → 55%。
+let docked = ScenarioLimit.resolve(scenarioInput(desktop: true, displays: 1))
+check(docked?.kind == .desktop, "桌面模式命中")
+check(docked?.limit == 55, "桌面模式上限 55%")
+// 用户自己设得更低时不再抬高。
+let lowerDock = ScenarioLimit.resolve(scenarioInput(desktop: true, displays: 1, limit: 40))
+check(lowerDock?.limit == 40, "桌面模式不抬高用户已经设得更低的上限")
+// 满血模式：大适配器 + 低电量 → 100%，且允许高于用户设定。
+let boostHit = ScenarioLimit.resolve(scenarioInput(boost: true, watts: 96, percentage: 20, limit: 80))
+check(boostHit?.kind == .boost && boostHit?.limit == 100, "满血模式把上限临时提到 100%")
+// 小适配器不触发满血。
+check(ScenarioLimit.resolve(scenarioInput(boost: true, watts: 30, percentage: 20)) == nil,
+      "小适配器不触发满血模式")
+// 夜间窗口：23 点与 2 点命中，12 点不命中。
+check(ScenarioLimit.isNight(hour: 23), "23 点在夜间窗口内")
+check(ScenarioLimit.isNight(hour: 2), "2 点在夜间窗口内")
+check(!ScenarioLimit.isNight(hour: 12), "12 点不在夜间窗口内")
+check(!ScenarioLimit.isNight(hour: 7), "7 点已经离开夜间窗口")
+check(ScenarioLimit.resolve(scenarioInput(night: true, hour: 2))?.limit == 80, "夜间窗口上限 80%")
+// 冲突时满血压过桌面：用户急需容量时，底座的低上限不能拦。
+let both = ScenarioLimit.resolve(scenarioInput(desktop: true, boost: true,
+                                               watts: 96, displays: 1, percentage: 20))
+check(both?.kind == .boost, "满血模式优先于桌面模式")
+// 桌面包过夜间：插着外接屏比时钟是更强的信号。
+let dockedNight = ScenarioLimit.resolve(scenarioInput(desktop: true, night: true,
+                                                      displays: 1, hour: 23))
+check(dockedNight?.kind == .desktop, "桌面模式优先于夜间窗口")
+
+print("PASS pure policy/math/checkpoint/helper-validation/quality/trend/anomaly/profile/advice/arbitration/store/low-power/automation/session/usage/sleep/scenario tests (no hardware)")
 '''
     with tempfile.TemporaryDirectory(prefix="infinical-tests-") as directory:
         main = Path(directory) / "main.swift"

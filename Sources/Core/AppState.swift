@@ -149,6 +149,12 @@ final class AppState: ObservableObject {
     @Published var dashboardBackgroundUpdates: Bool = false { didSet { store(dashboardBackgroundUpdates, "dashboardBackgroundUpdates") } }
     @Published var showProcessesInHighUsage: Bool = false { didSet { store(showProcessesInHighUsage, "showProcessesInHighUsage") } }
     @Published var energyThreshold: Int = 1 { didSet { store(energyThreshold, "appsSignificantEnergyThreshold") } }
+    // 场景化上限（N1-04）。三条都默认关闭：自动改写用户亲手设的上限，必须先由
+    // 用户明确选择。命中时只改「这一次用哪个上限」，不改 `chargeVal` 本身，
+    // 所以关掉任何一条都会立刻回到用户自己的值。
+    @Published var scenarioDesktop: Bool = false { didSet { store(scenarioDesktop, "scenarioDesktop") } }
+    @Published var scenarioBoost: Bool = false { didSet { store(scenarioBoost, "scenarioBoost") } }
+    @Published var scenarioNight: Bool = false { didSet { store(scenarioNight, "scenarioNight") } }
     /// 「电量即将用尽」的提前量。开关本身不在这里：它是 `AnomalyAlerts` 里的
     /// 一条规则，「关闭此类」与设置页的开关必须是同一个状态，多存一份就会打架。
     @Published var lowPowerLeadMinutes: Int = LowPowerPolicy.defaultLeadMinutes { didSet { store(lowPowerLeadMinutes, "lowPowerLeadMinutes") } }
@@ -222,6 +228,10 @@ final class AppState: ObservableObject {
     private var smartChargeStartedFor: Date?
     private var sleepObserver: NSObjectProtocol?
     private var sleepInhibited = false
+    /// The sample taken at `willSleep`, waiting for the matching `didWake`.
+    private var sleepStart: SleepPoint?
+    private var externalDisplayCached = 0
+    private var externalDisplayCheckedAt = Date.distantPast
     private var lastLidClosed = false
     private var isLoadingSettings = false
 
@@ -357,6 +367,13 @@ final class AppState: ObservableObject {
     /// 「睡眠时停止充电」/「睡眠时充满后停止充电」: the process is suspended during
     /// sleep, so the decision has to be made before the machine goes down.
     private func handleWillSleep() {
+        // Recorded before anything else: the process is about to be frozen, and
+        // a sample taken after the charge-inhibit write would describe a state
+        // the user did not sleep in.
+        sleepStart = SleepPoint(date: Date(),
+                                percentage: snapshot.percentage,
+                                temperature: snapshot.temperature,
+                                pluggedIn: snapshot.isPluggedIn)
         guard !updatePreparationActive else { return }
         if calibrationEngine.isRunning {
             calibrationEngine.stop(reason: t("系统即将睡眠，校准已中断；请处理恢复记录"))
@@ -384,6 +401,44 @@ final class AppState: ObservableObject {
         }
     }
 
+    // MARK: - Sleep observation
+    //
+    // Two samples, one row. `pmset -g log` would give more detail and a log
+    // format that is not a contract; the pair answers the question people
+    // actually ask ("was 8 % overnight normal?") and cannot silently change.
+
+    struct SleepPoint {
+        var date: Date
+        var percentage: Int
+        var temperature: Double
+        var pluggedIn: Bool
+    }
+
+    private func recordSleepSession() {
+        guard let start = sleepStart else { return }
+        sleepStart = nil
+        let end = SleepPoint(date: Date(),
+                             percentage: snapshot.percentage,
+                             temperature: snapshot.temperature,
+                             pluggedIn: snapshot.isPluggedIn)
+        let crossed = start.pluggedIn != end.pluggedIn
+        let session = SleepSession(
+            start: start.date,
+            end: end.date,
+            startPercentage: start.percentage,
+            endPercentage: end.percentage,
+            startTemperature: start.temperature,
+            endTemperature: end.temperature,
+            pluggedThroughout: (start.pluggedIn && end.pluggedIn) ? true : nil,
+            crossedPowerSource: crossed,
+            sleepSeconds: end.date.timeIntervalSince(start.date))
+        // A wake without a matching sleep start is a wake the app did not see
+        // (launched while asleep, power loss). Skipping it is the honest move:
+        // the alternative is inventing a duration.
+        guard session.sleepSeconds >= SleepReport.minimumSleepSeconds else { return }
+        SleepSessionStore.shared.record(session)
+    }
+
     // MARK: - Sleep assertions & lid lock
 
     private func applySleepAssertions() {
@@ -408,6 +463,7 @@ final class AppState: ObservableObject {
     }
 
     private func handleWake() {
+        recordSleepSession()
         // The SMC may have dropped the forced ceiling or the charge inhibit bit
         // during sleep; clearing these makes the next tick write them again.
         lastAppliedLimit = nil
@@ -612,22 +668,26 @@ final class AppState: ObservableObject {
     private func notifyLimitReached() {
         let current = snapshot.percentage
         defer { previousPercentage = current }
+        // The effective ceiling, not the user's own: a scenario that lowered
+        // the limit to 55 % has to announce 55 when the pack gets there,
+        // otherwise the banner says "已充至 80%" on a machine holding at 55.
+        let limit = effectiveLimit
         guard snapshot.isPluggedIn, !heatPause,
               previousPercentage > 0,
-              previousPercentage < chargeVal,
-              current >= chargeVal else { return }
+              previousPercentage < limit,
+              current >= limit else { return }
 
-        if chargeVal >= 100 {
+        if limit >= 100 {
             Notifier.shared.post(key: "battery-full",
                                  title: t("电池已充满"),
                                  body: t("已充至 100%，可以拔下电源。"),
                                  cooldown: 3600)
         } else {
             Notifier.shared.post(key: "charge-limit",
-                                 title: tf("已充至 {p}%", "\(chargeVal)"),
+                                 title: tf("已充至 {p}%", "\(limit)"),
                                  body: Notifier.evidenceBody(
                                     t("电量已达到设定上限；是否停充以实际电流为准。"),
-                                    requested: "\(chargeVal)%", actual: "\(current)% / \(String(format: "%.3f", snapshot.instantAmperage)) A / Charging=\(snapshot.isCharging)",
+                                    requested: "\(limit)%", actual: "\(current)% / \(String(format: "%.3f", snapshot.instantAmperage)) A / Charging=\(snapshot.isCharging)",
                                     sampledAt: snapshot.timestamp),
                                  cooldown: 3600)
         }
@@ -641,10 +701,64 @@ final class AppState: ObservableObject {
     // the lowest rank and the loop only lets the winner act, so the documented
     // priority decides the outcome instead of the order of the `if` statements.
 
+    // MARK: - Scenario ceiling
+
+    var scenarioSettings: ScenarioSettings {
+        ScenarioSettings(desktop: scenarioDesktop, boost: scenarioBoost, night: scenarioNight)
+    }
+
+    /// Displays that are not the built-in panel. `NSScreen` is the only public
+    /// source; a machine in clamshell mode reports zero, which is correct — the
+    /// lid is shut, so it is not being used as a desktop.
+    ///
+    /// Cached for five seconds: this is read from `scenarioResolution`, which
+    /// the SwiftUI body calls several times per redraw, and `NSScreen.screens`
+    /// is not free. A monitor plugged in mid-session shows up one tick later.
+    var externalDisplayCount: Int {
+        if Date().timeIntervalSince(externalDisplayCheckedAt) < 5 {
+            return externalDisplayCached
+        }
+        let count = NSScreen.screens.filter { screen in
+            let number = screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber
+            guard let id = number.map({ CGDirectDisplayID($0.uint32Value) }) else { return false }
+            return CGDisplayIsBuiltin(id) == 0
+        }.count
+        externalDisplayCached = count
+        externalDisplayCheckedAt = Date()
+        return count
+    }
+
+    var scenarioInput: ScenarioInput {
+        ScenarioInput(settings: scenarioSettings,
+                      pluggedIn: snapshot.isPluggedIn,
+                      adapterWatts: snapshot.adapter.watts,
+                      externalDisplays: externalDisplayCount,
+                      percentage: snapshot.percentage,
+                      hour: Calendar.current.component(.hour, from: Date()),
+                      userLimit: chargeVal)
+    }
+
+    var scenarioResolution: ScenarioResolution? {
+        guard let resolution = ScenarioLimit.resolve(scenarioInput) else { return nil }
+        // This backend cannot express anything below 80 %. Re-clamping here is
+        // what makes 「桌面模式 55%」 honest on such a machine: the card shows
+        // 80 % with the reason, instead of a number that will be bounced back
+        // by the loop one tick later.
+        if resolution.limit < 80,
+           ChargeController.shared.capabilities.strategy == .systemLimit {
+            return ScenarioResolution(kind: resolution.kind, limit: 80,
+                                      evidence: resolution.evidence + t(" · 此机型最低 80%"))
+        }
+        return resolution
+    }
+
+    /// What the control loop should hold. Falls back to the user's own limit.
+    var effectiveLimit: Int { scenarioResolution?.limit ?? chargeVal }
+
     private func currentArbitration(calibrationRunning: Bool) -> ChargeArbitration? {
         ChargeArbiter.arbitrate(ChargeArbiter.claims(for: ChargeArbitrationInput(
             percentage: snapshot.percentage,
-            limit: chargeVal,
+            limit: effectiveLimit,
             temperature: snapshot.temperature,
             heatProtectMode: heatProtectMode,
             maxTemperature: maxTemperature,
@@ -827,7 +941,7 @@ final class AppState: ObservableObject {
             chargeVal = 80
             statusNote = t("当前系统充电上限后端最低只能设置为 80%，低于 80% 的限制不可用")
         }
-        let limit = chargeVal
+        let limit = effectiveLimit
         if lastAppliedLimit != limit {
             do {
                 try ChargeController.shared.applyChargeLimit(limit)
@@ -905,7 +1019,7 @@ final class AppState: ObservableObject {
         // Checked before `isPluggedIn`: a forced discharge clears that flag, and
         // the state would otherwise read 「未连接电源」 while it is ours doing.
         if ChargeController.shared.activeAdapterKey != nil || snapshot.instantAmperage < -0.05 {
-            if automaticDischarge, snapshot.percentage > chargeVal {
+            if automaticDischarge, snapshot.percentage > effectiveLimit {
                 chargeState = dischargeConfirmed ? .discharging : .paused
                 return
             }
@@ -914,7 +1028,7 @@ final class AppState: ObservableObject {
         if heatPause { chargeState = .paused; return }
         if snapshot.fullyCharged || snapshot.percentage >= 100 { chargeState = .full; return }
         if snapshot.isCharging { chargeState = .charging; return }
-        if snapshot.percentage > chargeVal { chargeState = .paused; return }
+        if snapshot.percentage > effectiveLimit { chargeState = .paused; return }
         chargeState = .paused
     }
 
@@ -1745,6 +1859,9 @@ final class AppState: ObservableObject {
         launchAtLogin = bool("launchAtLogin", false)
         startTasksAfterDue = bool("startTasksAfterDue", false)
         lowPowerLeadMinutes = int("lowPowerLeadMinutes", LowPowerPolicy.defaultLeadMinutes)
+        scenarioDesktop = bool("scenarioDesktop", false)
+        scenarioBoost = bool("scenarioBoost", false)
+        scenarioNight = bool("scenarioNight", false)
         if let data = defaults.data(forKey: "scheduledTasks"),
            let decoded = try? JSONDecoder().decode([ScheduledTask].self, from: data) {
             tasks = decoded

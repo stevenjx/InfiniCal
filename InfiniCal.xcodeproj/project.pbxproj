@@ -33,6 +33,8 @@
 		D33B732A843BD751700A1652 /* Automation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 265121A55C1F8ECA4A029CB2 /* Automation.swift */; };
 		75BA7C9B37F338BFA5730AC9 /* ChargeSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 89427F678CCDD2E85A3CEDA8 /* ChargeSession.swift */; };
 		ADE1FF527665EC479154ACF0 /* UsageProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 595235AF8FD43149D82051E6 /* UsageProfile.swift */; };
+		DB2C91AC48AD543E9EF98C7B /* SleepSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 516DA4224D0E4CE4DBCAA2E8 /* SleepSession.swift */; };
+		DE8F36C5E023A95233F9BBDC /* ScenarioLimit.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5261A151DDAE3DB9ECA546EB /* ScenarioLimit.swift */; };
 		20E99C974B27C6F327C19D4B /* SparkleUpdater.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2148970513382B2D5E272D50 /* SparkleUpdater.swift */; };
 		CA7B2E903228E86F220A7AA1 /* UpdatePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA41B8B1FC1FEB4BCA29BF00 /* UpdatePanel.swift */; };
 		4679ED6D469B3C728D05C8BC /* Notifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82BE2237B9BA6EC865EF74E4 /* Notifier.swift */; };
@@ -123,6 +125,8 @@
 		265121A55C1F8ECA4A029CB2 /* Automation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Automation.swift; sourceTree = "<group>"; };
 		89427F678CCDD2E85A3CEDA8 /* ChargeSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChargeSession.swift; sourceTree = "<group>"; };
 		595235AF8FD43149D82051E6 /* UsageProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageProfile.swift; sourceTree = "<group>"; };
+		516DA4224D0E4CE4DBCAA2E8 /* SleepSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SleepSession.swift; sourceTree = "<group>"; };
+		5261A151DDAE3DB9ECA546EB /* ScenarioLimit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScenarioLimit.swift; sourceTree = "<group>"; };
 		2148970513382B2D5E272D50 /* SparkleUpdater.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SparkleUpdater.swift; sourceTree = "<group>"; };
 		EA41B8B1FC1FEB4BCA29BF00 /* UpdatePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdatePanel.swift; sourceTree = "<group>"; };
 		82BE2237B9BA6EC865EF74E4 /* Notifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Notifier.swift; sourceTree = "<group>"; };
@@ -244,6 +248,8 @@
 				265121A55C1F8ECA4A029CB2 /* Automation.swift */,
 				89427F678CCDD2E85A3CEDA8 /* ChargeSession.swift */,
 				595235AF8FD43149D82051E6 /* UsageProfile.swift */,
+				516DA4224D0E4CE4DBCAA2E8 /* SleepSession.swift */,
+				5261A151DDAE3DB9ECA546EB /* ScenarioLimit.swift */,
 				2148970513382B2D5E272D50 /* SparkleUpdater.swift */,
 				82BE2237B9BA6EC865EF74E4 /* Notifier.swift */,
 				DDC381DEFC38BD86762D8824 /* AnomalyAlerts.swift */,
@@ -421,6 +427,8 @@
 				D33B732A843BD751700A1652 /* Automation.swift in Sources */,
 				75BA7C9B37F338BFA5730AC9 /* ChargeSession.swift in Sources */,
 				ADE1FF527665EC479154ACF0 /* UsageProfile.swift in Sources */,
+				DB2C91AC48AD543E9EF98C7B /* SleepSession.swift in Sources */,
+				DE8F36C5E023A95233F9BBDC /* ScenarioLimit.swift in Sources */,
 				20E99C974B27C6F327C19D4B /* SparkleUpdater.swift in Sources */,
 				CA7B2E903228E86F220A7AA1 /* UpdatePanel.swift in Sources */,
 				4679ED6D469B3C728D05C8BC /* Notifier.swift in Sources */,
@@ -544,7 +552,7 @@
 				);
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 41;
+				CURRENT_PROJECT_VERSION = 42;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Resources/Info.plist;
@@ -556,7 +564,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.32;
+				MARKETING_VERSION = 1.0.33;
 				PRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -573,7 +581,7 @@
 				);
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "";
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 41;
+				CURRENT_PROJECT_VERSION = 42;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Resources/Info.plist;
@@ -585,7 +593,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.0.32;
+				MARKETING_VERSION = 1.0.33;
 				PRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = NO;
@@ -600,9 +608,9 @@
 					arm64,
 					x86_64,
 				);
-				CURRENT_PROJECT_VERSION = 41;
+				CURRENT_PROJECT_VERSION = 42;
 				GENERATE_INFOPLIST_FILE = NO;
-				MARKETING_VERSION = 1.0.32;
+				MARKETING_VERSION = 1.0.33;
 				PRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical.helper;
 				PRODUCT_NAME = com.infinitycomputer.infinical.helper;
 				SKIP_INSTALL = YES;
@@ -617,9 +625,9 @@
 					arm64,
 					x86_64,
 				);
-				CURRENT_PROJECT_VERSION = 41;
+				CURRENT_PROJECT_VERSION = 42;
 				GENERATE_INFOPLIST_FILE = NO;
-				MARKETING_VERSION = 1.0.32;
+				MARKETING_VERSION = 1.0.33;
 				PRODUCT_BUNDLE_IDENTIFIER = com.infinitycomputer.infinical.helper;
 				PRODUCT_NAME = com.infinitycomputer.infinical.helper;
 				SKIP_INSTALL = YES;

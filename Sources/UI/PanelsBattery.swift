@@ -7,6 +7,7 @@ import SwiftUI
 struct SleepEnergyView: View {
     @EnvironmentObject private var state: AppState
     @ObservedObject private var alerts = AnomalyAlerts.shared
+    @ObservedObject private var sleepSessions = SleepSessionStore.shared
     private var theme: Theme { Theme.current }
     @StateObject private var advanced = UIFlag()
 
@@ -122,6 +123,8 @@ struct SleepEnergyView: View {
                 }
             }
 
+            sleepReportCard
+
             HStack(spacing: 10) {
                 IconBadge(symbol: "bolt.fill")
                 Text(t("高功耗的应用程序")).font(Typography.headline).foregroundColor(theme.textPrimary)
@@ -154,6 +157,99 @@ struct SleepEnergyView: View {
             }
         }
     }
+
+    // MARK: - Sleep report
+
+    /// "The lid was closed for eight hours and it lost 8 %" — the question this
+    /// page could not answer before. Two samples per sleep, one row each; the
+    /// figure is %/h so a 2-hour nap and a full night are comparable.
+    private var sleepReportCard: some View {
+        let summary = SleepAnalyzer.summarize(sleepSessions.sessions)
+        let rows = SleepAnalyzer.recent(sleepSessions.sessions)
+        return VStack(alignment: .leading, spacing: Spacing.s) {
+            HStack(spacing: 10) {
+                IconBadge(symbol: "moon.zzz")
+                Text(t("睡眠耗电")).font(Typography.headline).foregroundColor(theme.textPrimary)
+                Spacer()
+                if let average = summary.averagePercentPerHour {
+                    Text(String(format: "%.2f %%/h", average))
+                        .font(Typography.caption.monospacedDigit())
+                        .foregroundColor(theme.textSecondary)
+                }
+            }
+            Card {
+                VStack(alignment: .leading, spacing: Spacing.s) {
+                    if rows.isEmpty {
+                        Text(t("还没有可用的睡眠记录。合上盖子睡一次再唤醒，这里会按「时长 / 掉电 / 每小时」列出最近 14 次。"))
+                            .font(Typography.caption)
+                            .foregroundColor(theme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        if let advice = SleepAnalyzer.advice(summary) {
+                            HStack(alignment: .firstTextBaseline, spacing: Spacing.s) {
+                                Image(systemName: summary.averagePercentPerHour ?? 0 > SleepReport.abnormalPercentPerHour
+                                      ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                                    .font(Glyph.inline)
+                                    .foregroundColor((summary.averagePercentPerHour ?? 0) > SleepReport.abnormalPercentPerHour
+                                                     ? theme.warning : theme.success)
+                                Text(advice)
+                                    .font(Typography.caption)
+                                    .foregroundColor(theme.textPrimary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                        sleepTable(rows)
+                        if summary.excluded > 0 {
+                            Text(tf("另有 {p} 次睡眠期间电源状态发生变化，未计入每小时平均。", "\(summary.excluded)"))
+                                .font(Typography.micro)
+                                .foregroundColor(theme.textTertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func sleepTable(_ rows: [SleepSession]) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                Text(t("醒来时间")).frame(width: 96, alignment: .leading)
+                Text(t("时长")).frame(maxWidth: .infinity, alignment: .trailing)
+                Text(t("电量")).frame(maxWidth: .infinity, alignment: .trailing)
+                Text(t("掉电")).frame(maxWidth: .infinity, alignment: .trailing)
+                Text(t("每小时")).frame(maxWidth: .infinity, alignment: .trailing)
+            }
+            .font(Typography.label)
+            .foregroundColor(theme.textTertiary)
+            .frame(height: 22)
+            ForEach(rows) { row in
+                HStack(spacing: 0) {
+                    Text(Self.sleepFormatter.string(from: row.end))
+                        .frame(width: 96, alignment: .leading)
+                        .foregroundColor(theme.textPrimary)
+                    Text(String(format: "%.1f h", row.hours))
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    Text("\(row.startPercentage)→\(row.endPercentage)%")
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    Text("\(row.lostPercentage) pp")
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                    Text(row.percentPerHour.map { String(format: "%.2f", $0) } ?? "—")
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                }
+                .font(Typography.caption.monospacedDigit())
+                .foregroundColor(row.isAbnormal ? theme.warning : theme.textSecondary)
+                .frame(height: 22)
+            }
+        }
+    }
+
+    private static let sleepFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "MM/dd HH:mm"
+        return formatter
+    }()
 
     private func applyLowPowerMode(_ value: Int) {
         let mode: ChargeController.LowPowerMode
