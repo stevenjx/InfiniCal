@@ -375,6 +375,33 @@ for (key, allowed) in [("CH0B", [0, 2]), ("CH0C", [0, 2]), ("CHIE", [0, 8]),
 for value in 0...255 {
     check(accepts("CHTE", "ui32", 4, [UInt8(value), 0, 0, 0]) == (value <= 1), "CHTE low mask")
 }
+// 回归：本机（Mac14,9 + macOS 27）的 CHIE 类型是 `hex_`，宽度 1。只认 `ui8 `
+// 时所有适配器恢复写入都被拒，错误被上层锁存，校准入口从此永久失败。
+check(accepts("CHIE", "hex_", 1, [0]), "CHIE 为 hex_ 时允许恢复供电")
+check(accepts("CHIE", "hex_", 1, [8]), "CHIE 为 hex_ 时允许断开适配器")
+check(!accepts("CHIE", "hex_", 1, [3]), "hex_ 也不放宽取值范围")
+check(!accepts("CHIE", "hex_", 2, [0, 0]), "hex_ 宽度不符仍拒绝")
+check(!accepts("CHIE", "si8 ", 1, [0]), "有符号字节仍然拒绝")
+// 两处规则不能共享代码（app 与 root 助手是两个 target），用断言把它们钉住：
+// 对同一把键、同一个类型，App 的 isOneByteControl 与助手的 accepts 必须一致。
+for type in ["ui8 ", "hex_", "ch8*", "flag", "si8 ", "ui16", "flt "] {
+    for size in [UInt32(1), UInt32(2), UInt32(4)] {
+        let info = SMCKeyInfo(size: size, type: type, attributes: 0xC0)
+        let helperAccepts = WriteValidation.accepts(
+            key: "CHIE", info: info,
+            bytes: [UInt8](repeating: 0, count: Int(size)), read: { _ in nil })
+        check(helperAccepts == (info.isOneByteControl && info.isWritable),
+              "CHIE 可写判定在 App 与助手之间一致：" + type + "/\(size)")
+    }
+}
+for type in ["ui32", "u32 ", "hex_", "ch8*", "flt ", "ui8 "] {
+    let info = SMCKeyInfo(size: 4, type: type, attributes: 0xC0)
+    let helperAccepts = WriteValidation.accepts(
+        key: "CHTE", info: info, bytes: [0, 0, 0, 0], read: { _ in nil })
+    check(helperAccepts == (info.isFourByteControl && info.isWritable),
+          "CHTE 可写判定在 App 与助手之间一致：" + type)
+}
+
 for index in 1...3 {
     var payload: [UInt8] = [0, 0, 0, 0]; payload[index] = 1
     check(!accepts("CHTE", "ui32", 4, payload), "CHTE other bits")

@@ -1784,9 +1784,12 @@ final class AppState: ObservableObject {
     /// has never been set up — no helper, or the prompt was never answered.
     /// An existing installation that already finished setup is not nagged.
     var shouldShowOnboarding: Bool {
+        // An outdated helper comes first: it is a functional problem, not a
+        // setup preference, and it was previously hidden once the user had
+        // finished onboarding.
+        if HelperClient.shared.needsUpdate { return true }
         if defaults.bool(forKey: "didCompleteOnboarding") { return false }
-        return !helperInstalled || HelperClient.shared.needsUpdate
-            || !defaults.bool(forKey: "didShowFirstRunHelperPrompt")
+        return !helperInstalled || !defaults.bool(forKey: "didShowFirstRunHelperPrompt")
     }
 
     func completeOnboarding() {

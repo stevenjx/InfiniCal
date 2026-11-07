@@ -17,6 +17,24 @@ struct SMCKeyInfo {
     var attributes: UInt8 = 0
     /// SMC marks a key writable when bit 0x40 of the attribute byte is set.
     var isWritable: Bool { attributes & 0x40 != 0 }
+
+    /// 1 字节控制键的类型名。`ui8 ` 是标准无符号字节，`hex_` 是原始字节，
+    /// `ch8*` / `flag` 是同一宽度的变体。
+    ///
+    /// This has to match `WriteValidation.isOneByteControlType` in
+    /// `Helper/main.swift`: the helper runs as root and validates every write
+    /// itself, so a key the app considers writable but the helper refuses turns
+    /// into a confusing "write rejected" at the worst moment. The two live in
+    /// different targets and cannot share code, which is why the rule is
+    /// written down in both places.
+    var isOneByteControl: Bool {
+        size == 1 && (type == "ui8 " || type == "hex_" || type == "ch8*" || type == "flag")
+    }
+
+    /// 4 字节控制键（CHTE）的类型名，理由同上。
+    var isFourByteControl: Bool {
+        size == 4 && (type == "ui32" || type == "u32 " || type == "hex_" || type == "ch8*")
+    }
 }
 
 enum SMCError: Error, CustomStringConvertible {

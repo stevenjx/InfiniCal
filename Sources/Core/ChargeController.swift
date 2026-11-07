@@ -61,7 +61,13 @@ enum HelperError: LocalizedError {
         switch self {
         case .notInstalled: return t("需要安装特权助手才能写入 SMC")
         case .noResponse(let detail): return tf("特权助手无响应：{p}", detail)
-        case .smc(let detail): return tf("SMC 操作失败：{p}", detail)
+        case .smc(let detail):
+            let base = tf("SMC 操作失败：{p}", detail)
+            // A rejected write is often an outdated helper: its whitelist is
+            // older than the app's. Saying so turns a dead end into one click.
+            return HelperClient.shared.needsUpdate
+                ? base + t("（特权助手版本较旧，请更新后重试）")
+                : base
         }
     }
 }
@@ -685,7 +691,7 @@ final class ChargeController {
         if capabilities.strategy == .bclm {
             try applyChargeLimit(100)
         }
-        if let info = capabilities.chte, info.size == 4, info.isWritable {
+        if let info = capabilities.chte, info.isFourByteControl, info.isWritable {
             try HelperClient.shared.smcWriteBytes("CHTE", [0, 0, 0, 0])
         }
         // CHIE is adapter control, never a charge-inhibit key.
@@ -695,7 +701,7 @@ final class ChargeController {
             case "CH0B": info = capabilities.ch0b
             default: info = capabilities.ch0c
             }
-            guard let info, info.size == 1 else { continue }
+            guard let info, info.isOneByteControl else { continue }
             try HelperClient.shared.smcWrite(key, 0)
         }
         // A machine that exposes no charge-control key at all has nothing
@@ -723,9 +729,9 @@ final class ChargeController {
         var found: [(key: String, off: UInt8, on: UInt8)] = []
         #if arch(arm64)
         let table = HelperClient.shared.keyInfoList(["CHIE", "CH0I", "CH0J"])
-        if let chie = table["CHIE"], chie.size == 1, chie.isWritable { found.append(("CHIE", 0x08, 0x00)) }
-        if let ch0i = table["CH0I"], ch0i.size == 1, ch0i.isWritable { found.append(("CH0I", 0x01, 0x00)) }
-        if let ch0j = table["CH0J"], ch0j.size == 1, ch0j.isWritable { found.append(("CH0J", 0x01, 0x00)) }
+        if let chie = table["CHIE"], chie.isOneByteControl, chie.isWritable { found.append(("CHIE", 0x08, 0x00)) }
+        if let ch0i = table["CH0I"], ch0i.isOneByteControl, ch0i.isWritable { found.append(("CH0I", 0x01, 0x00)) }
+        if let ch0j = table["CH0J"], ch0j.isOneByteControl, ch0j.isWritable { found.append(("CH0J", 0x01, 0x00)) }
         #endif
         cachedAdapterCandidates = found
         return found
@@ -798,6 +804,21 @@ final class ChargeController {
             endForcedDischarge()
             return failure
         }
+    }
+
+    /// Drops the adapter recovery record without retrying the write.
+    ///
+    /// Used only by the explicit "discard and restore control" path: a write
+    /// the helper refuses (wrong key type, missing key) would otherwise latch
+    /// `adapterRestoreError` forever, and every calibration entry would fail
+    /// with the same sentence and no way out.
+    func discardAdapterRecovery() {
+        savedAdapterState = nil
+        inflowLeaseActive = false
+        activeAdapterKey = nil
+        adapterRestoreError = nil
+        UserDefaults.standard.removeObject(forKey: adapterOffFlag)
+        UserDefaults.standard.removeObject(forKey: adapterOffKey)
     }
 
     func endForcedDischarge() {

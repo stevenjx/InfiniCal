@@ -547,9 +547,20 @@ final class CalibrationEngine: ObservableObject {
         _ = controller.detectCapabilities()
         controller.restoreAdapterLeftOff()
         controller.endForcedDischarge()
-        guard controller.adapterRestoreError == nil else {
-            recoveryError = controller.adapterRestoreError
-            return false
+        if let restoreError = controller.adapterRestoreError {
+            // 放弃时必须能放弃。原来的实现即使 `discard` 也会在这里直接返回
+            // false，于是一次被助手拒绝的适配器恢复写入会让恢复记录与错误
+            // 永久锁存：所有校准入口从此都只报同一句话，用户没有任何出路。
+            guard discard else {
+                recoveryError = restoreError
+                return false
+            }
+            // Best effort is over: drop the record, keep the failure visible in
+            // `chargingIssue` so it is not silently forgotten.
+            controller.discardAdapterRecovery()
+            chargingIssue = tf("上次的适配器恢复没有完成：{p}。恢复记录已清除，充电控制按当前状态重新建立。",
+                               restoreError)
+            append(chargingIssue ?? "")
         }
         do {
             // Clears charge-inhibit keys as well as persisted ceilings.
@@ -577,6 +588,16 @@ final class CalibrationEngine: ObservableObject {
             return true
         } catch {
             recoveryError = error.localizedDescription
+            if discard {
+                // The user asked to let go of this session. Whatever failed to
+                // restore is recorded in `chargingIssue`; keeping the checkpoint
+                // would just re-block every entry point on the next launch.
+                defaults.removeObject(forKey: checkpointKey)
+                pendingRecovery = nil
+                chargingIssue = tf("安全清理未能全部完成：{p}。恢复记录已清除，请检查充电状态。",
+                                   error.localizedDescription)
+                append(chargingIssue ?? "")
+            }
             return false
         }
     }
@@ -643,7 +664,6 @@ final class CalibrationEngine: ObservableObject {
         sessionRestoreLimit = max(1, min(100, defaults.object(forKey: "chargeVal") as? Int ?? storageLevel))
         sessionStressMode = stressMode
         sessionPreset = preset
-        saveCheckpoint(reason: "preparing")
         guard recoveryError == nil else {
             // A pending recovery blocks the run, and the reason used to be lost
             // here: `beginCalibration` then fell back to 「校准未能开始」, which
@@ -665,9 +685,17 @@ final class CalibrationEngine: ObservableObject {
             let message = tf("校准未开始：恢复充电失败 — {p}", error.localizedDescription)
             startFailureReason = message
             append(message)
-            pendingRecovery = defaults.data(forKey: checkpointKey).flatMap { try? JSONDecoder().decode(CalibrationCheckpoint.self, from: $0) }
+            // Nothing was recorded and nothing was measured, so there is no
+            // interrupted session to report. Writing a checkpoint here is what
+            // produced a permanent "Interrupted calibration detected" card for
+            // runs that never started — and one failing write then blocked
+            // every later attempt.
+            _ = try? ChargeController.shared.applyChargeLimit(sessionRestoreLimit)
             return false
         }
+        // Committed from here on: the ceiling has been lifted, so the record is
+        // needed in case this process dies before the session ends.
+        saveCheckpoint(reason: "preparing")
 
         resultQuality = nil
         phaseTimeline = []

@@ -106,12 +106,25 @@ enum WriteValidation {
         return value
     }
 
+    /// 单字节控制键可以出现的类型名。`ui8 ` 是标准无符号字节，`hex_` 是原始
+    /// 字节，`ch8*` 与 `flag` 是同一宽度的变体。宽度由 `size` 单独校验。
+    static func isOneByteControlType(_ type: String) -> Bool {
+        type == "ui8 " || type == "hex_" || type == "ch8*" || type == "flag"
+    }
+
     static func accepts(key: String, info: SMCKeyInfo, bytes: [UInt8],
                         read: (String) -> Double?) -> Bool {
         guard isAllowedWriteKey(key), info.isWritable, bytes.count == Int(info.size) else { return false }
         switch key {
         case "CH0B", "CH0C", "CHIE", "CH0I", "CH0J", "BCLM":
-            guard info.type == "ui8 ", info.size == 1 else { return false }
+            // 允许的类型不止 `ui8 `：同一颗 SMC 上，这类单字节控制键的类型名
+            // 会随机型/系统版本变化。本机（Mac14,9 + macOS 27）的 CHIE 就是
+            // `hex_`，此前只认 `ui8 ` 导致所有适配器恢复写入被拒，且错误被
+            // 上层锁存，校准入口从此永久失败。
+            //
+            // 校验的真正约束是「键在白名单里 + 宽度 1 字节 + 值在允许集合」，
+            // 类型名只决定这 1 个字节怎么解释，放宽它不放大写入面。
+            guard isOneByteControlType(info.type), info.size == 1 else { return false }
             switch key {
             case "CH0B", "CH0C": return bytes[0] == 0 || bytes[0] == 2
             case "CHIE": return bytes[0] == 0 || bytes[0] == 8
@@ -119,8 +132,11 @@ enum WriteValidation {
             default: return bytes[0] <= 1
             }
         case "CHTE":
-            // App 写入 [0/1, 0, 0, 0]，不允许其他控制位。
-            return info.type == "ui32" && info.size == 4
+            // App 写入 [0/1, 0, 0, 0]，不允许其他控制位。宽度 4 的原始字节
+            // 类型同样接受，理由与上面相同。
+            let fourByte = info.type == "ui32" || info.type == "hex_"
+                || info.type == "ch8*" || info.type == "u32 "
+            return fourByte && info.size == 4
                 && bytes[0] <= 1 && bytes.dropFirst().allSatisfy { $0 == 0 }
         case "FS! ":
             guard info.type == "ui16", info.size == 2 else { return false }
@@ -231,12 +247,17 @@ func handle(_ request: [String: Any]) -> [String: Any] {
               let bytes = WriteValidation.payload(request["bytes"]) else {
             return ["ok": false, "error": "write key or payload not allowed"]
         }
-        guard let info = smc.keyInfo(key),
-              WriteValidation.accepts(key: key, info: info, bytes: bytes, read: { name in
+        guard let info = smc.keyInfo(key) else {
+            return ["ok": false, "error": "key not found"]
+        }
+        guard WriteValidation.accepts(key: key, info: info, bytes: bytes, read: { name in
                   guard let (metadata, raw) = try? smc.readBytes(name) else { return nil }
                   return WriteValidation.numeric(info: metadata, bytes: raw)
               }) else {
-            return ["ok": false, "error": "write type, width, value, or hardware bounds not allowed"]
+            // 具体到键与类型：一句 "not allowed" 无法让人判断是值越界还是
+            // 类型不匹配，而这正是排查时唯一需要的信息。
+            return ["ok": false,
+                    "error": "write rejected for \(key) (type=\(info.type) size=\(info.size) value=\(bytes.map { String(format: "%02x", $0) }.joined()))"]
         }
         do {
             try smc.writeBytes(key, bytes)
